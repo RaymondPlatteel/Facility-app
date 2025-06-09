@@ -23,6 +23,9 @@ log.txt
 /platforms
 /plugins
 
+# Keep docs for GitHub Pages
+!/docs
+
 # Compiled output
 /dist
 /tmp
