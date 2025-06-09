@@ -1,0 +1,108 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-button (click)="goBack()">
+        <ion-icon name="arrow-back"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-title>{{ selectedSession ? 'Check In' : 'Today\'s Sessions' }}</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <!-- Session Selection View -->
+  <div *ngIf="!selectedSession" class="sessions-container">
+    <div class="header-section">
+      <h2>Select a Session</h2>
+      <p class="subtitle">Choose which session you're attending today</p>
+    </div>
+
+    <div *ngIf="todaySessions.length === 0" class="no-sessions">
+      <ion-icon name="time" class="no-sessions-icon"></ion-icon>
+      <h3>No Sessions Today</h3>
+      <p>There are no sessions scheduled for today.</p>
+    </div>
+
+    <ion-card 
+      *ngFor="let todaySession of todaySessions" 
+      class="session-card"
+      (click)="selectSession(todaySession)">
+      <ion-card-header>
+        <ion-card-title>{{ todaySession.session.name }}</ion-card-title>
+      </ion-card-header>
+      
+      <ion-card-content>
+        <div class="session-info">
+          <div class="session-detail">
+            <ion-icon name="time"></ion-icon>
+            <span>{{ formatSessionTime(todaySession.session.date) }}</span>
+          </div>
+          <div class="session-detail">
+            <ion-icon name="person"></ion-icon>
+            <span>{{ getSessionStatus(todaySession) }}</span>
+          </div>
+        </div>
+        
+        <div class="participants-preview">
+          <ion-badge 
+            *ngFor="let participant of todaySession.participants.slice(0, 3)"
+            [color]="todaySession.checkedInStudents.includes(participant) ? 'success' : 'medium'"
+            class="participant-badge">
+            {{ participant }}
+          </ion-badge>
+          <span *ngIf="todaySession.participants.length > 3" class="more-participants">
+            +{{ todaySession.participants.length - 3 }} more
+          </span>
+        </div>
+      </ion-card-content>
+    </ion-card>
+  </div>
+
+  <!-- Student Check-in View -->
+  <div *ngIf="selectedSession" class="checkin-container">
+    <div class="header-section">
+      <h2>{{ selectedSession.session.name }}</h2>
+      <p class="subtitle">
+        {{ formatSessionTime(selectedSession.session.date) }} • 
+        {{ getSessionStatus(selectedSession) }}
+      </p>
+    </div>
+
+    <ion-card class="students-card">
+      <ion-card-header>
+        <ion-card-title>Students</ion-card-title>
+      </ion-card-header>
+      
+      <ion-card-content>
+        <ion-list class="students-list">
+          <ion-item 
+            *ngFor="let student of selectedSession.participants"
+            class="student-item"
+            [class.checked-in]="isStudentCheckedIn(student)"
+            (click)="checkInStudent(student)"
+            button>
+            
+            <ion-icon 
+              [name]="isStudentCheckedIn(student) ? 'checkmark-circle' : 'person'" 
+              slot="start"
+              [color]="isStudentCheckedIn(student) ? 'success' : 'medium'">
+            </ion-icon>
+            
+            <ion-label>
+              <h3>{{ student }}</h3>
+              <p *ngIf="isStudentCheckedIn(student)">✓ Checked in</p>
+              <p *ngIf="!isStudentCheckedIn(student)">Tap to check in</p>
+            </ion-label>
+
+            <ion-badge 
+              *ngIf="isStudentCheckedIn(student)"
+              color="success" 
+              slot="end">
+              Present
+            </ion-badge>
+          </ion-item>
+        </ion-list>
+      </ion-card-content>
+    </ion-card>
+  </div>
+</ion-content> 

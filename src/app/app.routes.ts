@@ -14,4 +14,20 @@ export const routes: Routes = [
     path: 'waiver',
     loadComponent: () => import('./waiver/waiver.page').then( m => m.WaiverPage)
   },
+  {
+    path: 'schedule',
+    loadComponent: () => import('./schedule/schedule.page').then( m => m.SchedulePage)
+  },
+  {
+    path: 'students',
+    loadComponent: () => import('./students/students.page').then( m => m.StudentsPage)
+  },
+  {
+    path: 'feedback',
+    loadComponent: () => import('./feedback/feedback.page').then( m => m.FeedbackPage)
+  },
+  {
+    path: 'signin',
+    loadComponent: () => import('./signin/signin.page').then( m => m.SigninPage)
+  },
 ];

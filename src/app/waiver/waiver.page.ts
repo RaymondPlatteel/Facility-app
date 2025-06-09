@@ -1,16 +1,18 @@
 import { Component, OnInit, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { IonContent, IonHeader, IonTitle, IonToolbar } from '@ionic/angular/standalone';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import { Router } from '@angular/router';
+import { IonContent, IonHeader, IonTitle, IonToolbar, IonIcon, IonButton, IonButtons, LoadingController, AlertController } from '@ionic/angular/standalone';
+import { addIcons } from 'ionicons';
+import { arrowBack } from 'ionicons/icons';
+import { FirebaseService, WaiverData } from '../services/firebase.service';
 
 @Component({
   selector: 'app-waiver',
   templateUrl: './waiver.page.html',
   styleUrls: ['./waiver.page.scss'],
   standalone: true,
-  imports: [IonContent, IonHeader, IonTitle, IonToolbar, CommonModule, FormsModule]
+  imports: [IonContent, IonHeader, IonTitle, IonToolbar, IonIcon, IonButton, IonButtons, CommonModule, FormsModule]
 })
 export class WaiverPage implements OnInit, AfterViewInit {
   showWaiverSelect = true;
@@ -45,10 +47,33 @@ export class WaiverPage implements OnInit, AfterViewInit {
   drawing = false;
   ctx!: CanvasRenderingContext2D;
 
+  constructor(
+    private firebaseService: FirebaseService,
+    private loadingController: LoadingController,
+    private alertController: AlertController,
+    private router: Router
+  ) {
+    addIcons({ arrowBack });
+  }
+
   ngOnInit() {}
 
   ngAfterViewInit() {
     // Canvas context will be set when modal is opened
+  }
+
+  goBack() {
+    if (this.showAdultForm || this.showChildForm) {
+      // Go back to waiver selection
+      this.showWaiverSelect = true;
+      this.showAdultForm = false;
+      this.showChildForm = false;
+      this.resetAdultForm();
+      this.resetChildForm();
+    } else {
+      // Go back to home page
+      this.router.navigate(['/home']);
+    }
   }
 
   selectWaiver(type: 'adult' | 'child') {
@@ -155,58 +180,67 @@ export class WaiverPage implements OnInit, AfterViewInit {
     this.child = { childName: '', guardianName: '', guardianPhone: '', guardianEmail: '', agree: false, signed: false, signatureDataUrl: '', signatureDate: '' };
   }
 
-  submitWaiver(type: 'adult' | 'child') {
-    alert('Waiver submitted successfully!');
-    this.generateWaiverPDF(type);
-    if (type === 'adult') {
-      this.resetAdultForm();
-      this.showAdultForm = false;
-    } else {
-      this.resetChildForm();
-      this.showChildForm = false;
-    }
-    this.showWaiverSelect = true;
-  }
+  async submitWaiver(type: 'adult' | 'child') {
+    console.log('Starting waiver submission for type:', type);
+    const loading = await this.loadingController.create({
+      message: 'Submitting waiver...'
+    });
+    await loading.present();
 
-  async generateWaiverPDF(type: 'adult' | 'child') {
-    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
-    const margin = 40;
-    let y = margin;
-    let waiverText = '';
-    let signatureDataUrl = '';
-    let dateText = '';
-    if (type === 'adult') {
-      pdf.setFontSize(18);
-      pdf.text('New Student Enrollment Waiver', margin, y); y += 30;
-      pdf.setFontSize(12);
-      pdf.text(`Full Name: ${this.adult.fullName}`, margin, y); y += 18;
-      pdf.text(`Phone: ${this.adult.phone}`, margin, y); y += 18;
-      pdf.text(`Email: ${this.adult.email}`, margin, y); y += 18;
-      waiverText = `I acknowledge and agree that my participation in any and all training activities, exercises, programs, and services offered by this facility and its trainers, employees, agents, successors, and assigns (collectively referred to as \"the Provider\") is entirely voluntary and undertaken at my own risk. I understand that physical training carries inherent risks including, but not limited to, serious bodily injury, permanent disability, heart attack, stroke, paralysis, psychological trauma, or death, as well as property loss or damage. I hereby expressly and unequivocally waive, release, discharge, indemnify, and hold harmless the Provider from any and all claims, liabilities, obligations, demands, actions, damages, expenses, and costs of any kind or nature whatsoever, whether now known or unknown, foreseeable or unforeseeable, arising directly or indirectly out of or in connection with my participation, regardless of whether caused by negligence, fault, omission, or any other act or condition of the Provider or any other party.\n\n- I am physically fit and capable of safely participating in all training activities. I have either consulted a licensed physician or have voluntarily chosen not to do so and accept full responsibility for this decision.\n- I will not hold the Provider responsible for any aggravation or worsening of any existing injuries or conditions, including unknown or latent medical issues.\n- I waive the right to bring any claim in a court of law and agree to binding arbitration in the Commonwealth of Massachusetts as the sole and exclusive venue for any dispute resolution.\n- I will not bring any collective or class action lawsuit against the Provider.\n- This agreement shall be governed by and interpreted in accordance with the laws of the Commonwealth of Massachusetts, without regard to conflicts of laws principles.\n- If any part of this waiver is deemed unenforceable, the remainder shall remain in full force and effect.\n\nI have read and understood this entire waiver and agree to be bound by its terms. I understand that by signing below, I am giving up substantial legal rights and that I am doing so voluntarily and of my own free will.`;
-      signatureDataUrl = this.adult.signatureDataUrl;
-      dateText = this.adult.signatureDate;
-    } else {
-      pdf.setFontSize(18);
-      pdf.text('New Student Enrollment Waiver', margin, y); y += 30;
-      pdf.setFontSize(12);
-      pdf.text(`Child's Name: ${this.child.childName}`, margin, y); y += 18;
-      pdf.text(`Parent/Guardian Name: ${this.child.guardianName}`, margin, y); y += 18;
-      pdf.text(`Parent/Guardian Phone: ${this.child.guardianPhone}`, margin, y); y += 18;
-      pdf.text(`Parent/Guardian Email: ${this.child.guardianEmail}`, margin, y); y += 18;
-      waiverText = `As the parent or legal guardian of the above-named child, I hereby give permission for my child to participate in training programs offered by this facility. I acknowledge that all training activities, programs, and services carry inherent risks, including serious injury or death. I agree to assume all risks and liabilities and voluntarily waive, release, discharge, and indemnify the Provider, its employees, agents, successors, and assigns from all liability, including that resulting from negligence. This waiver is binding and irrevocable.\n\n- I confirm my child is medically and physically able to participate.\n- I take full legal and financial responsibility for any injuries or damages.\n- I waive the right to any future claims or lawsuits under any circumstances.\n- I agree to binding arbitration in Massachusetts for any disputes.\n- This waiver remains in effect indefinitely unless explicitly revoked in writing and acknowledged by the Provider.\n\nI have read and understood this entire waiver and agree to be bound by its terms.`;
-      signatureDataUrl = this.child.signatureDataUrl;
-      dateText = this.child.signatureDate;
+    try {
+      console.log('About to save waiver data...');
+      
+      // Create waiver data object
+      const waiverData: WaiverData = {
+        waiverType: type,
+        studentName: type === 'adult' ? this.adult.fullName : this.child.childName,
+        signedDate: new Date().toISOString(),
+        signatureDataUrl: type === 'adult' ? this.adult.signatureDataUrl : this.child.signatureDataUrl,
+        createdAt: new Date().toISOString()
+      };
+
+      // Add type-specific fields
+      if (type === 'adult') {
+        waiverData.fullName = this.adult.fullName;
+        waiverData.phone = this.adult.phone;
+        waiverData.email = this.adult.email;
+      } else {
+        waiverData.childName = this.child.childName;
+        waiverData.guardianName = this.child.guardianName;
+        waiverData.guardianPhone = this.child.guardianPhone;
+        waiverData.guardianEmail = this.child.guardianEmail;
+      }
+
+      // Save to Firestore
+      const waiverId = await this.firebaseService.saveWaiver(waiverData);
+      console.log('Waiver saved successfully with ID:', waiverId);
+      
+      const alert = await this.alertController.create({
+        header: 'Success',
+        message: 'Waiver submitted successfully!',
+        buttons: ['OK']
+      });
+      await alert.present();
+
+      // Reset form and navigate back
+      if (type === 'adult') {
+        this.resetAdultForm();
+        this.showAdultForm = false;
+      } else {
+        this.resetChildForm();
+        this.showChildForm = false;
+      }
+      this.showWaiverSelect = true;
+    } catch (error) {
+      console.error('Error submitting waiver:', error);
+      const alert = await this.alertController.create({
+        header: 'Error',
+        message: `Failed to submit waiver: ${error}. Please try again.`,
+        buttons: ['OK']
+      });
+      await alert.present();
+    } finally {
+      await loading.dismiss();
     }
-    const waiverLines = pdf.splitTextToSize(waiverText, 520);
-    pdf.text(waiverLines, margin, y);
-    y += waiverLines.length * 14 + 20;
-    if (signatureDataUrl && signatureDataUrl.startsWith('data:image')) {
-      pdf.text('Signature:', margin, y);
-      pdf.addImage(signatureDataUrl, 'PNG', margin + 70, y - 12, 150, 40);
-      y += 50;
-    }
-    pdf.text(dateText, margin, y);
-    // Placeholder: Google Drive upload logic can be added here
-    pdf.save(type === 'adult' ? 'Waiver-Adult.pdf' : 'Waiver-Child.pdf');
   }
 }

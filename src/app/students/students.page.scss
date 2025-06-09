@@ -1,0 +1,535 @@
+// Dark theme matching the rest of the app
+ion-content {
+  --background: #0e1117;
+  --color: #e6edf3;
+}
+
+ion-header {
+  ion-toolbar {
+    --background: #161b22;
+    --color: #e6edf3;
+    --border-color: #30363d;
+  }
+}
+
+.students-container {
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+  background: #0e1117;
+  min-height: 100vh;
+}
+
+.header-section {
+  text-align: center;
+  margin-bottom: 24px;
+  
+  h2 {
+    margin: 0 0 8px 0;
+    color: #3daee9;
+    font-size: 1.8rem;
+    font-weight: 600;
+  }
+  
+  .subtitle {
+    margin: 0;
+    color: #8b949e;
+    font-size: 1rem;
+  }
+}
+
+ion-list {
+  background: transparent;
+}
+
+.student-item {
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: #161b22 !important;
+  border: 1px solid #30363d;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  
+  // Force dark background for ion-item
+  --background: #161b22 !important;
+  --color: #ffffff !important;
+  --background-hover: #21262d !important;
+  --background-activated: #21262d !important;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    border-color: #3daee9;
+  }
+  
+  .student-icon {
+    color: #3daee9;
+    font-size: 1.5rem;
+  }
+  
+  ion-label {
+    color: #ffffff !important;
+  }
+  
+  .student-name {
+    margin: 0 0 4px 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #ffffff !important;
+  }
+  
+  .student-info {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #c9d1d9 !important;
+  }
+  
+  .waiver-badge {
+    font-size: 0.8rem;
+    padding: 6px 12px;
+    border-radius: 20px;
+    
+    .badge-icon {
+      margin-right: 4px;
+      font-size: 0.9rem;
+    }
+  }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #8b949e;
+  
+  .empty-icon {
+    font-size: 4rem;
+    margin-bottom: 16px;
+    opacity: 0.5;
+    color: #6c727a;
+  }
+  
+  h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #ffffff;
+  }
+  
+  p {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+}
+
+// Modal Styles with Dark Theme
+ion-modal {
+  ion-header {
+    ion-toolbar {
+      --background: #161b22;
+      --color: #e6edf3;
+      --border-color: #30363d;
+    }
+  }
+  
+  ion-content {
+    --background: #0e1117;
+    --color: #e6edf3;
+  }
+}
+
+.modal-content {
+  padding: 16px;
+  background: #0e1117;
+  min-height: 100%;
+}
+
+ion-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.student-header-card {
+  margin-bottom: 16px;
+  
+  .student-modal-name {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 1.4rem;
+    color: #3daee9;
+    
+    .modal-person-icon {
+      font-size: 1.6rem;
+    }
+  }
+  
+  .status-badges {
+    margin-top: 12px;
+    
+    .status-badge {
+      font-size: 0.9rem;
+      padding: 8px 16px;
+      border-radius: 20px;
+      
+      ion-icon {
+        margin-right: 6px;
+        font-size: 1rem;
+      }
+    }
+  }
+}
+
+ion-card-title {
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+ion-card-content {
+  color: #e6edf3;
+}
+
+.sessions-list {
+  .session-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    color: #ffffff;
+    
+    .session-icon {
+      color: #3daee9;
+      font-size: 1.2rem;
+    }
+    
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
+
+.waivers-list {
+  .waiver-item {
+    padding: 16px;
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    
+    &:last-child {
+      margin-bottom: 0;
+    }
+    
+    .waiver-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+      
+      .waiver-icon {
+        color: #3fb950;
+        font-size: 1.4rem;
+        margin-top: 2px;
+      }
+      
+      .waiver-info {
+        flex: 1;
+        
+        h4 {
+          margin: 0 0 4px 0;
+          font-size: 1.1rem;
+          font-weight: 600;
+          color: #ffffff;
+        }
+        
+        .waiver-date {
+          margin: 0;
+          font-size: 0.9rem;
+          color: #c9d1d9;
+        }
+      }
+    }
+    
+    .waiver-details {
+      padding-left: 40px;
+      
+      p {
+        margin: 0 0 8px 0;
+        font-size: 0.9rem;
+        color: #ffffff;
+        
+        &:last-child {
+          margin-bottom: 0;
+        }
+        
+        strong {
+          color: #c9d1d9;
+        }
+      }
+    }
+  }
+}
+
+// Signature Section Styles
+.signature-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #30363d;
+  
+  .signature-title {
+    margin: 0 0 12px 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #3daee9;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    
+    &::before {
+      content: "✍";
+      font-size: 1.2rem;
+    }
+  }
+  
+  .signature-container {
+    background: #161b22;
+    border: 2px solid #30363d;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    
+    .signature-image {
+      max-width: 100%;
+      max-height: 120px;
+      background: white;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+    
+    .signature-info {
+      .signature-date {
+        margin: 0;
+        font-size: 0.9rem;
+        color: #c9d1d9;
+        font-weight: 500;
+      }
+    }
+  }
+}
+
+.no-waiver-message {
+  text-align: center;
+  padding: 40px 20px;
+  
+  .no-waiver-icon {
+    font-size: 3rem;
+    color: #f78166;
+    margin-bottom: 16px;
+  }
+  
+  h3 {
+    margin: 0 0 12px 0;
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #ffffff;
+  }
+  
+  p {
+    margin: 0;
+    font-size: 1rem;
+    color: #8b949e;
+    line-height: 1.5;
+  }
+}
+
+// Badges container for multiple badges
+.badges-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.makeup-badge {
+  font-size: 0.7rem;
+  --padding-start: 6px;
+  --padding-end: 6px;
+  
+  .badge-icon {
+    font-size: 0.8rem;
+    margin-right: 2px;
+  }
+}
+
+.attendance-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  --padding-start: 6px;
+  --padding-end: 6px;
+}
+
+.waiver-badge {
+  .badge-icon {
+    font-size: 0.8rem;
+    margin-right: 2px;
+  }
+}
+
+// Attendance Statistics
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 12px;
+  background: #21262d;
+  border-radius: 8px;
+  border: 1px solid #30363d;
+  
+  .stat-number {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #e6edf3;
+    margin-bottom: 4px;
+    
+    &.success {
+      color: #2ea043;
+    }
+    
+    &.danger {
+      color: #f85149;
+    }
+    
+    &.warning {
+      color: #f7931e;
+    }
+  }
+  
+  .stat-label {
+    font-size: 0.8rem;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+}
+
+.attendance-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(247, 147, 30, 0.1);
+  border: 1px solid rgba(247, 147, 30, 0.3);
+  border-radius: 8px;
+  
+  .info-icon {
+    color: #f7931e;
+    font-size: 1rem;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+  
+  p {
+    margin: 0;
+    color: #e6edf3;
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+}
+
+// Status badges in modal
+.status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  
+  .status-badge {
+    font-size: 0.8rem;
+    --padding-start: 8px;
+    --padding-end: 8px;
+    
+    ion-icon {
+      font-size: 0.9rem;
+      margin-right: 4px;
+    }
+  }
+}
+
+// Responsive design
+@media (max-width: 768px) {
+  .students-container {
+    padding: 16px;
+  }
+  
+  .header-section {
+    h2 {
+      font-size: 1.6rem;
+    }
+  }
+  
+  .student-item {
+    .waiver-badge {
+      font-size: 0.7rem;
+      padding: 4px 8px;
+    }
+  }
+  
+  .modal-content {
+    padding: 12px;
+  }
+  
+  .waiver-details {
+    padding-left: 20px;
+  }
+  
+  .signature-container {
+    padding: 12px;
+    
+    .signature-image {
+      max-height: 100px;
+    }
+  }
+  
+  .badges-container {
+    align-items: center;
+    
+    ion-badge {
+      font-size: 0.65rem;
+    }
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    
+    .stat-item {
+      padding: 8px;
+      
+      .stat-number {
+        font-size: 1.4rem;
+      }
+      
+      .stat-label {
+        font-size: 0.7rem;
+      }
+    }
+  }
+  
+  .status-badges {
+    .status-badge {
+      font-size: 0.7rem;
+    }
+  }
+} 

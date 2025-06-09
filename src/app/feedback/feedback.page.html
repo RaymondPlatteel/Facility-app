@@ -1,0 +1,78 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-button (click)="goBack()">
+        <ion-icon name="arrow-back"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-title>Feedback</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <div class="feedback-container">
+    <div class="header-section">
+      <h2>Share Your Feedback</h2>
+      <p class="subtitle">Let us know how we're doing!</p>
+    </div>
+
+    <ion-card class="feedback-card">
+      <ion-card-header>
+        <ion-card-title>Your Feedback</ion-card-title>
+      </ion-card-header>
+      
+      <ion-card-content>
+        <!-- Student Name -->
+        <div class="form-group">
+          <label for="studentName">Your Name</label>
+          <input 
+            id="studentName"
+            type="text" 
+            placeholder="Enter your name" 
+            [(ngModel)]="feedback.studentName"
+            class="form-input">
+        </div>
+
+        <!-- Rating -->
+        <div class="form-group">
+          <label>Rating</label>
+          <div class="rating-container">
+            <button 
+              *ngFor="let num of [1,2,3,4,5]" 
+              class="star-btn"
+              (click)="setRating(num)"
+              [class.active]="num <= feedback.rating">
+              <ion-icon [name]="num <= feedback.rating ? 'star' : 'star-outline'"></ion-icon>
+            </button>
+            <span class="rating-text">{{ feedback.rating }}/5</span>
+          </div>
+        </div>
+
+        <!-- Feedback Comment -->
+        <div class="form-group">
+          <label for="feedback">Your Feedback</label>
+          <ion-textarea
+            id="feedback"
+            placeholder="Tell us about your experience..."
+            [(ngModel)]="feedback.comment"
+            rows="6"
+            class="feedback-textarea">
+          </ion-textarea>
+        </div>
+
+        <!-- Submit Button -->
+        <div class="form-actions">
+          <ion-button 
+            expand="block" 
+            color="primary"
+            (click)="submitFeedback()"
+            [disabled]="isSubmitting"
+            class="submit-btn">
+            <ion-icon name="send" slot="start"></ion-icon>
+            {{ isSubmitting ? 'Submitting...' : 'Submit Feedback' }}
+          </ion-button>
+        </div>
+      </ion-card-content>
+    </ion-card>
+  </div>
+</ion-content> 

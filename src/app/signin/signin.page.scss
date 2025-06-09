@@ -1,0 +1,246 @@
+// Dark theme matching the rest of the app
+ion-content {
+  --background: #0e1117;
+  --color: #e6edf3;
+}
+
+ion-header {
+  ion-toolbar {
+    --background: #161b22;
+    --color: #e6edf3;
+    --border-color: #30363d;
+  }
+}
+
+.sessions-container,
+.checkin-container {
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+  background: #0e1117;
+  min-height: 100vh;
+}
+
+.header-section {
+  text-align: center;
+  margin-bottom: 24px;
+  
+  h2 {
+    margin: 0 0 8px 0;
+    color: #3daee9;
+    font-size: 1.8rem;
+    font-weight: 600;
+  }
+  
+  .subtitle {
+    margin: 0;
+    color: #8b949e;
+    font-size: 1rem;
+  }
+}
+
+// No sessions state
+.no-sessions {
+  text-align: center;
+  padding: 60px 20px;
+  color: #8b949e;
+  
+  .no-sessions-icon {
+    font-size: 4rem;
+    margin-bottom: 16px;
+    color: #6e7681;
+  }
+  
+  h3 {
+    margin: 16px 0 8px 0;
+    color: #e6edf3;
+    font-size: 1.4rem;
+  }
+  
+  p {
+    margin: 0;
+    font-size: 1rem;
+  }
+}
+
+// Session cards
+.session-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  margin-bottom: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    border-color: #3daee9;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  }
+  
+  ion-card-title {
+    color: #ffffff !important;
+    font-weight: 600;
+    font-size: 1.2rem;
+  }
+  
+  ion-card-content {
+    color: #e6edf3;
+  }
+}
+
+.session-info {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  
+  .session-detail {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #8b949e;
+    font-size: 0.9rem;
+    
+    ion-icon {
+      font-size: 1rem;
+    }
+  }
+}
+
+.participants-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  
+  .participant-badge {
+    font-size: 0.8rem;
+    padding: 4px 8px;
+  }
+  
+  .more-participants {
+    color: #8b949e;
+    font-size: 0.8rem;
+    font-style: italic;
+  }
+}
+
+// Students card
+.students-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  
+  ion-card-title {
+    color: #ffffff !important;
+    font-weight: 600;
+  }
+  
+  ion-card-content {
+    color: #e6edf3;
+    padding: 0;
+  }
+}
+
+.students-list {
+  background: transparent;
+  
+  .student-item {
+    --background: transparent;
+    --color: #e6edf3;
+    --border-color: #30363d;
+    --padding-start: 16px;
+    --padding-end: 16px;
+    --min-height: 60px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid #30363d;
+    
+    &:last-child {
+      border-bottom: none;
+    }
+    
+    &:hover {
+      --background: #21262d;
+    }
+    
+    &.checked-in {
+      --background: rgba(46, 160, 67, 0.1);
+      --color: #2ea043;
+      
+      ion-label h3 {
+        color: #2ea043 !important;
+      }
+      
+      ion-label p {
+        color: #2ea043 !important;
+        opacity: 0.8;
+      }
+    }
+    
+    ion-label {
+      h3 {
+        color: #e6edf3 !important;
+        font-weight: 500;
+        margin: 2px 0;
+        font-size: 1.1rem;
+      }
+      
+      p {
+        color: #8b949e !important;
+        margin: 2px 0;
+        font-size: 0.9rem;
+      }
+    }
+    
+    ion-icon {
+      font-size: 1.5rem;
+      margin-right: 12px;
+    }
+  }
+}
+
+// Responsive design
+@media (max-width: 768px) {
+  .sessions-container,
+  .checkin-container {
+    padding: 16px;
+  }
+  
+  .header-section {
+    h2 {
+      font-size: 1.6rem;
+    }
+  }
+  
+  .session-info {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .participants-preview {
+    .participant-badge {
+      font-size: 0.7rem;
+    }
+  }
+  
+  .students-list {
+    .student-item {
+      --min-height: 56px;
+      --padding-start: 12px;
+      --padding-end: 12px;
+      
+      ion-label {
+        h3 {
+          font-size: 1rem;
+        }
+        
+        p {
+          font-size: 0.8rem;
+        }
+      }
+    }
+  }
+} 

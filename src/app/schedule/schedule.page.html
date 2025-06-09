@@ -1,0 +1,268 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-title>Schedule</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <!-- Left Sidebar -->
+  <div class="left-sidebar">
+    <div class="sidebar-content">
+      <button class="sidebar-btn back-btn" (click)="goToHome()">
+        <ion-icon name="arrow-back"></ion-icon>
+        Back to Home
+      </button>
+      <button class="sidebar-btn primary" (click)="showFormPage()">
+        <ion-icon name="add-circle-outline"></ion-icon>
+        Add Session
+      </button>
+      <button class="sidebar-btn">
+        <ion-icon name="create-outline"></ion-icon>
+        Edit Session
+      </button>
+      <button class="sidebar-btn" (click)="goToStudents()">
+        <ion-icon name="people-outline"></ion-icon>
+        Manage Students
+      </button>
+      <button class="sidebar-btn">
+        <ion-icon name="calendar-outline"></ion-icon>
+        View History
+      </button>
+      <button class="sidebar-btn">
+        <ion-icon name="settings-outline"></ion-icon>
+        Settings
+      </button>
+    </div>
+  </div>
+
+  <!-- Calendar Container -->
+  <div class="calendar-container" id="calendarContainer">
+    <div class="calendar">
+      <header class="calendar-header">
+        <button id="prev" (click)="prevPeriod()">⟵</button>
+        <h1 id="monthYear">{{ monthYearText }}</h1>
+        <div class="header-controls">
+          <button class="current-week-btn" (click)="goToCurrentWeek()">
+            <ion-icon name="today"></ion-icon>
+            Current Week
+          </button>
+          <select id="viewMode" [(ngModel)]="viewMode" (change)="onViewModeChange()">
+            <option value="monthly">Monthly</option>
+            <option value="weekly">Weekly</option>
+          </select>
+          <button id="next" (click)="nextPeriod()">⟶</button>
+        </div>
+      </header>
+      <div id="calendarGrid">
+        <!-- Weekly View -->
+        <div *ngIf="viewMode === 'weekly'" class="weekly-calendar">
+          <!-- Header with days -->
+          <div class="week-header">
+            <div class="time-column-header">Time</div>
+            <div *ngFor="let day of weekDays" 
+                 class="day-header"
+                 [class.today]="isToday(day.date)"
+                 [class.past-day]="isPastDate(day.date)"
+                 [class.future-day]="isFutureDate(day.date)">
+              {{ day.label }}<br><span class="date">{{ formatDate(day.date) }}</span>
+            </div>
+          </div>
+          
+          <!-- Time slots grid -->
+          <div class="time-slots-grid">
+            <div *ngFor="let hour of timeSlots" class="time-row">
+              <div class="time-label">{{ formatHour(hour) }}</div>
+                             <div *ngFor="let day of weekDays; let dayIndex = index" 
+                    class="time-slot" 
+                    [class.has-session]="getSessionForSlot(day.date, hour)"
+                    [class.last-session]="getSessionForSlot(day.date, hour) && isLastSessionInSeries(getSessionForSlot(day.date, hour)!)"
+                    [class.today]="isToday(day.date)"
+                    [class.past-day]="isPastDate(day.date)"
+                    [class.future-day]="isFutureDate(day.date)"
+                    (click)="onTimeSlotClick(day.date, hour)">
+                 <div *ngIf="getSessionForSlot(day.date, hour)" 
+                      class="session-info"
+                      [class.last-session-info]="isLastSessionInSeries(getSessionForSlot(day.date, hour)!)">
+                   {{ getSessionForSlot(day.date, hour)?.name }}
+                 </div>
+                 <div *ngIf="!getSessionForSlot(day.date, hour)" class="empty-slot">
+                   <!-- Empty slot for visual consistency -->
+                 </div>
+               </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Monthly View Placeholder -->
+        <div *ngIf="viewMode === 'monthly'" class="monthly-view">
+          <p>Monthly view coming soon...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Page -->
+  <div class="form-page" [class.active]="formPageActive" id="formPage">
+    <div class="form-container">
+      <!-- Header -->
+      <div class="form-header">
+        <h2>{{ isEditMode ? 'Edit Session' : 'Create New Session' }}</h2>
+        <button class="close-btn" (click)="hideFormPage()">
+          <ion-icon name="close"></ion-icon>
+        </button>
+      </div>
+
+      <!-- Form Content -->
+      <div class="form-content">
+        <!-- Session Name -->
+        <div class="form-group">
+          <label for="sessionName">Session Name</label>
+          <input 
+            id="sessionName" 
+            type="text" 
+            placeholder="Enter session name" 
+            [(ngModel)]="newSession.name"
+            class="form-input">
+        </div>
+
+        <!-- Date & Time Row -->
+        <div class="form-row">
+          <div class="form-group half">
+            <label for="startDate">Date</label>
+            <input 
+              id="startDate" 
+              type="date" 
+              [(ngModel)]="newSession.startDate"
+              class="form-input">
+          </div>
+          <div class="form-group half">
+            <label for="sessionTime">Time</label>
+            <input 
+              id="sessionTime" 
+              type="time" 
+              [(ngModel)]="newSession.time"
+              class="form-input">
+          </div>
+        </div>
+
+                 <!-- Days of Week (only show for new sessions) -->
+         <div class="form-group" *ngIf="!isEditMode">
+           <label>Days of Week</label>
+           <div class="days-selector">
+             <button 
+               *ngFor="let day of ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; let i = index"
+               type="button"
+               class="day-btn"
+               [class.selected]="newSession.daysOfWeek.includes(i)"
+               (click)="toggleDay(i)">
+               {{ day }}
+             </button>
+           </div>
+         </div>
+
+         <!-- Session Count (only show for new sessions) -->
+         <div class="form-group" *ngIf="!isEditMode">
+           <label for="sessionCount">Total Number of Sessions</label>
+           <input 
+             id="sessionCount" 
+             type="number" 
+             min="1" 
+             max="50"
+             placeholder="How many sessions total?" 
+             [(ngModel)]="newSession.sessionCount"
+             class="form-input">
+           <small class="form-hint">
+             Based on {{ newSession.daysOfWeek.length }} day{{ newSession.daysOfWeek.length !== 1 ? 's' : '' }} per week, 
+             this will run for approximately {{ calculateWeeks() }} week{{ calculateWeeks() !== 1 ? 's' : '' }}
+           </small>
+         </div>
+
+        <!-- Participants -->
+        <div class="form-group">
+          <label>Participants</label>
+          <div class="participants-list">
+            <div 
+              *ngFor="let participant of newSession.participants; trackBy: trackParticipant; let i = index" 
+              class="participant-row">
+              <div class="participant-input-container">
+                <input 
+                  type="text" 
+                  placeholder="Participant name" 
+                  [(ngModel)]="newSession.participants[i]"
+                  (input)="onParticipantInput(i, newSession.participants[i])"
+                  (focus)="showAllStudentSuggestions(i)"
+                  (blur)="clearSuggestions(i)"
+                  class="form-input participant-input">
+                
+                <!-- Suggestions dropdown -->
+                <div 
+                  *ngIf="filteredSuggestions[i] && filteredSuggestions[i].length > 0"
+                  class="suggestions-dropdown">
+                  <button 
+                    *ngFor="let suggestion of filteredSuggestions[i]" 
+                    type="button"
+                    class="suggestion-item"
+                    (click)="selectSuggestion(i, suggestion)">
+                    {{ suggestion }}
+                  </button>
+                </div>
+              </div>
+              
+              <button 
+                *ngIf="newSession.participants.length > 1"
+                type="button" 
+                class="remove-btn"
+                (click)="removeParticipant(i)">
+                <ion-icon name="trash-outline"></ion-icon>
+              </button>
+            </div>
+          </div>
+          <button type="button" class="add-participant-btn" (click)="addParticipant()">
+            <ion-icon name="add"></ion-icon>
+            Add Participant
+          </button>
+          
+          <!-- Quick add existing students -->
+          <div *ngIf="allStudentNames.length > 0" class="quick-add-students">
+            <p class="quick-add-label">Quick add existing students:</p>
+            <div class="student-chips">
+              <button 
+                *ngFor="let studentName of allStudentNames.slice(0, 6)" 
+                type="button"
+                class="student-chip"
+                [disabled]="newSession.participants.includes(studentName)"
+                (click)="addExistingStudent(studentName)">
+                {{ studentName }}
+              </button>
+              <span *ngIf="allStudentNames.length > 6" class="more-students">
+                +{{ allStudentNames.length - 6 }} more...
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="form-actions">
+        <button 
+          *ngIf="isEditMode" 
+          type="button" 
+          class="delete-btn" 
+          (click)="deleteSession()">
+          <ion-icon name="trash"></ion-icon>
+          Delete Session
+        </button>
+        
+        <div class="action-buttons">
+          <button type="button" class="cancel-btn" (click)="hideFormPage()">
+            Cancel
+          </button>
+          <button type="button" class="save-btn" (click)="saveSession()">
+            <ion-icon name="save"></ion-icon>
+            {{ isEditMode ? 'Update Session' : 'Create Session' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</ion-content>

@@ -1,9 +1,13 @@
 <ion-header [translucent]="true">
   <ion-toolbar>
-    <ion-title>waiver </ion-title>
+    <ion-buttons slot="start">
+      <ion-button (click)="goBack()">
+        <ion-icon name="arrow-back"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-title>{{ showWaiverSelect ? 'Select Waiver Type' : 'Waiver Form' }}</ion-title>
   </ion-toolbar>
 </ion-header>
-
 <ion-content [fullscreen]="true">
   <ion-header collapse="condense">
     <ion-toolbar>
@@ -11,23 +15,38 @@
     </ion-toolbar>
   </ion-header>
 
-  <div *ngIf="showWaiverSelect">
-    <h1>Choose Waiver</h1>
-    <button (click)="selectWaiver('adult')">I am 18 or older and signing for myself</button>
-    <button (click)="selectWaiver('child')">I am the parent or legal guardian of the participant</button>
-  </div>
+  <div class="waiver-container">
+    <div *ngIf="showWaiverSelect" class="waiver-selection">
+      <h2>Select Waiver Type</h2>
+      <p>Please choose the appropriate waiver for your needs:</p>
+      
+      <div class="selection-buttons">
+        <button class="selection-btn" (click)="selectWaiver('adult')">
+          <h3>Adult Waiver</h3>
+          <p>For participants 18 years and older</p>
+        </button>
+        
+        <button class="selection-btn" (click)="selectWaiver('child')">
+          <h3>Child Waiver</h3>
+          <p>For participants under 18 years (parent/guardian signature required)</p>
+        </button>
+      </div>
+    </div>
 
   <div *ngIf="showAdultForm"> <!-- Adult waiver -->
     <h1>New Student Enrollment</h1>
 
     <label for="fullName">Full Name</label>
-    <input id="fullName" type="text" placeholder="Your full name" [(ngModel)]="adult.fullName">
+    <input id="fullName" type="text" placeholder="Your full name" [(ngModel)]="adult.fullName" 
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
 
     <label for="phone">Phone Number</label>
-    <input id="phone" type="tel" placeholder="e.g. (123) 456-7890" [(ngModel)]="adult.phone">
+    <input id="phone" type="tel" placeholder="e.g. (123) 456-7890" [(ngModel)]="adult.phone" 
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
 
     <label for="email">Email Address</label>
-    <input id="email" type="email" placeholder="you@example.com" [(ngModel)]="adult.email">
+    <input id="email" type="text" placeholder="you@example.com" [(ngModel)]="adult.email" 
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
 
     <div class="section-title">Waiver & Terms</div>
     <p style="font-size: 0.9em; line-height: 1.4em;">
@@ -45,7 +64,10 @@
       I have read and understood this entire waiver and agree to be bound by its terms. I understand that by signing below, I am giving up substantial legal rights and that I am doing so voluntarily and of my own free will.
     </p>
 
-    <label><input type='checkbox' [(ngModel)]="adult.agree"> I have read and agree to the terms</label>
+    <div class="checkbox-container">
+      <input type='checkbox' id="adultAgree" [(ngModel)]="adult.agree">
+      <label for="adultAgree">I have read and agree to the terms</label>
+    </div>
     <div class="signature-display" (click)="openSignatureModal('adult')">Tap to Sign</div>
     <div id="signatureWrapper" [style.display]="adult.signed ? 'block' : 'none'">
       <img #savedSignature [src]="adult.signatureDataUrl"/>
@@ -59,16 +81,20 @@
     <h1>New Student Enrollment</h1>
 
     <label for="childName">Child's Full Name</label>
-    <input id="childName" type="text" placeholder="Child's full name" [(ngModel)]="child.childName">
+    <input id="childName" type="text" placeholder="Child's full name" [(ngModel)]="child.childName" 
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
 
     <label for="guardianName">Parent/Guardian Full Name</label>
-    <input id="guardianName" type="text" placeholder="Your full name" [(ngModel)]="child.guardianName">
+    <input id="guardianName" type="text" placeholder="Your full name" [(ngModel)]="child.guardianName" 
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
 
     <label for="guardianPhone">Phone Number</label>
-    <input id="guardianPhone" type="tel" placeholder="e.g. (123) 456-7890" [(ngModel)]="child.guardianPhone">
+    <input id="guardianPhone" type="tel" placeholder="e.g. (123) 456-7890" [(ngModel)]="child.guardianPhone" 
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
 
     <label for="guardianEmail">Email Address</label>
-    <input id="guardianEmail" type="email" placeholder="you@example.com" [(ngModel)]="child.guardianEmail">
+    <input id="guardianEmail" type="text" placeholder="you@example.com" [(ngModel)]="child.guardianEmail" 
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
 
     <div class="section-title">Waiver & Terms</div>
     <p style="font-size: 0.9em; line-height: 1.4em;">
@@ -85,7 +111,10 @@
       I have read and understood this entire waiver and agree to be bound by its terms.
     </p>
 
-    <label><input type='checkbox' [(ngModel)]="child.agree"> I have read and agree to the terms</label>
+    <div class="checkbox-container">
+      <input type='checkbox' id="childAgree" [(ngModel)]="child.agree">
+      <label for="childAgree">I have read and agree to the terms</label>
+    </div>
     <div class="signature-display" (click)="openSignatureModal('child')">Tap to Sign</div>
     <div id="signatureWrapperChild" [style.display]="child.signed ? 'block' : 'none'">
       <img #savedSignatureChild [src]="child.signatureDataUrl"/>
@@ -102,5 +131,6 @@
       <button (click)="clearCanvas()">Clear</button>
       <button (click)="saveSignature()">Done</button>
     </div>
+  </div>
   </div>
 </ion-content>

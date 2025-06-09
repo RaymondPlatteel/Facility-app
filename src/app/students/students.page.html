@@ -1,0 +1,247 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-button (click)="goBack()">
+        <ion-icon name="arrow-back"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-title>Manage Students</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <div class="students-container">
+    <div class="header-section">
+      <h2>All Students</h2>
+      <p class="subtitle">Students from sessions and waiver records</p>
+    </div>
+
+    <ion-list>
+      <ion-item 
+        *ngFor="let student of students" 
+        button 
+        (click)="openStudentDetails(student)"
+        class="student-item">
+        <ion-icon 
+          name="person" 
+          slot="start" 
+          class="student-icon">
+        </ion-icon>
+        <ion-label>
+          <h3 class="student-name">{{ student.name }}</h3>
+          <p class="student-info">
+            Sessions: {{ student.sessions.length }} | 
+            Waivers: {{ student.waivers.length }}
+            <span *ngIf="student.stats && student.stats.totalSessions > 0"> | 
+              Attendance: {{ getAttendanceRate(student) }}%
+            </span>
+          </p>
+        </ion-label>
+        <div slot="end" class="badges-container">
+          <!-- Make-up Sessions Badge (only show if student has missed sessions) -->
+          <ion-badge 
+            *ngIf="hasMissedSessions(student)"
+            [color]="getMakeUpBadgeColor(student)"
+            class="makeup-badge">
+            <ion-icon name="alert-circle" class="badge-icon"></ion-icon>
+            {{ student.stats?.makeUpSessionsRemaining || 0 }} Make-ups
+          </ion-badge>
+          
+          <!-- Attendance Badge (only show if student has attended sessions) -->
+          <ion-badge 
+            *ngIf="student.stats && student.stats.totalSessions > 0"
+            [color]="getAttendanceColor(student)"
+            class="attendance-badge">
+            {{ getAttendanceRate(student) }}%
+          </ion-badge>
+          
+          <!-- Waiver Badge -->
+          <ion-badge 
+            [color]="student.hasWaiver ? 'success' : 'warning'"
+            class="waiver-badge">
+            <ion-icon 
+              [name]="student.hasWaiver ? 'checkmark-circle' : 'close-circle'" 
+              class="badge-icon">
+            </ion-icon>
+            {{ student.hasWaiver ? 'Waiver On File' : 'No Waiver' }}
+          </ion-badge>
+        </div>
+      </ion-item>
+    </ion-list>
+
+    <div *ngIf="students.length === 0" class="empty-state">
+      <ion-icon name="person" class="empty-icon"></ion-icon>
+      <h3>No Students Found</h3>
+      <p>Students will appear here when you create sessions or when waivers are signed.</p>
+    </div>
+  </div>
+
+  <!-- Student Details Modal -->
+  <ion-modal [isOpen]="isModalOpen" (didDismiss)="closeModal()">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>Student Details</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="closeModal()">
+              <ion-icon name="close-circle"></ion-icon>
+            </ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+
+      <ion-content *ngIf="selectedStudent">
+        <div class="modal-content">
+          <!-- Student Info Header -->
+          <ion-card class="student-header-card">
+            <ion-card-header>
+              <ion-card-title class="student-modal-name">
+                <ion-icon name="person" class="modal-person-icon"></ion-icon>
+                {{ selectedStudent.name }}
+              </ion-card-title>
+            </ion-card-header>
+            <ion-card-content>
+              <div class="status-badges">
+                <ion-badge 
+                  [color]="selectedStudent.hasWaiver ? 'success' : 'warning'"
+                  class="status-badge">
+                  <ion-icon 
+                    [name]="selectedStudent.hasWaiver ? 'checkmark-circle' : 'close-circle'">
+                  </ion-icon>
+                  {{ selectedStudent.hasWaiver ? 'Waiver On File' : 'No Waiver On File' }}
+                </ion-badge>
+                
+                <!-- Attendance Badge -->
+                <ion-badge 
+                  *ngIf="selectedStudent.stats && selectedStudent.stats.totalSessions > 0"
+                  [color]="getAttendanceColor(selectedStudent)"
+                  class="status-badge">
+                  {{ getAttendanceRate(selectedStudent) }}% Attendance
+                </ion-badge>
+                
+                <!-- Make-up Sessions Badge -->
+                <ion-badge 
+                  *ngIf="hasMissedSessions(selectedStudent)"
+                  [color]="getMakeUpBadgeColor(selectedStudent)"
+                  class="status-badge">
+                  <ion-icon name="alert-circle"></ion-icon>
+                  {{ selectedStudent.stats?.makeUpSessionsRemaining || 0 }} Make-ups Remaining
+                </ion-badge>
+              </div>
+            </ion-card-content>
+          </ion-card>
+
+          <!-- Attendance Statistics Section -->
+          <ion-card *ngIf="selectedStudent.stats && selectedStudent.stats.totalSessions > 0">
+            <ion-card-header>
+              <ion-card-title>Attendance Statistics</ion-card-title>
+            </ion-card-header>
+            <ion-card-content>
+              <div class="stats-grid">
+                <div class="stat-item">
+                  <div class="stat-number">{{ selectedStudent.stats.totalSessions }}</div>
+                  <div class="stat-label">Total Sessions</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-number success">{{ selectedStudent.stats.attendedSessions }}</div>
+                  <div class="stat-label">Attended</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-number danger">{{ selectedStudent.stats.missedSessions }}</div>
+                  <div class="stat-label">Missed</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-number warning">{{ selectedStudent.stats.makeUpSessionsRemaining }}</div>
+                  <div class="stat-label">Make-ups Remaining</div>
+                </div>
+              </div>
+              
+              <div class="attendance-info" *ngIf="selectedStudent.stats.makeUpSessionsRemaining > 0">
+                <ion-icon name="alert-circle" class="info-icon"></ion-icon>
+                <p>Each missed session earns 2 make-up opportunities. Please schedule make-up sessions to maintain training progress.</p>
+              </div>
+            </ion-card-content>
+          </ion-card>
+
+          <!-- Sessions Section -->
+          <ion-card *ngIf="selectedStudent.sessions.length > 0">
+            <ion-card-header>
+              <ion-card-title>Sessions ({{ selectedStudent.sessions.length }})</ion-card-title>
+            </ion-card-header>
+            <ion-card-content>
+              <div class="sessions-list">
+                <div 
+                  *ngFor="let session of selectedStudent.sessions" 
+                  class="session-item">
+                  <ion-icon name="calendar-outline" class="session-icon"></ion-icon>
+                  {{ session }}
+                </div>
+              </div>
+            </ion-card-content>
+          </ion-card>
+
+          <!-- Waivers Section -->
+          <ion-card *ngIf="selectedStudent.waivers.length > 0">
+            <ion-card-header>
+              <ion-card-title>Waivers ({{ selectedStudent.waivers.length }})</ion-card-title>
+            </ion-card-header>
+            <ion-card-content>
+              <div class="waivers-list">
+                <div 
+                  *ngFor="let waiver of selectedStudent.waivers" 
+                  class="waiver-item">
+                  <div class="waiver-header">
+                    <ion-icon name="document" class="waiver-icon"></ion-icon>
+                    <div class="waiver-info">
+                      <h4>{{ getWaiverTypeDisplay(waiver.waiverType) }}</h4>
+                      <p class="waiver-date">Signed: {{ formatDate(waiver.signedDate) }}</p>
+                    </div>
+                  </div>
+                  
+                  <div class="waiver-details">
+                    <div *ngIf="waiver.waiverType === 'adult'" class="adult-details">
+                      <p><strong>Name:</strong> {{ waiver.fullName }}</p>
+                      <p *ngIf="waiver.phone"><strong>Phone:</strong> {{ waiver.phone }}</p>
+                      <p *ngIf="waiver.email"><strong>Email:</strong> {{ waiver.email }}</p>
+                    </div>
+                    
+                    <div *ngIf="waiver.waiverType === 'child'" class="child-details">
+                      <p><strong>Child:</strong> {{ waiver.childName }}</p>
+                      <p *ngIf="waiver.guardianName"><strong>Guardian:</strong> {{ waiver.guardianName }}</p>
+                      <p *ngIf="waiver.guardianPhone"><strong>Guardian Phone:</strong> {{ waiver.guardianPhone }}</p>
+                      <p *ngIf="waiver.guardianEmail"><strong>Guardian Email:</strong> {{ waiver.guardianEmail }}</p>
+                    </div>
+
+                    <!-- Signature Display -->
+                    <div class="signature-section">
+                      <h4 class="signature-title">Signature:</h4>
+                      <div class="signature-container">
+                        <img 
+                          [src]="waiver.signatureDataUrl" 
+                          alt="Signature" 
+                          class="signature-image"
+                          (error)="onSignatureError($event)">
+                        <div class="signature-info">
+                          <p class="signature-date">Signed on: {{ formatDate(waiver.signedDate) }}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </ion-card-content>
+          </ion-card>
+
+          <!-- No Waiver Message -->
+          <ion-card *ngIf="selectedStudent.waivers.length === 0">
+            <ion-card-content class="no-waiver-message">
+              <ion-icon name="close-circle" class="no-waiver-icon"></ion-icon>
+              <h3>No Waiver On File</h3>
+              <p>This student has not signed a waiver yet. They should complete a waiver before participating in sessions.</p>
+            </ion-card-content>
+          </ion-card>
+        </div>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+</ion-content> 
