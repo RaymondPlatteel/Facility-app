@@ -1,0 +1,101 @@
+body {
+  font-family: Arial, sans-serif;
+  background-color: #0e1117;
+  color: white;
+  padding: 40px;
+  max-width: 600px;
+  margin: auto;
+  overflow-x: hidden;
+}
+h1 {
+  text-align: center;
+  color: #3daee9;
+}
+label {
+  display: block;
+  margin-top: 15px;
+  font-weight: bold;
+}
+input, select, textarea {
+  width: 100%;
+  padding: 10px;
+  margin-top: 5px;
+  border-radius: 5px;
+  border: none;
+}
+button {
+  margin-top: 20px;
+  background-color: #3daee9;
+  color: white;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  font-size: 16px;
+  width: 100%;
+  cursor: pointer;
+}
+.section-title {
+  margin-top: 40px;
+  font-size: 1.2em;
+  border-bottom: 1px solid #3daee9;
+  padding-bottom: 5px;
+}
+.signature-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.8);
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+.signature-modal.active {
+  display: flex;
+}
+.signature-box {
+  background: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  max-width: 500px;
+  width: 100%;
+  text-align: center;
+  color: black;
+}
+.signature-box canvas {
+  width: 100%;
+  height: 150px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  margin-top: 10px;
+  background: #fff;
+}
+.signature-display {
+  background: #fff;
+  color: black;
+  height: 40px;
+  line-height: 40px;
+  border-radius: 5px;
+  text-align: center;
+  cursor: pointer;
+  margin-top: 10px;
+}
+#signatureWrapper, #signatureWrapperChild {
+  position: relative;
+}
+#savedSignature, #savedSignatureChild {
+  margin-top: 10px;
+  width: 100%;
+  border-radius: 5px;
+  background: white;
+}
+#signatureDateText, #signatureDateTextChild {
+  position: absolute;
+  bottom: 5px;
+  right: 10px;
+  color: #888;
+  font-size: 12px;
+}
+#waiverForm, #waiverFormChild { display: none; }

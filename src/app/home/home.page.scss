@@ -6,6 +6,7 @@
   right: 0;
   top: 50%;
   transform: translateY(-50%);
+  display: none;
 }
 
 #container strong {
@@ -24,4 +25,45 @@
 
 #container a {
   text-decoration: none;
+}
+
+#home-buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 80vh;
+  gap: 32px;
+}
+
+.home-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 180px;
+  height: 120px;
+  background: #222b45;
+  color: #fff;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  font-size: 1.2em;
+  text-decoration: none;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.home-btn ion-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  color: #3daee9;
+}
+
+.home-btn:hover {
+  background: #3daee9;
+  color: #fff;
+  transform: translateY(-4px) scale(1.04);
+}
+
+.home-btn:hover ion-icon {
+  color: #fff;
 }

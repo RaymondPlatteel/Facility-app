@@ -10,4 +10,8 @@ export const routes: Routes = [
     redirectTo: 'home',
     pathMatch: 'full',
   },
+  {
+    path: 'waiver',
+    loadComponent: () => import('./waiver/waiver.page').then( m => m.WaiverPage)
+  },
 ];

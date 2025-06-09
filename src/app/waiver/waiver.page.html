@@ -1,0 +1,106 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-title>waiver</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <ion-header collapse="condense">
+    <ion-toolbar>
+      <ion-title size="large">waiver</ion-title>
+    </ion-toolbar>
+  </ion-header>
+
+  <div *ngIf="showWaiverSelect">
+    <h1>Choose Waiver</h1>
+    <button (click)="selectWaiver('adult')">I am 18 or older and signing for myself</button>
+    <button (click)="selectWaiver('child')">I am the parent or legal guardian of the participant</button>
+  </div>
+
+  <div *ngIf="showAdultForm"> <!-- Adult waiver -->
+    <h1>New Student Enrollment</h1>
+
+    <label for="fullName">Full Name</label>
+    <input id="fullName" type="text" placeholder="Your full name" [(ngModel)]="adult.fullName">
+
+    <label for="phone">Phone Number</label>
+    <input id="phone" type="tel" placeholder="e.g. (123) 456-7890" [(ngModel)]="adult.phone">
+
+    <label for="email">Email Address</label>
+    <input id="email" type="email" placeholder="you@example.com" [(ngModel)]="adult.email">
+
+    <div class="section-title">Waiver & Terms</div>
+    <p style="font-size: 0.9em; line-height: 1.4em;">
+      I acknowledge and agree that my participation in any and all training activities, exercises, programs, and services offered by this facility and its trainers, employees, agents, successors, and assigns (collectively referred to as "the Provider") is entirely voluntary and undertaken at my own risk. I understand that physical training carries inherent risks including, but not limited to, serious bodily injury, permanent disability, heart attack, stroke, paralysis, psychological trauma, or death, as well as property loss or damage. I hereby expressly and unequivocally waive, release, discharge, indemnify, and hold harmless the Provider from any and all claims, liabilities, obligations, demands, actions, damages, expenses, and costs of any kind or nature whatsoever, whether now known or unknown, foreseeable or unforeseeable, arising directly or indirectly out of or in connection with my participation, regardless of whether caused by negligence, fault, omission, or any other act or condition of the Provider or any other party.
+    </p>
+    <ul>
+      <li>I am physically fit and capable of safely participating in all training activities. I have either consulted a licensed physician or have voluntarily chosen not to do so and accept full responsibility for this decision.</li>
+      <li>I will not hold the Provider responsible for any aggravation or worsening of any existing injuries or conditions, including unknown or latent medical issues.</li>
+      <li>I waive the right to bring any claim in a court of law and agree to binding arbitration in the Commonwealth of Massachusetts as the sole and exclusive venue for any dispute resolution.</li>
+      <li>I will not bring any collective or class action lawsuit against the Provider.</li>
+      <li>This agreement shall be governed by and interpreted in accordance with the laws of the Commonwealth of Massachusetts, without regard to conflicts of laws principles.</li>
+      <li>If any part of this waiver is deemed unenforceable, the remainder shall remain in full force and effect.</li>
+    </ul>
+    <p style="font-size: 0.9em; line-height: 1.4em;">
+      I have read and understood this entire waiver and agree to be bound by its terms. I understand that by signing below, I am giving up substantial legal rights and that I am doing so voluntarily and of my own free will.
+    </p>
+
+    <label><input type='checkbox' [(ngModel)]="adult.agree"> I have read and agree to the terms</label>
+    <div class="signature-display" (click)="openSignatureModal('adult')">Tap to Sign</div>
+    <div id="signatureWrapper" [style.display]="adult.signed ? 'block' : 'none'">
+      <img #savedSignature [src]="adult.signatureDataUrl"/>
+      <div #signatureDateText>{{ adult.signatureDate }}</div>
+    </div>
+
+    <button id="submitBtnAdult" (click)="submitWaiver('adult')" [disabled]="!isAdultFormComplete()">Submit</button>
+  </div>
+
+  <div *ngIf="showChildForm"> <!-- Child waiver -->
+    <h1>New Student Enrollment</h1>
+
+    <label for="childName">Child's Full Name</label>
+    <input id="childName" type="text" placeholder="Child's full name" [(ngModel)]="child.childName">
+
+    <label for="guardianName">Parent/Guardian Full Name</label>
+    <input id="guardianName" type="text" placeholder="Your full name" [(ngModel)]="child.guardianName">
+
+    <label for="guardianPhone">Phone Number</label>
+    <input id="guardianPhone" type="tel" placeholder="e.g. (123) 456-7890" [(ngModel)]="child.guardianPhone">
+
+    <label for="guardianEmail">Email Address</label>
+    <input id="guardianEmail" type="email" placeholder="you@example.com" [(ngModel)]="child.guardianEmail">
+
+    <div class="section-title">Waiver & Terms</div>
+    <p style="font-size: 0.9em; line-height: 1.4em;">
+      As the parent or legal guardian of the above-named child, I hereby give permission for my child to participate in training programs offered by this facility. I acknowledge that all training activities, programs, and services carry inherent risks, including serious injury or death. I agree to assume all risks and liabilities and voluntarily waive, release, discharge, and indemnify the Provider, its employees, agents, successors, and assigns from all liability, including that resulting from negligence. This waiver is binding and irrevocable.
+    </p>
+    <ul>
+      <li>I confirm my child is medically and physically able to participate.</li>
+      <li>I take full legal and financial responsibility for any injuries or damages.</li>
+      <li>I waive the right to any future claims or lawsuits under any circumstances.</li>
+      <li>I agree to binding arbitration in Massachusetts for any disputes.</li>
+      <li>This waiver remains in effect indefinitely unless explicitly revoked in writing and acknowledged by the Provider.</li>
+    </ul>
+    <p style="font-size: 0.9em; line-height: 1.4em;">
+      I have read and understood this entire waiver and agree to be bound by its terms.
+    </p>
+
+    <label><input type='checkbox' [(ngModel)]="child.agree"> I have read and agree to the terms</label>
+    <div class="signature-display" (click)="openSignatureModal('child')">Tap to Sign</div>
+    <div id="signatureWrapperChild" [style.display]="child.signed ? 'block' : 'none'">
+      <img #savedSignatureChild [src]="child.signatureDataUrl"/>
+      <div #signatureDateTextChild>{{ child.signatureDate }}</div>
+    </div>
+
+    <button id="submitBtnChild" (click)="submitWaiver('child')" [disabled]="!isChildFormComplete()">Submit</button>
+  </div>
+
+  <div class="signature-modal" [class.active]="showSignatureModal">
+    <div class="signature-box">
+      <h3>Sign Below</h3>
+      <canvas #canvas width="400" height="150"></canvas>
+      <button (click)="clearCanvas()">Clear</button>
+      <button (click)="saveSignature()">Done</button>
+    </div>
+  </div>
+</ion-content>
