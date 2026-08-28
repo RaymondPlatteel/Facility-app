@@ -1,0 +1,124 @@
+<ion-content [fullscreen]="true">
+  <div class="fit-page">
+
+    <!-- Header -->
+    <div class="fit-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back">
+        <ion-icon name="arrow-back"></ion-icon>
+      </button>
+      <div class="fit-titles">
+        <div class="fit-eyebrow">Activity File Analyzer</div>
+        <h1>FIT <span>ANALYZER</span></h1>
+      </div>
+    </div>
+
+    <!-- Drop zone -->
+    <label class="dropzone"
+      [class.active]="dragActive"
+      (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave($event)"
+      (drop)="onDrop($event)">
+      <input type="file" accept=".fit,.gpx" multiple hidden (change)="onFileInput($event)" />
+      <ion-icon name="cloud-upload-outline"></ion-icon>
+      <div class="dz-title">Drop .fit or .gpx files here</div>
+      <div class="dz-sub">or click to browse — device recordings &amp; GPS exports from Garmin, Wahoo, Strava, Coros…</div>
+      <div class="dz-parsing" *ngIf="parsing">Parsing…</div>
+    </label>
+
+    <!-- One card per analyzed activity, newest first -->
+    <div class="activity" *ngFor="let a of activities; let i = index">
+
+      <div class="activity-top">
+        <div class="activity-name">{{ a.fileName }}</div>
+        <button class="remove-btn" (click)="removeActivity(i)" aria-label="Remove">
+          <ion-icon name="close-outline"></ion-icon>
+        </button>
+      </div>
+
+      <!-- Failed parse -->
+      <div class="activity-error" *ngIf="a.error">
+        <ion-icon name="alert-circle-outline"></ion-icon>
+        {{ a.error }}
+      </div>
+
+      <ng-container *ngIf="!a.error">
+        <!-- Headline: best 2-minute (+ best 30-minute) distance + summary -->
+        <div class="summary-row">
+          <div class="best-card" *ngIf="a.best2min">
+            <div class="best-label">
+              <ion-icon name="flash-outline"></ion-icon>
+              Fastest 2-Minute Section
+            </div>
+            <div class="best-value">{{ a.best2min.km | number:'1.3-3' }} <span>km</span></div>
+            <div class="best-range">{{ a.bestRange }}</div>
+            <div class="best-note" *ngIf="a.best2min.full">
+              Activity under 2 min — full distance shown
+            </div>
+            <div class="best-note" *ngIf="!a.best2min.full">
+              Use this as the assessment's 2&nbsp;Min&nbsp;Speed
+            </div>
+          </div>
+
+          <div class="best-card" *ngIf="a.best30min">
+            <div class="best-label">
+              <ion-icon name="flash-outline"></ion-icon>
+              Fastest 30-Minute Section
+            </div>
+            <div class="best-value">{{ a.best30min.km | number:'1.3-3' }} <span>km</span></div>
+            <div class="best-range">{{ a.best30Range }}</div>
+            <div class="best-note">Best sustained half-hour of the activity</div>
+          </div>
+
+          <div class="stat-tiles">
+            <div class="stat-tile">
+              <div class="stat-icon"><ion-icon name="timer-outline"></ion-icon></div>
+              <div class="stat-val">{{ a.durationLabel }}</div>
+              <div class="stat-cap">Duration</div>
+            </div>
+            <div class="stat-tile">
+              <div class="stat-val">{{ a.totalKm }}<span class="stat-unit">km</span></div>
+              <div class="stat-cap">Total Distance</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Per-metric charts -->
+        <div class="charts" *ngIf="a.charts?.length; else noMetrics">
+          <div class="metric" *ngFor="let c of a.charts">
+            <div class="metric-head">
+              <div class="metric-name"><span class="metric-dot" [style.background]="c.color"></span>{{ c.label }}</div>
+              <div class="metric-stats">
+                <span class="ms"><b [style.color]="c.color">{{ c.avg }}</b> avg</span>
+                <span class="ms">{{ c.min }} min</span>
+                <span class="ms">{{ c.max }} max</span>
+                <span class="ms-unit">{{ c.unit }}</span>
+              </div>
+            </div>
+            <svg class="metric-chart" viewBox="0 0 600 150" preserveAspectRatio="none">
+              <rect *ngIf="c.windowX" [attr.x]="c.windowX.x" y="12" [attr.width]="c.windowX.w" height="116"
+                class="window-band"></rect>
+              <text x="40" y="16" class="y-tick">{{ c.yMaxLabel }}</text>
+              <text x="40" y="128" class="y-tick">{{ c.yMinLabel }}</text>
+              <path [attr.d]="c.area" [attr.fill]="c.color" class="metric-area"></path>
+              <path [attr.d]="c.path" fill="none" [attr.stroke]="c.color" stroke-width="1.5"
+                stroke-linejoin="round" stroke-linecap="round"></path>
+            </svg>
+          </div>
+          <div class="chart-legend" *ngIf="a.best2min && !a.best2min.full">
+            <span class="legend-band"></span> Shaded band = fastest 2-min section ({{ a.bestRange }})
+          </div>
+        </div>
+        <ng-template #noMetrics>
+          <div class="activity-error">
+            <ion-icon name="alert-circle-outline"></ion-icon>
+            No chartable metrics found in this file.
+          </div>
+        </ng-template>
+      </ng-container>
+    </div>
+
+    <div class="empty-hint" *ngIf="!activities.length">
+      Dropped files are analyzed entirely in your browser — nothing is uploaded.
+    </div>
+  </div>
+</ion-content>

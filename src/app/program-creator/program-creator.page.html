@@ -1,0 +1,396 @@
+<ion-content [fullscreen]="true">
+  <div class="creator-page">
+
+    <!-- Top bar -->
+    <div class="creator-topbar">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back to programs">
+        <ion-icon name="arrow-back"></ion-icon>
+      </button>
+      <div class="topbar-title">
+        <h1>{{ programId ? 'Edit Program' : 'New Program' }}</h1>
+        <p *ngIf="view === 'builder'">{{ name }} · {{ cycles }} {{ cycleLabel.toLowerCase() }}{{ cycles === 1 ? '' : 's' }} · {{ totalSessions }} days</p>
+        <p *ngIf="view === 'setup'">Set the structure, then build each day</p>
+      </div>
+      <div class="topbar-actions" *ngIf="view === 'builder'">
+        <button class="ghost-btn" (click)="openSetup()">
+          <ion-icon name="settings-outline"></ion-icon> Setup
+        </button>
+        <button class="primary-btn" (click)="save()" [disabled]="saving">
+          <ion-icon name="save-outline"></ion-icon> {{ saving ? 'Saving…' : 'Save Program' }}
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="loading" class="state-msg">Loading…</div>
+
+    <!-- ============ SETUP VIEW ============ -->
+    <div *ngIf="!loading && view === 'setup'" class="setup-view">
+      <div class="setup-grid">
+
+        <div class="setup-card">
+          <h3>Program Details</h3>
+          <label class="fld">
+            <span>Program name *</span>
+            <input class="fld-input" [(ngModel)]="name" placeholder="e.g. Spring Strength Block" />
+          </label>
+          <label class="fld">
+            <span>Goals</span>
+            <input class="fld-input" [(ngModel)]="goals" placeholder="e.g. Strength, conditioning" />
+          </label>
+          <label class="fld">
+            <span>Description</span>
+            <textarea class="fld-input" rows="3" [(ngModel)]="description" placeholder="What this program is about"></textarea>
+          </label>
+          <div class="fld-row">
+            <label class="fld">
+              <span>Fitness level</span>
+              <select class="fld-input" [(ngModel)]="fitnessLevel">
+                <option value="">—</option>
+                <option *ngFor="let lvl of fitnessLevelOptions" [value]="lvl">{{ lvl }}</option>
+              </select>
+            </label>
+            <label class="fld">
+              <span>Session duration</span>
+              <select class="fld-input" [(ngModel)]="durationPerDayMinutes">
+                <option *ngFor="let m of durationOptions()" [ngValue]="m">{{ m }} minutes</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="setup-card">
+          <h3>Structure</h3>
+          <label class="check-row">
+            <input type="checkbox" [(ngModel)]="isStandardWeek" />
+            <span class="check-label">
+              <strong>Standard 7-day week</strong>
+              <small>Days line up with a calendar week</small>
+            </span>
+          </label>
+          <div class="fld-row">
+            <label class="fld">
+              <span>Total {{ cycleLabel.toLowerCase() }}s</span>
+              <input class="fld-input" type="number" min="1" [max]="MAX_CYCLES" [(ngModel)]="cycles" />
+            </label>
+            <label class="fld" *ngIf="!isStandardWeek">
+              <span>Days per cycle</span>
+              <input class="fld-input" type="number" min="1" [max]="MAX_DAYS_PER_CYCLE" [(ngModel)]="daysPerCycle" />
+            </label>
+          </div>
+          <p class="structure-summary" [class.error]="!!setupError && setupError !== 'Program name is required'">
+            {{ setupError && setupError !== 'Program name is required' ? setupError : totalSessions + ' total days (' + cycles + ' × ' + effectiveDays + ')' }}
+          </p>
+          <p class="structure-note" *ngIf="programId">
+            Reducing {{ cycleLabel.toLowerCase() }}s or days removes those days and their exercises.
+          </p>
+          <label class="fld">
+            <span>Start date (optional)</span>
+            <input class="fld-input" type="date" [(ngModel)]="startDate" />
+          </label>
+          <p class="structure-note">
+            When set, the client app shows today's day by counting calendar days since this
+            date — the program moves forward on schedule whether or not sessions are actually
+            logged. Leave blank to keep today's behavior, where it's based on completed workouts.
+          </p>
+        </div>
+
+        <div class="setup-card">
+          <h3>Equipment</h3>
+          <div class="chip-grid">
+            <button
+              *ngFor="let eq of availableEquipment"
+              class="chip"
+              [class.selected]="equipment.includes(eq)"
+              (click)="toggleEquipment(eq)">
+              {{ eq }}
+            </button>
+          </div>
+        </div>
+
+        <div class="setup-card">
+          <h3>Assign Clients</h3>
+          <p class="card-hint">Pick who trains on this program — used by the workout log.</p>
+          <div class="chip-grid" *ngIf="clients.length > 0">
+            <button
+              *ngFor="let c of clients"
+              class="chip"
+              [class.selected]="isClientAssigned(c.id!)"
+              (click)="toggleClient(c.id!)">
+              {{ c.fullName }}
+            </button>
+          </div>
+          <p class="card-hint" *ngIf="clients.length === 0">No client profiles yet.</p>
+        </div>
+      </div>
+
+      <div class="setup-actions">
+        <button class="primary-btn large" (click)="enterBuilder()">
+          <ion-icon name="barbell-outline"></ion-icon>
+          {{ schedule.length > 0 ? 'Back to Builder' : 'Start Building' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- ============ BUILDER VIEW ============ -->
+    <div *ngIf="!loading && view === 'builder'" class="builder">
+
+      <!-- Sidebar: schedule tree -->
+      <aside class="builder-sidebar">
+        <div class="sidebar-head">Schedule</div>
+        <div class="sidebar-scroll">
+          <ng-container *ngFor="let c of getCycles()">
+            <button class="cycle-row" (click)="toggleCycle(c)">
+              <span>{{ cycleLabel }} {{ c + 1 }}</span>
+              <ion-icon [name]="openCycles[c] ? 'chevron-down' : 'chevron-forward'"></ion-icon>
+            </button>
+            <ng-container *ngIf="openCycles[c]">
+              <button
+                *ngFor="let day of getDaysForCycle(c); let d = index"
+                class="day-row"
+                [class.active]="(c * effectiveDays + d) === currentIdx"
+                (click)="loadDay(c * effectiveDays + d)">
+                <span class="day-row-label">
+                  Day {{ d + 1 }}<span class="day-row-name" *ngIf="day.name && day.name !== 'Day ' + (d + 1)"> · {{ day.name }}</span>
+                </span>
+                <span class="day-dot" [class.filled]="hasDayData(day)" [class.rest]="day.isRestDay"></span>
+              </button>
+            </ng-container>
+          </ng-container>
+        </div>
+        <div class="sidebar-foot">
+          <div>{{ getDaysWithExercises() }} training days</div>
+          <div>{{ getTotalExercises() }} exercises · {{ getRestDaysCount() }} rest days</div>
+        </div>
+      </aside>
+
+      <!-- Main: day editor -->
+      <main class="builder-main" *ngIf="currentDay as day">
+        <div class="day-crumb">{{ cycleLabel }} {{ getCycleNumber(currentIdx) }} · Day {{ getDayNumber(currentIdx) }}</div>
+
+        <!-- Day meta card -->
+        <div class="day-meta-card">
+          <div class="day-meta-top">
+            <input
+              class="day-name-input"
+              [(ngModel)]="day.name"
+              (change)="onDayMetaChanged()"
+              placeholder="e.g. Upper A, Push Day, Leg Day" />
+            <label class="rest-toggle">
+              <input type="checkbox" [checked]="day.isRestDay" (change)="toggleRestDay($any($event.target).checked)" />
+              <span><ion-icon name="bed-outline"></ion-icon> Rest day</span>
+            </label>
+          </div>
+
+          <textarea
+            class="day-notes"
+            rows="2"
+            [(ngModel)]="day.notes"
+            (change)="onDayMetaChanged()"
+            placeholder="Coach's notes — focus points or instructions for this day"></textarea>
+
+          <div class="repeat-row">
+            <label class="fld inline">
+              <span>Repeat</span>
+              <select class="fld-input" [ngModel]="day.repeat" (ngModelChange)="onRepeatChange($event)">
+                <option value="Never">Never</option>
+                <option value="Repeat every cycle">Repeat every {{ cycleLabel.toLowerCase() }}</option>
+                <option value="Custom">Custom days</option>
+              </select>
+            </label>
+
+            <label class="fld inline" *ngIf="day.repeat !== 'Never'">
+              <span>End after</span>
+              <div class="endafter-wrap">
+                <input class="fld-input narrow" type="number" min="1" [max]="cycles"
+                       [ngModel]="day.repeatEndAfter"
+                       (change)="updateRepeatEndAfter($any($event.target).value)" />
+                <em>{{ cycleLabel.toLowerCase() }}s</em>
+              </div>
+            </label>
+
+            <div class="custom-days" *ngIf="day.repeat === 'Custom'">
+              <button
+                *ngFor="let n of getDaysInCycle()"
+                class="chip small"
+                [class.selected]="isCustomRepeatDaySelected(n)"
+                (click)="toggleCustomRepeatDay(n)">
+                D{{ n }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rest day message -->
+        <div class="rest-message" *ngIf="day.isRestDay">
+          This is a rest day — no exercises. Toggle off "Rest day" to add training.
+        </div>
+
+        <!-- Exercise stack -->
+        <div class="exercise-stack" *ngIf="!day.isRestDay">
+          <div class="empty-state" *ngIf="day.exercises.length === 0">
+            No exercises yet — add the first one below.
+          </div>
+
+          <div class="ex-card" *ngFor="let ex of day.exercises; let exIdx = index; trackBy: trackByIdx" [class.open]="isExOpen(exIdx)">
+            <!-- header -->
+            <div class="ex-head">
+              <div class="ex-name-wrap" *ngIf="isExOpen(exIdx)">
+                <input
+                  class="ex-name-input"
+                  [(ngModel)]="ex.name"
+                  (change)="onDayMetaChanged()"
+                  placeholder="Exercise name" />
+                <span class="assessment-flag" *ngIf="assessmentLiftLabel(ex.name) as lift"
+                      [title]="lift + ' is an Omni Method benchmark — a PR here auto-updates the athlete\'s level'">
+                  <ion-icon name="trending-up-outline"></ion-icon> Benchmark
+                </span>
+              </div>
+              <div class="ex-collapsed" *ngIf="!isExOpen(exIdx)" (click)="toggleExercise(exIdx)">
+                <span class="ex-title">
+                  {{ ex.name || 'New Exercise' }}
+                  <span class="assessment-dot" *ngIf="assessmentLiftLabel(ex.name) as lift"
+                        [title]="lift + ' — Omni Method benchmark'"></span>
+                </span>
+                <span class="ex-summary">{{ getExerciseSummary(ex) }}</span>
+              </div>
+              <div class="ex-head-actions">
+                <button class="mini-btn" title="Duplicate" (click)="duplicateExercise(exIdx)">
+                  <ion-icon name="copy-outline"></ion-icon>
+                </button>
+                <button class="mini-btn danger" title="Delete" (click)="deleteExercise(exIdx)">
+                  <ion-icon name="trash-outline"></ion-icon>
+                </button>
+                <button class="mini-btn" [title]="isExOpen(exIdx) ? 'Collapse' : 'Expand'" (click)="toggleExercise(exIdx)">
+                  <ion-icon [name]="isExOpen(exIdx) ? 'chevron-up' : 'chevron-down'"></ion-icon>
+                </button>
+              </div>
+            </div>
+
+            <!-- body -->
+            <div class="ex-body" *ngIf="isExOpen(exIdx)">
+              <div class="attr-row" *ngFor="let attr of ex.attributes">
+                <div class="attr-label">{{ attr.type }}</div>
+
+                <select class="fld-input strategy-select"
+                        [ngModel]="attr.strategy"
+                        (ngModelChange)="updateAttrStrategy(attr, $event)">
+                  <option *ngFor="let s of getStrategiesForAttribute(attr.type)" [value]="s">{{ s }}</option>
+                </select>
+
+                <div class="attr-value">
+                  <!-- Tempo: 4 boxes -->
+                  <div class="multi-input" *ngIf="attr.strategy === 'Fixed' && attr.type === 'Tempo'">
+                    <ng-container *ngFor="let i of [0,1,2,3]; let last = last">
+                      <input class="fld-input tiny" type="number" min="0" placeholder="0"
+                             [value]="getTempoValues(attr.val)[i]"
+                             (input)="updateTempo(attr, i, $any($event.target).value)" />
+                      <span class="sep" *ngIf="!last">-</span>
+                    </ng-container>
+                  </div>
+
+                  <!-- Fixed duration hh:mm:ss -->
+                  <div class="multi-input" *ngIf="attr.strategy === 'Fixed' && attr.type === 'Duration'">
+                    <input class="fld-input tiny" type="number" min="0" max="23" placeholder="hh"
+                           [value]="getDurationParts(attr.val).hours"
+                           (input)="updateDuration(attr, 'hours', $any($event.target).value)" />
+                    <span class="sep">:</span>
+                    <input class="fld-input tiny" type="number" min="0" max="59" placeholder="mm"
+                           [value]="getDurationParts(attr.val).minutes"
+                           (input)="updateDuration(attr, 'minutes', $any($event.target).value)" />
+                    <span class="sep">:</span>
+                    <input class="fld-input tiny" type="number" min="0" max="59" placeholder="ss"
+                           [value]="getDurationParts(attr.val).seconds"
+                           (input)="updateDuration(attr, 'seconds', $any($event.target).value)" />
+                  </div>
+
+                  <!-- Range duration -->
+                  <div class="multi-input" *ngIf="attr.strategy === 'Range' && attr.type === 'Duration'">
+                    <ng-container *ngFor="let which of ['start', 'end']; let isEnd = last">
+                      <input class="fld-input tiny" type="number" min="0" max="23" placeholder="hh"
+                             [value]="getDurationParts(which === 'start' ? getRangeStart(attr.val) : getRangeEnd(attr.val)).hours"
+                             (input)="updateDurationRange(attr, $any(which), 'hours', $any($event.target).value)" />
+                      <span class="sep">:</span>
+                      <input class="fld-input tiny" type="number" min="0" max="59" placeholder="mm"
+                             [value]="getDurationParts(which === 'start' ? getRangeStart(attr.val) : getRangeEnd(attr.val)).minutes"
+                             (input)="updateDurationRange(attr, $any(which), 'minutes', $any($event.target).value)" />
+                      <span class="sep">:</span>
+                      <input class="fld-input tiny" type="number" min="0" max="59" placeholder="ss"
+                             [value]="getDurationParts(which === 'start' ? getRangeStart(attr.val) : getRangeEnd(attr.val)).seconds"
+                             (input)="updateDurationRange(attr, $any(which), 'seconds', $any($event.target).value)" />
+                      <span class="sep wide" *ngIf="!isEnd">–</span>
+                    </ng-container>
+                  </div>
+
+                  <!-- Fixed / AMRAP single value (non-duration/tempo) -->
+                  <input class="fld-input val"
+                         *ngIf="(attr.strategy === 'Fixed' || attr.strategy === 'AMRAP') && attr.type !== 'Duration' && attr.type !== 'Tempo'"
+                         type="number"
+                         [min]="attr.type === 'RPE' ? 1 : null"
+                         [max]="attr.type === 'RPE' ? 20 : null"
+                         [placeholder]="attr.type === 'RPE' ? '1–10' : ''"
+                         [value]="attr.val"
+                         (input)="updateAttrVal(attr, $any($event.target).value)" />
+
+                  <!-- Range (non-duration) -->
+                  <div class="multi-input" *ngIf="attr.strategy === 'Range' && attr.type !== 'Duration'">
+                    <input class="fld-input small" type="number"
+                           [value]="getRangeStart(attr.val)"
+                           (input)="updateRange(attr, $any($event.target).value, getRangeEnd(attr.val))" />
+                    <span class="sep">–</span>
+                    <input class="fld-input small" type="number"
+                           [value]="getRangeEnd(attr.val)"
+                           (input)="updateRange(attr, getRangeStart(attr.val), $any($event.target).value)" />
+                  </div>
+
+                  <!-- %1RM -->
+                  <div class="multi-input" *ngIf="attr.strategy === '%1RM'">
+                    <input class="fld-input small" type="number" min="1" max="100"
+                           [value]="attr.val"
+                           (input)="updateAttrVal(attr, $any($event.target).value)" />
+                    <span class="sep">%</span>
+                  </div>
+
+                  <!-- Bodyweight / User Input labels -->
+                  <span class="passive-label" *ngIf="attr.strategy === 'Bodyweight'">Bodyweight</span>
+                  <span class="passive-label" *ngIf="attr.strategy === 'User Input'">Entered when logging</span>
+                </div>
+
+                <button class="mini-btn danger attr-delete" title="Remove attribute" (click)="deleteAttribute(exIdx, attr.id)">
+                  <ion-icon name="close-outline"></ion-icon>
+                </button>
+              </div>
+
+              <!-- Add attribute -->
+              <div class="add-attr" *ngIf="getAvailableAttributesForExercise(exIdx).length > 0">
+                <button class="ghost-btn small" (click)="toggleAttrPanel(exIdx)">
+                  <ion-icon name="add-circle-outline"></ion-icon> Add attribute
+                </button>
+                <div class="attr-panel" *ngIf="attrPanelIdx === exIdx">
+                  <div class="attr-search">
+                    <ion-icon name="search-outline"></ion-icon>
+                    <input [(ngModel)]="attrSearch" placeholder="Search attributes…" />
+                  </div>
+                  <div class="attr-options">
+                    <button
+                      *ngFor="let a of filteredAttributes(exIdx)"
+                      class="attr-option"
+                      [class.disabled]="isAttributeDisabled(exIdx, a)"
+                      (click)="selectAttribute(exIdx, a)">
+                      {{ a }}
+                      <ion-icon name="lock-closed" *ngIf="isAttributeDisabled(exIdx, a)"></ion-icon>
+                    </button>
+                    <div class="no-results" *ngIf="filteredAttributes(exIdx).length === 0">No matches</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button class="add-exercise-btn" (click)="addExercise()">
+            <ion-icon name="add"></ion-icon> Add Exercise
+          </button>
+        </div>
+      </main>
+    </div>
+  </div>
+</ion-content>

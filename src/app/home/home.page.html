@@ -1,34 +1,175 @@
-<ion-header [translucent]="true">
-  <ion-toolbar>
-    <ion-title>
-      Facility Portal
-    </ion-title>
-  </ion-toolbar>
-</ion-header>
-
 <ion-content [fullscreen]="true">
-  <ion-header collapse="condense">
-    <ion-toolbar>
-      <ion-title size="large">Facility Portal</ion-title>
-    </ion-toolbar>
-  </ion-header>
 
-  <div id="home-buttons">
-    <a class="home-btn" [routerLink]="['/signin']">
+  <!-- Kiosk mode: what members see on the iPad -->
+  <div *ngIf="!isAuthenticated" class="kiosk-home">
+    <div class="kiosk-welcome">
+      <div class="kiosk-eyebrow">Welcome to</div>
+      <h1 class="kiosk-title">Project [000]</h1>
+      <p class="kiosk-sub">Tap below to check in for your session</p>
+    </div>
+
+    <a class="kiosk-checkin-btn" [routerLink]="['/signin']">
       <ion-icon name="log-in-outline"></ion-icon>
-      <div class="btn-label">Sign In</div>
+      <span>Check In</span>
     </a>
-    <a class="home-btn" [routerLink]="['/feedback']">
-      <ion-icon name="chatbubbles-outline"></ion-icon>
-      <div class="btn-label">Feedback</div>
-    </a>
-    <a class="home-btn" [routerLink]="['/waiver']">
-      <ion-icon name="document-text-outline"></ion-icon>
-      <div class="btn-label">Waiver</div>
-    </a>
-    <a class="home-btn" [routerLink]="['/schedule']">
-      <ion-icon name="calendar-outline"></ion-icon>
-      <div class="btn-label">Schedule</div>
-    </a>
+
+    <div class="kiosk-secondary">
+      <a class="home-btn" [routerLink]="['/feedback']">
+        <ion-icon name="chatbubbles-outline"></ion-icon>
+        <div class="btn-label">Feedback</div>
+      </a>
+      <a class="home-btn" [routerLink]="['/waiver']">
+        <ion-icon name="document-text-outline"></ion-icon>
+        <div class="btn-label">Waiver</div>
+      </a>
+      <button class="home-btn home-btn--admin" (click)="openKeypad()">
+        <ion-icon name="keypad-outline"></ion-icon>
+        <div class="btn-label">Admin</div>
+      </button>
+    </div>
+  </div>
+
+  <!-- Admin dashboard -->
+  <div *ngIf="isAuthenticated" class="dash">
+
+    <div class="dash-header">
+      <div>
+        <p class="dash-eyebrow">{{ todayLabel }}</p>
+        <h1 class="dash-greeting">{{ greeting }}<span *ngIf="trainerName">, {{ trainerName }}</span></h1>
+      </div>
+      <a class="live-cta" [routerLink]="['/live-session']">
+        <ion-icon name="pulse-outline"></ion-icon>
+        <span>Start Live Session</span>
+      </a>
+    </div>
+
+    <div class="dash-row">
+      <!-- Today's schedule: who's actually coming in -->
+      <section class="card card--schedule">
+        <div class="card-head">
+          <span class="card-title">
+            <ion-icon name="calendar-outline"></ion-icon>
+            Today's Schedule
+          </span>
+          <span class="card-count" *ngIf="todaySchedule.length">{{ todaySchedule.length }}</span>
+        </div>
+
+        <div class="card-body">
+          <div *ngIf="loadingSchedule" class="card-empty">Loading…</div>
+          <div *ngIf="!loadingSchedule && !todaySchedule.length" class="card-empty">
+            Nothing on the calendar today.
+          </div>
+          <a *ngFor="let entry of todaySchedule" class="sched-row" [routerLink]="['/schedule']">
+            <span class="sched-time">{{ entry.time ? formatTime12h(entry.time) : '—' }}</span>
+            <span class="sched-info">
+              <span class="sched-name">{{ entry.packageName }}</span>
+              <span class="sched-sub">{{ clientLabel(entry) }}</span>
+            </span>
+            <span class="sched-type">{{ entry.sessionType }}</span>
+          </a>
+        </div>
+
+        <a class="card-foot" [routerLink]="['/schedule']">
+          Full calendar
+          <ion-icon name="arrow-forward-outline"></ion-icon>
+        </a>
+      </section>
+
+      <!-- The money/action panel: renewals due, balances owed, reviews waiting -->
+      <section class="card card--attention">
+        <div class="card-head">
+          <span class="card-title">
+            <ion-icon name="warning-outline"></ion-icon>
+            Needs Attention
+          </span>
+          <span class="card-count card-count--alert" *ngIf="attention.length">{{ attention.length }}</span>
+        </div>
+
+        <div class="card-body">
+          <div *ngIf="loadingAttention" class="card-empty">Loading…</div>
+          <div *ngIf="!loadingAttention && !attention.length" class="card-clear">
+            <ion-icon name="checkmark-circle-outline"></ion-icon>
+            <span>All clear — nothing needs you right now.</span>
+          </div>
+          <a *ngFor="let item of attention" class="att-row" [routerLink]="[item.link]">
+            <span class="att-icon" [class]="'att-icon--' + item.kind">
+              <ion-icon [name]="item.kind === 'unpaid' ? 'cash-outline' : item.kind === 'review' ? 'notifications-outline' : 'refresh-outline'"></ion-icon>
+            </span>
+            <span class="att-info">
+              <span class="att-label">{{ item.label }}</span>
+              <span class="att-detail" [class]="'att-detail--' + item.kind">{{ item.detail }}</span>
+            </span>
+            <ion-icon name="arrow-forward-outline" class="att-arrow"></ion-icon>
+          </a>
+        </div>
+      </section>
+    </div>
+
+    <!-- Score movement only — assessments, not check-ins or logged workouts -->
+    <section class="card card--activity">
+      <div class="card-head">
+        <span class="card-title">
+          <ion-icon name="trending-up-outline"></ion-icon>
+          Score Updates
+        </span>
+      </div>
+      <div class="card-body">
+        <div *ngIf="loadingScores" class="card-empty">Loading…</div>
+        <div *ngIf="!loadingScores && !scoreUpdates.length" class="card-empty">
+          No score updates yet.
+        </div>
+        <a *ngFor="let s of scoreUpdates" class="act-row" [routerLink]="['/assessments']">
+          <span class="act-icon"
+                [class.act-icon--green]="s.delta !== null && s.delta > 0"
+                [class.act-icon--red]="s.delta !== null && s.delta < 0"
+                [class.act-icon--cyan]="s.delta === null || s.delta === 0">
+            <ion-icon name="trending-up-outline"></ion-icon>
+          </span>
+          <span class="act-info">
+            <span class="act-text">{{ s.clientName }}</span>
+            <span class="act-detail">Level {{ s.lvl }} · {{ s.rank }}</span>
+          </span>
+          <span class="act-delta"
+                [class.act-delta--up]="s.delta !== null && s.delta > 0"
+                [class.act-delta--down]="s.delta !== null && s.delta < 0"
+                [class.act-delta--flat]="s.delta === 0">
+            <ng-container *ngIf="s.delta === null">first</ng-container>
+            <ng-container *ngIf="s.delta !== null && s.delta > 0">+{{ s.delta }}</ng-container>
+            <ng-container *ngIf="s.delta !== null && s.delta < 0">{{ s.delta }}</ng-container>
+            <ng-container *ngIf="s.delta === 0">—</ng-container>
+          </span>
+          <span class="act-time">{{ timeAgo(s.at) }}</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- Quick View: plain jump buttons, no stats -->
+    <h2 class="dash-section-title">Quick View</h2>
+    <div class="quick-row">
+      <a class="quick-btn" [routerLink]="['/students']">
+        <ion-icon name="people-outline"></ion-icon>
+        <span>Clients</span>
+      </a>
+      <a class="quick-btn" [routerLink]="['/assessments']">
+        <ion-icon name="trending-up-outline"></ion-icon>
+        <span>Assessments</span>
+      </a>
+      <a class="quick-btn" [routerLink]="['/schedule']">
+        <ion-icon name="calendar-outline"></ion-icon>
+        <span>Full Calendar</span>
+      </a>
+      <a class="quick-btn" [routerLink]="['/programs']">
+        <ion-icon name="barbell-outline"></ion-icon>
+        <span>Programs</span>
+      </a>
+      <a class="quick-btn" [routerLink]="['/packages']">
+        <ion-icon name="cube-outline"></ion-icon>
+        <span>Packages</span>
+      </a>
+      <a class="quick-btn" [routerLink]="['/workout-log']">
+        <ion-icon name="fitness-outline"></ion-icon>
+        <span>Workout Log</span>
+      </a>
+    </div>
   </div>
 </ion-content>

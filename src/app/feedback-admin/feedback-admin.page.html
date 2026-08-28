@@ -1,0 +1,88 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-button (click)="goBack()">
+        <ion-icon name="arrow-back"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-title>Client Feedback</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <div class="feedback-admin-container">
+    <div class="crm-header">
+      <div class="crm-title">
+        <h2>Client Feedback</h2>
+        <p class="subtitle">What your clients are telling you</p>
+      </div>
+      <div class="crm-stats" *ngIf="!isLoading && allFeedback.length > 0">
+        <div class="stat-chip">
+          <span class="stat-value">{{ allFeedback.length }}</span>
+          <span class="stat-label">Submissions</span>
+        </div>
+        <div class="stat-chip">
+          <span class="stat-value">
+            {{ averageRating | number: '1.1-1' }}
+            <ion-icon name="star" class="avg-star"></ion-icon>
+          </span>
+          <span class="stat-label">Avg Rating</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-bar" *ngIf="!isLoading && allFeedback.length > 0">
+      <input
+        type="text"
+        class="filter-search"
+        placeholder="Search by name or comment"
+        [(ngModel)]="searchQuery"
+        (input)="applyFilters()" />
+      <select class="filter-select" [(ngModel)]="ratingFilter" (change)="applyFilters()">
+        <option value="all">All ratings</option>
+        <option value="5">5 stars</option>
+        <option value="4">4 stars</option>
+        <option value="3">3 stars</option>
+        <option value="2">2 stars</option>
+        <option value="1">1 star</option>
+      </select>
+    </div>
+
+    <div class="loading-state" *ngIf="isLoading">Loading feedback...</div>
+
+    <div class="empty-state" *ngIf="!isLoading && allFeedback.length === 0">
+      <ion-icon name="chatbubbles-outline"></ion-icon>
+      <h3>No feedback yet</h3>
+      <p>Feedback submitted from the kiosk will show up here.</p>
+    </div>
+
+    <div class="empty-state" *ngIf="!isLoading && allFeedback.length > 0 && filteredFeedback.length === 0">
+      <h3>No matches</h3>
+      <p>No feedback matches the current search or filter.</p>
+    </div>
+
+    <div class="feedback-list" *ngIf="!isLoading">
+      <div class="feedback-card" *ngFor="let item of filteredFeedback; trackBy: trackById">
+        <div class="card-top">
+          <div class="card-who">
+            <span class="student-name">{{ item.studentName }}</span>
+            <span class="session-name" *ngIf="item.sessionName">{{ item.sessionName }}</span>
+          </div>
+          <div class="card-meta">
+            <span class="rating" *ngIf="item.rating">
+              <ion-icon
+                *ngFor="let s of stars"
+                [name]="s <= item.rating! ? 'star' : 'star-outline'"
+                [class.filled]="s <= item.rating!"></ion-icon>
+            </span>
+            <span class="date">{{ formatDate(item.submittedDate) }}</span>
+            <button class="delete-btn" (click)="confirmDelete(item)" aria-label="Delete feedback">
+              <ion-icon name="trash-outline"></ion-icon>
+            </button>
+          </div>
+        </div>
+        <p class="card-comment">{{ item.feedback }}</p>
+      </div>
+    </div>
+  </div>
+</ion-content>

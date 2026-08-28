@@ -1,0 +1,532 @@
+// Main container
+.workout-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  background: #01070f;
+  min-height: 100vh;
+}
+
+// Workout header section
+.workout-header {
+  background: #070b12;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 24px;
+  border: 1px solid #133748;
+  
+  h2 {
+    color: #dceaf6;
+    font-size: 1.8rem;
+    font-weight: 600;
+    margin: 0 0 24px 0;
+  }
+}
+
+// Form elements
+.form-group {
+  margin-bottom: 20px;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+  
+  label {
+    display: block;
+    color: #dceaf6;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px 16px;
+  background: #0a1018;
+  border: 2px solid #133748;
+  border-radius: 8px;
+  color: #dceaf6;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  
+  &::placeholder {
+    color: #88a6bf;
+  }
+  
+  &:focus {
+    outline: none;
+    border-color: #00d4ff;
+    background: #0a1018;
+  }
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  background: #0a1018;
+  border: 2px solid #133748;
+  border-radius: 8px;
+  color: #dceaf6;
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+  transition: all 0.2s ease;
+  
+  &::placeholder {
+    color: #88a6bf;
+  }
+  
+  &:focus {
+    outline: none;
+    border-color: #00d4ff;
+    background: #0a1018;
+  }
+}
+
+
+
+// Workout sections
+.workout-sections {
+  background: #070b12;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 24px;
+  border: 1px solid #133748;
+  
+  .sections-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    
+    h3 {
+      color: #dceaf6;
+      font-size: 1.4rem;
+      font-weight: 600;
+      margin: 0;
+    }
+  }
+}
+
+.add-section-btn {
+  background: #00d4ff;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  padding: 10px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  &:hover {
+    background: #00b6e6;
+    transform: translateY(-1px);
+  }
+  
+  ion-icon {
+    font-size: 1.1rem;
+  }
+}
+
+.empty-sections {
+  text-align: center;
+  padding: 40px 20px;
+  color: #88a6bf;
+  
+  ion-icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+    color: #6a8aa3;
+  }
+  
+  p {
+    font-size: 1.1rem;
+    margin: 0 0 8px 0;
+  }
+  
+  small {
+    font-size: 0.9rem;
+    color: #6a8aa3;
+  }
+}
+
+// Section cards
+.section-card {
+  background: #0a1018;
+  border: 1px solid #133748;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  
+  .section-title {
+    h4 {
+      color: #dceaf6;
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin: 0 0 4px 0;
+    }
+    
+    .exercise-count {
+      color: #88a6bf;
+      font-size: 0.9rem;
+    }
+  }
+  
+  .section-actions {
+    display: flex;
+    gap: 8px;
+  }
+}
+
+.section-duration {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #88a6bf;
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+  
+  ion-icon {
+    font-size: 1rem;
+  }
+}
+
+.section-notes {
+  background: #070b12;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+  
+  p {
+    color: #b6cfe2;
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+}
+
+// Icon buttons
+.icon-btn {
+  background: #133748;
+  border: none;
+  border-radius: 6px;
+  color: #dceaf6;
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &:hover {
+    background: #0e2233;
+    transform: translateY(-1px);
+  }
+  
+  &.edit-btn:hover {
+    background: #00d4ff;
+    color: white;
+  }
+  
+  &.delete-btn:hover {
+    background: #00b6e6;
+    color: white;
+  }
+  
+  ion-icon {
+    font-size: 1rem;
+  }
+}
+
+// Exercise cards
+.exercises-list {
+  margin-top: 16px;
+}
+
+.exercise-card {
+  background: #070b12;
+  border: 1px solid #0a1018;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.exercise-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  
+  h5 {
+    color: #dceaf6;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+  }
+  
+  .exercise-actions {
+    display: flex;
+    gap: 6px;
+  }
+}
+
+.exercise-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+  
+  .detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    
+    .label {
+      color: #88a6bf;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    
+    .value {
+      color: #dceaf6;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+  }
+}
+
+.exercise-notes {
+  background: #01070f;
+  border-radius: 6px;
+  padding: 10px;
+  
+  p {
+    color: #b6cfe2;
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.3;
+  }
+}
+
+.empty-exercises {
+  text-align: center;
+  padding: 20px;
+  color: #88a6bf;
+  
+  p {
+    margin: 0 0 12px 0;
+    font-size: 0.9rem;
+  }
+}
+
+.add-exercise-btn {
+  background: transparent;
+  border: 2px dashed #133748;
+  border-radius: 8px;
+  color: #88a6bf;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  &:hover {
+    border-color: #00d4ff;
+    color: #00d4ff;
+    background: rgba(0, 212, 255, 0.05);
+  }
+  
+  ion-icon {
+    font-size: 1rem;
+  }
+}
+
+// Save actions
+.workout-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+  background: #070b12;
+  border-radius: 16px;
+  border: 1px solid #133748;
+  
+  @media (max-width: 480px) {
+    flex-direction: column;
+    
+    .cancel-btn,
+    .save-btn {
+      width: 100%;
+    }
+  }
+}
+
+.cancel-btn {
+  background: transparent;
+  border: 1px solid #133748;
+  border-radius: 8px;
+  color: #88a6bf;
+  padding: 12px 24px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: #0a1018;
+    border-color: #88a6bf;
+    color: #dceaf6;
+  }
+}
+
+.save-btn {
+  background: #00d4ff;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  padding: 12px 24px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  &:hover:not(:disabled) {
+    background: #00b6e6;
+    transform: translateY(-1px);
+  }
+  
+  &:disabled {
+    background: #133748;
+    color: #6a8aa3;
+    cursor: not-allowed;
+    transform: none;
+  }
+  
+  ion-icon {
+    font-size: 1.1rem;
+  }
+}
+
+// Modal styling
+.modal-content {
+  padding: 24px;
+  background: #070b12;
+  min-height: 100%;
+}
+
+.modal-save-btn {
+  width: 100%;
+  background: #00d4ff;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  padding: 14px 24px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 24px;
+  
+  &:hover:not(:disabled) {
+    background: #00b6e6;
+  }
+  
+  &:disabled {
+    background: #133748;
+    color: #6a8aa3;
+    cursor: not-allowed;
+  }
+}
+
+.section-type-select {
+  width: 100%;
+  background: #0a1018;
+  border: 2px solid #133748;
+  border-radius: 8px;
+  color: #dceaf6;
+  
+  --background: #0a1018;
+  --color: #dceaf6;
+  --placeholder-color: #88a6bf;
+  --padding-start: 16px;
+  --padding-end: 16px;
+}
+
+// Responsive design
+@media (max-width: 768px) {
+  .workout-container {
+    padding: 16px;
+  }
+  
+  .workout-header,
+  .workout-sections {
+    padding: 20px;
+  }
+  
+  .sections-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    
+    .add-section-btn {
+      align-self: stretch;
+      justify-content: center;
+    }
+  }
+  
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    
+    .section-actions {
+      align-self: flex-end;
+    }
+  }
+  
+  .exercise-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    
+    .exercise-actions {
+      align-self: flex-end;
+    }
+  }
+  
+  .exercise-details {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}

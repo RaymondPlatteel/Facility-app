@@ -1,0 +1,149 @@
+ion-content {
+  --background: #01070f;
+  --color: #dceaf6;
+}
+
+.settings-page {
+  padding: 24px clamp(16px, 3vw, 40px) 60px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ---------- Header ---------- */
+.crm-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.crm-title {
+  flex: 1;
+
+  h1 {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 700;
+    color: #dceaf6;
+  }
+
+  p {
+    margin: 2px 0 0;
+    color: #88a6bf;
+    font-size: 13px;
+  }
+}
+
+.icon-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid #133748;
+  background: #070b12;
+  color: #88a6bf;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+
+  &:hover {
+    color: #00d4ff;
+    border-color: #00d4ff;
+  }
+}
+
+/* ---------- Sections ---------- */
+.settings-section {
+  margin-bottom: 28px;
+}
+
+.section-heading {
+  margin: 0 0 10px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #4a6378;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #070b12;
+  border: 1px solid #133748;
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.setting-row--disabled {
+  opacity: 0.6;
+}
+
+.setting-row-text {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+
+  ion-icon {
+    font-size: 20px;
+    color: #00d4ff;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+}
+
+.setting-row-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #dceaf6;
+}
+
+.setting-row-detail {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #88a6bf;
+}
+
+/* ---------- Toggle switch ---------- */
+.toggle-switch {
+  flex-shrink: 0;
+  width: 48px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid #133748;
+  background: #04070c;
+  padding: 2px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  &.on {
+    background: rgba(0, 212, 255, 0.25);
+    border-color: #00d4ff;
+  }
+}
+
+.toggle-knob {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #88a6bf;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.toggle-switch.on .toggle-knob {
+  background: #00d4ff;
+  transform: translateX(20px);
+}

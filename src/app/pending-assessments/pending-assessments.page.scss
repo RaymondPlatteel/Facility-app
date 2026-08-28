@@ -1,0 +1,380 @@
+ion-content {
+  --background: #01070f;
+  --color: #dceaf6;
+}
+
+.pending-page {
+  padding: 24px clamp(16px, 3vw, 40px) 60px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.crm-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.crm-title {
+  flex: 1;
+
+  h1 {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 700;
+    color: #dceaf6;
+  }
+
+  p {
+    margin: 2px 0 0;
+    color: #88a6bf;
+    font-size: 13px;
+  }
+}
+
+.icon-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid #133748;
+  background: #070b12;
+  color: #88a6bf;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+
+  &:hover {
+    color: #00d4ff;
+    border-color: #00d4ff;
+  }
+}
+
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: #88a6bf;
+  font-size: 14px;
+
+  &.small {
+    padding: 20px;
+  }
+}
+
+.pending-section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #4a6378;
+}
+
+.pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pending-item {
+  border-radius: 12px;
+  border: 1px solid #133748;
+  background: #070b12;
+  overflow: hidden;
+}
+
+.pending-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+}
+
+// min-width:0 is the whole fix for the row overflowing.
+//
+// A flex item defaults to min-width:auto, which means it will not shrink
+// below its own content. .pending-actions is flex-shrink:0, so with a long
+// client name the row simply grew wider than the screen and pushed Approve
+// and Reject off the right edge — untappable, with nothing to scroll to
+// because the page never allowed horizontal scroll.
+.pending-info {
+  min-width: 0;
+}
+
+.pending-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #dceaf6;
+  // Long names now truncate instead of forcing the row wide.
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-lift {
+  margin-top: 2px;
+  font-size: 14px;
+  color: #00d4ff;
+}
+
+.pending-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #88a6bf;
+}
+
+.pending-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+
+  ion-icon {
+    font-size: 16px;
+  }
+
+  &.review {
+    background: rgba(0, 212, 255, 0.14);
+    border-color: rgba(0, 212, 255, 0.55);
+    color: #00d4ff;
+
+    &:hover {
+      background: rgba(0, 212, 255, 0.22);
+    }
+
+    ion-icon {
+      transition: transform 0.15s ease;
+    }
+
+    &.open ion-icon {
+      transform: rotate(180deg);
+    }
+  }
+
+  &.reject {
+    background: rgba(255, 90, 106, 0.1);
+    border-color: rgba(255, 90, 106, 0.4);
+    color: #ff5a6a;
+
+    &:hover {
+      background: rgba(255, 90, 106, 0.18);
+    }
+  }
+
+  &.approve {
+    background: rgba(45, 211, 111, 0.14);
+    border-color: rgba(45, 211, 111, 0.5);
+    color: #2dd36f;
+
+    &:hover {
+      background: rgba(45, 211, 111, 0.22);
+    }
+  }
+}
+
+// ---------- review panel: read-only diff against the previous assessment ----------
+.review-panel {
+  padding: 4px 18px 18px;
+  border-top: 1px solid #133748;
+}
+
+.review-video {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  margin-top: 14px;
+  border-radius: 10px;
+  background: #000;
+}
+
+.diff-list {
+  display: flex;
+  flex-direction: column;
+  padding-top: 10px;
+}
+
+.diff-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+
+  // unchanged fields fade into the background — only what actually moved
+  // should draw the eye
+  color: #4a6378;
+
+  .diff-old,
+  .diff-arrow {
+    color: inherit;
+  }
+
+  .diff-new {
+    color: inherit;
+    font-weight: 600;
+  }
+
+  &.changed {
+    color: #dceaf6;
+
+    .diff-label {
+      color: #dceaf6;
+    }
+
+    .diff-old {
+      color: #6b7d8c;
+      text-decoration: line-through;
+    }
+
+    .diff-arrow {
+      color: #4a6378;
+    }
+
+    .diff-new {
+      color: #00d4ff;
+      font-weight: 700;
+    }
+  }
+}
+
+.diff-label {
+  color: inherit;
+  font-weight: 500;
+}
+
+.diff-old,
+.diff-new {
+  text-align: right;
+  min-width: 64px;
+  font-variant-numeric: tabular-nums;
+}
+
+.diff-arrow {
+  font-size: 12px;
+}
+
+.approve-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(45, 211, 111, 0.55);
+  background: rgba(45, 211, 111, 0.14);
+  color: #2dd36f;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: rgba(45, 211, 111, 0.22);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  ion-icon {
+    font-size: 17px;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Mobile. This page had no breakpoint at all, which is why approving from
+   a phone didn't work: the action buttons sat on the same row as the
+   client's name and were pushed off-screen.
+   --------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  .pending-page {
+    padding: 16px 12px 48px;
+  }
+
+  .crm-title h1 {
+    font-size: 21px;
+  }
+
+  // Name above, buttons below. At this width there is no arrangement where
+  // both fit side by side and the buttons stay a usable size.
+  .pending-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .pending-actions {
+    // Each button takes half the width — a genuinely large tap target,
+    // rather than two small ones crowded against the right edge.
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .action-btn {
+    // Centred, and tall enough to hit reliably: 44px is Apple's minimum
+    // recommended touch target and these were 35px.
+    justify-content: center;
+    min-height: 44px;
+    padding: 10px 12px;
+  }
+
+  .review-panel {
+    padding: 4px 14px 14px;
+  }
+
+  .approve-btn {
+    min-height: 48px;
+  }
+
+  // The diff table's fixed 64px columns plus a long label ("Pull-up 1RM")
+  // overflow a narrow screen. Let the numbers size to content and allow
+  // the label to wrap instead.
+  .diff-row {
+    grid-template-columns: 1fr auto auto auto;
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .diff-old,
+  .diff-new {
+    min-width: 0;
+  }
+
+  .diff-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (max-width: 380px) {
+  // Very narrow: the arrow is decoration, and dropping it buys back the
+  // room the two numbers need to stay on one line.
+  .diff-arrow {
+    display: none;
+  }
+}

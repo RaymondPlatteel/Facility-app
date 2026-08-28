@@ -1,0 +1,580 @@
+:host {
+  display: block;
+}
+
+.app-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(52px + env(safe-area-inset-top));
+  z-index: 9999;
+  background: rgba(8, 8, 16, 0.96);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  // Content sits below the notch/status bar rather than under it — the bar
+  // itself is tall enough (via height above) to reach the real screen top.
+  padding: env(safe-area-inset-top) calc(20px + env(safe-area-inset-right)) 0 calc(20px + env(safe-area-inset-left));
+  gap: 0;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  flex-shrink: 0;
+  margin-right: 28px;
+
+  .brand-hex {
+    font-size: 18px;
+    color: #00d4ff;
+    line-height: 1;
+  }
+
+  .brand-name {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 5px;
+    color: #00d4ff;
+    text-transform: uppercase;
+  }
+}
+
+.nav-links {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 13px;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.38);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: color 0.15s ease, background 0.15s ease;
+
+    ion-icon {
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    &:hover {
+      color: rgba(255, 255, 255, 0.75);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    &.active {
+      color: #00d4ff;
+      background: rgba(0, 212, 255, 0.08);
+    }
+  }
+
+  .nav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: #ff5a6a;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+  }
+}
+
+/* Who's signed in — the PIN that unlocked the app decides this. */
+.nav-trainer {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #00d4ff;
+  white-space: nowrap;
+
+  ion-icon { font-size: 14px; }
+}
+
+.nav-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+}
+
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+
+  ion-icon {
+    font-size: 13px;
+  }
+
+  &--lock {
+    color: rgba(255, 255, 255, 0.38);
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.1);
+
+    &:hover {
+      color: rgba(255, 100, 100, 0.85);
+      border-color: rgba(255, 100, 100, 0.3);
+      background: rgba(255, 100, 100, 0.06);
+    }
+  }
+
+  &--signin {
+    color: rgba(0, 212, 255, 0.7);
+    background: rgba(0, 212, 255, 0.06);
+    border-color: rgba(0, 212, 255, 0.2);
+
+    &:hover {
+      color: #00d4ff;
+      background: rgba(0, 212, 255, 0.12);
+      border-color: rgba(0, 212, 255, 0.4);
+    }
+  }
+}
+
+.app-content {
+  position: relative;
+  margin-top: calc(52px + env(safe-area-inset-top));
+  height: calc(100% - 52px - env(safe-area-inset-top));
+  // Room for the home-indicator gesture bar on notched/Face ID devices — without
+  // this, content that runs flush to the bottom edge (e.g. Live Session's footer
+  // strip) gets visually clipped behind it.
+  padding-bottom: env(safe-area-inset-bottom);
+  box-sizing: border-box;
+}
+
+// Hamburger toggle for the off-canvas sidebar. Hidden here; the mobile
+// breakpoint below is the only place that turns it on, so it never shows
+// up on the desktop dashboard layout.
+.mobile-menu-btn {
+  display: none;
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top));
+  left: calc(10px + env(safe-area-inset-left));
+  z-index: 10001;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 8, 16, 0.92);
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  border-radius: 9px;
+  color: #dceaf6;
+  font-size: 19px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+/* Signed-in layout: left sidebar instead of the kiosk's top bar — content
+   shifts right instead of down, and gets the full remaining width instead
+   of a centered column, which is what makes a "standard dashboard" read as
+   one instead of a phone-app screen stretched onto a bigger display. */
+ion-app.has-sidebar {
+  .app-content {
+    margin-top: 0;
+    margin-left: 240px;
+    height: 100%;
+    width: calc(100% - 240px);
+  }
+}
+
+.app-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 240px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  background: #050505;
+  border-right: 1px solid rgba(0, 212, 255, 0.12);
+  padding: calc(18px + env(safe-area-inset-top)) 0 calc(14px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  overflow-y: auto;
+  // Desktop: always on screen, no slide — only the mobile breakpoint below
+  // turns this into an off-canvas overlay.
+  transition: transform 0.25s ease;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  padding: 0 20px;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+
+  .brand-name {
+    font-family: 'Courier New', monospace;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: #00d4ff;
+    text-transform: uppercase;
+  }
+}
+
+.sidebar-links {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 12px;
+}
+
+.sidebar-group-title {
+  margin: 16px 8px 4px;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
+
+  &:first-child {
+    margin-top: 4px;
+  }
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
+  text-decoration: none;
+  border-radius: 8px;
+  transition: color 0.15s ease, background 0.15s ease;
+  position: relative;
+
+  ion-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  &:hover {
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  &.active {
+    color: #00d4ff;
+    background: rgba(0, 212, 255, 0.1);
+  }
+
+  &--pending .nav-badge {
+    margin-left: auto;
+  }
+}
+
+.sidebar-footer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 20px 0;
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+
+  .nav-trainer {
+    color: #00d4ff;
+  }
+
+  .nav-btn {
+    justify-content: center;
+  }
+}
+
+// Below this width the persistent icon-rail sidebar stopped being "shrunk
+// down" and started being "in the way" — on an actual phone it permanently
+// ate 76px of a ~375-390px screen for icons alone, on every single page.
+// It's an off-canvas overlay here instead: full width, hidden by default,
+// slid in over the content by the hamburger button, and dismissed by the
+// backdrop, an outside tap, or (see app.component.ts) any navigation.
+@media (max-width: 900px) {
+  .mobile-menu-btn,
+  .sidebar-backdrop {
+    display: flex;
+  }
+
+  .app-sidebar {
+    width: min(280px, 84vw);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
+    transform: translateX(-100%);
+
+    &.open { transform: translateX(0); }
+
+    // Full labels again — this is a temporary overlay now, not a
+    // permanent rail, so there's no reason to abbreviate it.
+    .sidebar-link span,
+    .sidebar-group-title,
+    .nav-trainer span,
+    .nav-btn span {
+      display: inline;
+    }
+
+    .sidebar-link { justify-content: flex-start; }
+
+    .sidebar-brand {
+      justify-content: flex-start;
+      padding: 0 20px;
+
+      .brand-name {
+        font-size: 15px;
+
+        &::first-letter { font-size: inherit; }
+      }
+    }
+  }
+
+  // Content takes the full width now that the sidebar floats over it
+  // instead of permanently reserving a column.
+  ion-app.has-sidebar .app-content {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  // Top clearance for the floating hamburger button lives in global.scss,
+  // not here — ion-content belongs to each ROUTED page's own component, so
+  // an Angular-scoped selector in this file (app.component's own template)
+  // can never reach it; only an unscoped global rule can.
+}
+
+/* Global admin PIN keypad */
+.keypad-modal {
+  --background: #01070f;
+  --width: 420px;
+  --height: 560px;
+  --border-radius: 16px;
+}
+
+.keypad-container {
+  position: relative;
+  padding: 48px 20px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: #01070f;
+  border: 1px solid #133748;
+  border-radius: 16px;
+}
+
+.keypad-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid #133748;
+  background: transparent;
+  color: #88a6bf;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+
+  &:hover {
+    color: #dceaf6;
+    border-color: #00d4ff;
+  }
+}
+
+.keypad-title {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: #00d4ff;
+  margin-bottom: 18px;
+}
+
+.passcode-display {
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.passcode-dots {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid #133748;
+  background: transparent;
+  transition: all 0.2s ease;
+
+  &.filled {
+    background: #00d4ff;
+    border-color: #00d4ff;
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
+  }
+
+  &.error {
+    background: #eb445a;
+    border-color: #eb445a;
+  }
+}
+
+.error-message {
+  color: #eb445a;
+  font-size: 0.85rem;
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+
+  &.visible {
+    opacity: 1;
+  }
+}
+
+.keypad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  max-width: 280px;
+  width: 100%;
+  justify-items: center;
+}
+
+.keypad-btn {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 1px solid #133748;
+  background: #070b12;
+  color: #dceaf6;
+  font-size: 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover:not(.disabled) {
+    background: #0a1018;
+    border-color: #00d4ff;
+    color: #00d4ff;
+  }
+
+  &:active:not(.disabled) {
+    transform: scale(0.94);
+  }
+
+  &.disabled {
+    background: transparent;
+    border: none;
+    cursor: default;
+  }
+
+  ion-icon {
+    font-size: 1.2rem;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Signed-out top nav on phones.
+   At 375px the brand's 28px right margin, three nav links and the sign-in
+   button added up to 479px — a hundred past the viewport, so the sign-in
+   button sat off the right edge with no way to scroll to it.
+   --------------------------------------------------------------------- */
+@media (max-width: 560px) {
+  .app-nav {
+    // Keep the safe-area-aware top/side padding from the base rule — this
+    // only tightens the side gutters, not the notch clearance.
+    padding: env(safe-area-inset-top) calc(12px + env(safe-area-inset-right)) 0 calc(12px + env(safe-area-inset-left));
+    gap: 8px;
+  }
+
+  .nav-brand {
+    // The wordmark's 5px letter-spacing is most of its width; the hex mark
+    // alone still identifies the app at this size.
+    margin-right: 0;
+
+    .brand-name {
+      display: none;
+    }
+  }
+
+  .nav-links {
+    // Let the links shrink and, if they still don't fit, scroll on their
+    // own rather than pushing the sign-in button off-screen.
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+
+    &::-webkit-scrollbar { display: none; }
+
+    .nav-link {
+      padding: 6px 9px;
+      white-space: nowrap;
+    }
+  }
+
+  .nav-actions {
+    margin-left: 4px;
+  }
+
+  .nav-btn {
+    padding: 6px 10px;
+    white-space: nowrap;
+  }
+}

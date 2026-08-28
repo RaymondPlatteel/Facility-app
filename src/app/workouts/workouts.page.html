@@ -1,0 +1,340 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-button (click)="goBack()">
+        <ion-icon name="arrow-back"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-title>Create Workout</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <div class="workout-container">
+    
+    <!-- Workout Header Info -->
+    <div class="workout-header">
+      <h2>{{ isEditMode ? 'Edit Workout' : 'Create New Workout' }}</h2>
+      
+      <div class="form-group">
+        <label for="workoutName">Workout Name</label>
+        <input 
+          id="workoutName" 
+          type="text" 
+          placeholder="Enter workout name" 
+          [(ngModel)]="currentWorkout.name"
+          class="form-input">
+      </div>
+      
+      <div class="form-group">
+        <label for="workoutDescription">Description (Optional)</label>
+        <textarea 
+          id="workoutDescription" 
+          placeholder="Describe the workout purpose or focus" 
+          [(ngModel)]="currentWorkout.description"
+          class="form-textarea"
+          rows="3">
+        </textarea>
+      </div>
+      
+      <div class="form-group">
+        <label for="duration">Total Duration (minutes)</label>
+        <input 
+          id="duration" 
+          type="number" 
+          placeholder="60" 
+          [(ngModel)]="currentWorkout.totalDuration"
+          class="form-input">
+      </div>
+    </div>
+
+    <!-- Workout Sections -->
+    <div class="workout-sections">
+      <div class="sections-header">
+        <h3>Workout Sections</h3>
+        <button class="add-section-btn" (click)="showSectionModal = true">
+          <ion-icon name="add"></ion-icon>
+          Add Section
+        </button>
+      </div>
+      
+      <div *ngIf="currentWorkout.sections.length === 0" class="empty-sections">
+        <ion-icon name="barbell-outline"></ion-icon>
+        <p>No sections added yet</p>
+        <small>Add sections like warm-up, strength, cardio, etc.</small>
+      </div>
+      
+      <!-- Section Cards -->
+      <div *ngFor="let section of currentWorkout.sections; let sectionIndex = index" 
+           class="section-card">
+        <div class="section-header">
+          <div class="section-title">
+            <h4>{{ section.name | titlecase }}</h4>
+            <span class="exercise-count">{{ section.exercises.length }} exercise{{ section.exercises.length !== 1 ? 's' : '' }}</span>
+          </div>
+          <div class="section-actions">
+            <button class="icon-btn" (click)="addExerciseToSection(sectionIndex)">
+              <ion-icon name="add"></ion-icon>
+            </button>
+            <button class="icon-btn edit-btn" (click)="editSection(sectionIndex)">
+              <ion-icon name="create"></ion-icon>
+            </button>
+            <button class="icon-btn delete-btn" (click)="removeSection(sectionIndex)">
+              <ion-icon name="trash"></ion-icon>
+            </button>
+          </div>
+        </div>
+        
+        <div *ngIf="section.duration" class="section-duration">
+          <ion-icon name="time"></ion-icon>
+          {{ section.duration }} minutes
+        </div>
+        
+        <div *ngIf="section.notes" class="section-notes">
+          <p>{{ section.notes }}</p>
+        </div>
+        
+        <!-- Exercises in Section -->
+        <div class="exercises-list">
+          <div *ngFor="let exercise of section.exercises; let exerciseIndex = index" 
+               class="exercise-card">
+            <div class="exercise-header">
+              <h5>{{ exercise.name }}</h5>
+              <div class="exercise-actions">
+                <button class="icon-btn edit-btn" (click)="editExercise(sectionIndex, exerciseIndex)">
+                  <ion-icon name="create"></ion-icon>
+                </button>
+                <button class="icon-btn delete-btn" (click)="removeExercise(sectionIndex, exerciseIndex)">
+                  <ion-icon name="trash"></ion-icon>
+                </button>
+              </div>
+            </div>
+            
+            <div class="exercise-details">
+              <div class="detail-item">
+                <span class="label">Sets:</span>
+                <span class="value">{{ exercise.sets }}</span>
+              </div>
+              <div class="detail-item">
+                <span class="label">Reps:</span>
+                <span class="value">{{ exercise.reps }}</span>
+              </div>
+              <div *ngIf="exercise.percent" class="detail-item">
+                <span class="label">Percent:</span>
+                <span class="value">{{ exercise.percent }}%</span>
+              </div>
+              <div *ngIf="exercise.rir" class="detail-item">
+                <span class="label">RIR:</span>
+                <span class="value">{{ exercise.rir }}</span>
+              </div>
+              <div *ngIf="exercise.restTime" class="detail-item">
+                <span class="label">Rest:</span>
+                <span class="value">{{ exercise.restTime }}</span>
+              </div>
+              <div *ngIf="exercise.tempo" class="detail-item">
+                <span class="label">Tempo:</span>
+                <span class="value">{{ exercise.tempo }}</span>
+              </div>
+            </div>
+            
+            <div *ngIf="exercise.notes" class="exercise-notes">
+              <p>{{ exercise.notes }}</p>
+            </div>
+          </div>
+          
+          <div *ngIf="section.exercises.length === 0" class="empty-exercises">
+            <p>No exercises added</p>
+            <button class="add-exercise-btn" (click)="addExerciseToSection(sectionIndex)">
+              <ion-icon name="add"></ion-icon>
+              Add Exercise
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Save Actions -->
+    <div class="workout-actions">
+      <button class="cancel-btn" (click)="goBack()">
+        Cancel
+      </button>
+      <button class="save-btn" (click)="saveWorkout()" [disabled]="!canSaveWorkout()">
+        <ion-icon name="save"></ion-icon>
+        {{ isEditMode ? 'Update Workout' : 'Save Workout' }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Section Modal -->
+  <ion-modal [isOpen]="showSectionModal" (didDismiss)="closeSectionModal()">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>{{ editingSectionIndex !== -1 ? 'Edit Section' : 'Add Section' }}</ion-title>
+          <ion-buttons slot="end">
+            <ion-button fill="clear" (click)="closeSectionModal()">
+              <ion-icon name="close"></ion-icon>
+            </ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content>
+        <div class="modal-content">
+          <div class="form-group">
+            <label>Section Type</label>
+            <ion-select 
+              [(ngModel)]="currentSection.name" 
+              placeholder="Select section type"
+              class="section-type-select">
+              <ion-select-option value="warm-up">Warm-up</ion-select-option>
+              <ion-select-option value="strength">Strength</ion-select-option>
+              <ion-select-option value="endurance">Endurance</ion-select-option>
+              <ion-select-option value="cardio">Cardio</ion-select-option>
+              <ion-select-option value="speed">Speed</ion-select-option>
+              <ion-select-option value="power">Power</ion-select-option>
+              <ion-select-option value="flexibility">Flexibility</ion-select-option>
+              <ion-select-option value="cooldown">Cooldown</ion-select-option>
+              <ion-select-option value="other">Other</ion-select-option>
+            </ion-select>
+          </div>
+          
+          <div class="form-group">
+            <label for="sectionDuration">Duration (minutes, optional)</label>
+            <input 
+              id="sectionDuration" 
+              type="number" 
+              placeholder="15" 
+              [(ngModel)]="currentSection.duration"
+              class="form-input">
+          </div>
+          
+          <div class="form-group">
+            <label for="sectionNotes">Notes (optional)</label>
+            <textarea 
+              id="sectionNotes" 
+              placeholder="Any specific instructions for this section" 
+              [(ngModel)]="currentSection.notes"
+              class="form-textarea"
+              rows="3">
+            </textarea>
+          </div>
+          
+          <button class="modal-save-btn" (click)="saveSection()" [disabled]="!currentSection.name">
+            {{ editingSectionIndex !== -1 ? 'Update Section' : 'Add Section' }}
+          </button>
+        </div>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+
+  <!-- Exercise Modal -->
+  <ion-modal [isOpen]="showExerciseModal" (didDismiss)="closeExerciseModal()">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>{{ editingExerciseIndex !== -1 ? 'Edit Exercise' : 'Add Exercise' }}</ion-title>
+          <ion-buttons slot="end">
+            <ion-button fill="clear" (click)="closeExerciseModal()">
+              <ion-icon name="close"></ion-icon>
+            </ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content>
+        <div class="modal-content">
+          <div class="form-group">
+            <label for="exerciseName">Exercise Name</label>
+            <input 
+              id="exerciseName" 
+              type="text" 
+              placeholder="Push-ups, Squats, Bench Press, etc." 
+              [(ngModel)]="currentExercise.name"
+              class="form-input">
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="sets">Sets</label>
+              <input 
+                id="sets" 
+                type="number" 
+                placeholder="3" 
+                [(ngModel)]="currentExercise.sets"
+                class="form-input">
+            </div>
+            
+            <div class="form-group">
+              <label for="reps">Reps</label>
+              <input 
+                id="reps" 
+                type="text" 
+                placeholder="8-12 or 10" 
+                [(ngModel)]="currentExercise.reps"
+                class="form-input">
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="percent">Percent of Max</label>
+            <input 
+              id="percent" 
+              type="text" 
+              placeholder="75%, 80%, 100%, etc." 
+              [(ngModel)]="currentExercise.percent"
+              class="form-input">
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="rir">RIR (0-10, optional)</label>
+              <input 
+                id="rir" 
+                type="number" 
+                min="0" 
+                max="10" 
+                placeholder="2" 
+                [(ngModel)]="currentExercise.rir"
+                class="form-input">
+            </div>
+            
+            <div class="form-group">
+              <label for="restTime">Rest Time (optional)</label>
+              <input 
+                id="restTime" 
+                type="text" 
+                placeholder="60s, 2min, etc." 
+                [(ngModel)]="currentExercise.restTime"
+                class="form-input">
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="tempo">Tempo (optional)</label>
+            <input 
+              id="tempo" 
+              type="text" 
+              placeholder="2-1-2-1 (eccentric-pause-concentric-pause)" 
+              [(ngModel)]="currentExercise.tempo"
+              class="form-input">
+          </div>
+          
+          <div class="form-group">
+            <label for="exerciseNotes">Notes (optional)</label>
+            <textarea 
+              id="exerciseNotes" 
+              placeholder="Form cues, modifications, progressions, etc." 
+              [(ngModel)]="currentExercise.notes"
+              class="form-textarea"
+              rows="3">
+            </textarea>
+          </div>
+          
+          <button class="modal-save-btn" (click)="saveExercise()" [disabled]="!currentExercise.name || !currentExercise.sets || !currentExercise.reps">
+            {{ editingExerciseIndex !== -1 ? 'Update Exercise' : 'Add Exercise' }}
+          </button>
+        </div>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+
+</ion-content>

@@ -1,0 +1,262 @@
+ion-content {
+  --background: #01070f;
+  color: #ffffff;
+}
+
+ion-header {
+  ion-toolbar {
+    --background: #01070f;
+    --color: #ffffff;
+    --border-color: #0a1018;
+  }
+}
+
+.loading-container, .error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  
+  h2 {
+    color: #ffffff;
+    margin: 16px 0;
+    font-size: 1.5rem;
+  }
+}
+
+.workout-container {
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.workout-header {
+  background: #0a1018;
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid #0e2233;
+  margin-bottom: 20px;
+  
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 12px 0;
+    color: #00d4ff;
+  }
+  
+  .workout-description {
+    font-size: 1.1rem;
+    color: #b6cfe2;
+    margin: 0 0 16px 0;
+    line-height: 1.5;
+  }
+  
+  .workout-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #88a6bf;
+      font-size: 0.95rem;
+      
+      ion-icon {
+        font-size: 1rem;
+        color: #00d4ff;
+      }
+    }
+  }
+}
+
+.equipment-section, .tags-section {
+  background: #0a1018;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid #0e2233;
+  margin-bottom: 20px;
+  
+  h3 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+    color: #ffffff;
+  }
+  
+  .equipment-list, .tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+.sections-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.section-card {
+  background: #0a1018;
+  border-radius: 12px;
+  border: 1px solid #0e2233;
+  overflow: hidden;
+  
+  .section-header {
+    background: #00d4ff;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    
+    h2 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      margin: 0;
+      color: #ffffff;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .section-meta {
+      display: flex;
+      gap: 12px;
+      
+      .duration, .exercise-count {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        color: rgba(255,255,255,0.9);
+        font-size: 0.9rem;
+        background: rgba(255,255,255,0.2);
+        padding: 4px 8px;
+        border-radius: 6px;
+        
+        ion-icon {
+          font-size: 0.8rem;
+        }
+      }
+    }
+  }
+  
+  .section-notes {
+    padding: 16px 20px;
+    background: #0e2233;
+    border-bottom: 1px solid #123048;
+    
+    p {
+      margin: 0;
+      color: #b6cfe2;
+      font-style: italic;
+    }
+  }
+  
+  .exercises-list {
+    padding: 20px;
+  }
+}
+
+.exercise-card {
+  background: #0e2233;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid #123048;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+  
+  .exercise-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    
+    .exercise-number {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #00d4ff;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+    
+    h4 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 0;
+      color: #ffffff;
+    }
+  }
+  
+  .exercise-details {
+    color: #00d4ff;
+    font-size: 0.95rem;
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+  
+  .exercise-notes {
+    p {
+      margin: 0;
+      color: #88a6bf;
+      font-size: 0.9rem;
+      font-style: italic;
+    }
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .workout-container {
+    padding: 16px;
+  }
+  
+  .workout-header {
+    padding: 20px;
+    
+    h1 {
+      font-size: 1.6rem;
+    }
+    
+    .workout-meta {
+      flex-direction: column;
+      gap: 8px;
+    }
+  }
+  
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    
+    h2 {
+      font-size: 1.2rem;
+    }
+    
+    .section-meta {
+      align-self: stretch;
+      justify-content: space-between;
+    }
+  }
+  
+  .exercise-card {
+    padding: 12px;
+    
+    .exercise-header {
+      h4 {
+        font-size: 1rem;
+      }
+    }
+  }
+} 

@@ -1,0 +1,152 @@
+<ion-content [fullscreen]="true">
+  <div class="jobs-page">
+
+    <!-- Header -->
+    <div class="crm-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back">
+        <ion-icon name="arrow-back"></ion-icon>
+      </button>
+      <div class="crm-title">
+        <h1>Jobs</h1>
+        <p>{{ jobs.length }} posting{{ jobs.length === 1 ? '' : 's' }} · shows as a 3x3 board in the client app</p>
+      </div>
+      <button class="primary-btn" (click)="startCreate()" *ngIf="editingId === null">
+        <ion-icon name="add-outline"></ion-icon>
+        New Job
+      </button>
+    </div>
+
+    <div *ngIf="loading" class="state-msg">Loading jobs…</div>
+
+    <!-- Create form -->
+    <div class="job-form-card" *ngIf="editingId === 'new'">
+      <h3>New Job</h3>
+      <div class="field-grid">
+        <label class="field span-2">
+          <span>Title</span>
+          <input type="text" [(ngModel)]="form.title" placeholder="e.g. Restock the fridge" />
+        </label>
+        <label class="field span-2">
+          <span>Description</span>
+          <input type="text" [(ngModel)]="form.description" placeholder="What the job involves" />
+        </label>
+        <label class="field">
+          <span>Hours awarded</span>
+          <input type="number" inputmode="decimal" min="0" step="0.5" [(ngModel)]="form.hours" placeholder="1" />
+        </label>
+        <label class="field">
+          <span>Quantity available</span>
+          <input type="number" inputmode="numeric" min="0" [(ngModel)]="form.quantityTotal" placeholder="1" />
+        </label>
+        <label class="field span-2">
+          <span>Max times per client, per week</span>
+          <input type="number" inputmode="numeric" min="1" [(ngModel)]="form.maxPerClient" placeholder="No limit" />
+        </label>
+        <label class="field span-2">
+          <span>Quantity resets</span>
+          <select [(ngModel)]="form.quantityResetCadence">
+            <option [ngValue]="null">Never — only changes on accept/undo</option>
+            <option value="weekly">Weekly (Monday, 6am)</option>
+            <option value="monthly">Monthly (1st, 6am)</option>
+          </select>
+        </label>
+      </div>
+      <div class="job-form-actions">
+        <button class="ghost-btn" (click)="cancelEdit()">
+          <ion-icon name="close-outline"></ion-icon>
+          Cancel
+        </button>
+        <button class="primary-btn" [disabled]="!canSave" (click)="save()">
+          <ion-icon name="save-outline"></ion-icon>
+          {{ saving ? 'Posting…' : 'Post Job' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Job list -->
+    <div class="jobs-grid" *ngIf="!loading">
+      <div class="job-card" *ngFor="let job of jobs">
+
+        <ng-container *ngIf="editingId !== job.id">
+          <div class="job-card-top">
+            <span class="job-hours-badge">{{ job.hours }} hr{{ job.hours === 1 ? '' : 's' }}</span>
+            <span class="job-qty" [class.empty]="quantityLeft(job) <= 0">
+              {{ quantityLeft(job) }} / {{ job.quantityTotal }} left
+            </span>
+          </div>
+          <h3 class="job-title">{{ job.title }}</h3>
+          <p class="job-desc">{{ job.description }}</p>
+          <p class="job-cap" *ngIf="job.maxPerClient">Max {{ job.maxPerClient }}× per client, per week (resets Mon 6am)</p>
+          <p class="job-cap" *ngIf="job.quantityResetCadence === 'weekly'">Quantity resets weekly (Mon 6am)</p>
+          <p class="job-cap" *ngIf="job.quantityResetCadence === 'monthly'">Quantity resets monthly (1st, 6am)</p>
+
+          <button class="accepted-toggle" (click)="toggleExpanded(job)" *ngIf="acceptedFor(job).length">
+            <ion-icon name="people-outline"></ion-icon>
+            {{ acceptedFor(job).length }} accepted
+            <ion-icon name="chevron-down-outline" class="chevron" [class.open]="expandedJobId === job.id"></ion-icon>
+          </button>
+          <div class="accepted-list" *ngIf="expandedJobId === job.id">
+            <div class="accepted-row" *ngFor="let a of acceptedFor(job)">
+              <span>{{ a.clientName }}</span>
+              <span class="sub">{{ a.acceptedAt | date: 'MMM d' }}</span>
+            </div>
+          </div>
+
+          <div class="job-card-actions">
+            <button class="icon-btn" (click)="startEdit(job)" aria-label="Edit">
+              <ion-icon name="create-outline"></ion-icon>
+            </button>
+            <button class="icon-btn" (click)="deleteJob(job)" aria-label="Delete">
+              <ion-icon name="trash-outline"></ion-icon>
+            </button>
+          </div>
+        </ng-container>
+
+        <ng-container *ngIf="editingId === job.id">
+          <div class="field-grid">
+            <label class="field span-2">
+              <span>Title</span>
+              <input type="text" [(ngModel)]="form.title" />
+            </label>
+            <label class="field span-2">
+              <span>Description</span>
+              <input type="text" [(ngModel)]="form.description" />
+            </label>
+            <label class="field">
+              <span>Hours awarded</span>
+              <input type="number" inputmode="decimal" min="0" step="0.5" [(ngModel)]="form.hours" />
+            </label>
+            <label class="field">
+              <span>Quantity available</span>
+              <input type="number" inputmode="numeric" min="0" [(ngModel)]="form.quantityTotal" />
+            </label>
+            <label class="field span-2">
+              <span>Max times per client, per week</span>
+              <input type="number" inputmode="numeric" min="1" [(ngModel)]="form.maxPerClient" placeholder="No limit" />
+            </label>
+            <label class="field span-2">
+              <span>Quantity resets</span>
+              <select [(ngModel)]="form.quantityResetCadence">
+                <option [ngValue]="null">Never — only changes on accept/undo</option>
+                <option value="weekly">Weekly (Monday, 6am)</option>
+                <option value="monthly">Monthly (1st, 6am)</option>
+              </select>
+            </label>
+          </div>
+          <div class="job-form-actions">
+            <button class="ghost-btn" (click)="cancelEdit()">
+              <ion-icon name="close-outline"></ion-icon>
+              Cancel
+            </button>
+            <button class="primary-btn" [disabled]="!canSave" (click)="save()">
+              <ion-icon name="save-outline"></ion-icon>
+              {{ saving ? 'Saving…' : 'Save' }}
+            </button>
+          </div>
+        </ng-container>
+      </div>
+
+      <p class="state-msg" *ngIf="!jobs.length">No jobs posted yet.</p>
+    </div>
+  </div>
+</ion-content>

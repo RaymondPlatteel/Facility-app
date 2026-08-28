@@ -1,0 +1,1332 @@
+ion-content {
+  // !important: global.scss sets a page-wide ion-content --background with
+  // !important too. Without matching it here, that global rule always won
+  // regardless of this component's higher selector specificity — which is
+  // why this kept rendering the old blue-black instead of the grey below.
+  --background: #050505 !important;
+  --color: #dceaf6;
+}
+
+.omni-page {
+  --accent: #00d4ff;
+  padding: 20px clamp(16px, 3vw, 40px) 60px;
+  max-width: 1500px;
+  margin: 0 auto;
+  font-family: 'Barlow', sans-serif;
+  font-weight: 300;
+
+  // Stretch edge-to-edge when comparing two assessments.
+  &.compare { max-width: none; }
+}
+
+/* ---------- Header (compact bar) ---------- */
+.omni-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #2a2a2a;
+  margin-bottom: 20px;
+}
+
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid #2a2a2a;
+  background: #131313;
+  color: #88a6bf;
+  font-size: 19px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+
+  &:hover { color: var(--accent); border-color: var(--accent); }
+}
+
+.omni-titles { flex: 1; min-width: 0; }
+
+// Phone width: the title no longer fights Compare/Group Code for the same
+// row (that's what truncated "ASSESSMENTS" down to "AS…") — it gets its
+// own full-width row, with Compare and Group Code wrapping to a second row
+// beneath the back button's column.
+@media (max-width: 600px) {
+  .omni-header { row-gap: 8px; }
+  .omni-titles { flex-basis: 100%; order: 1; }
+  .mode-wrap, .group-lookup-input-wrap { order: 2; }
+}
+
+.omni-eyebrow {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 3px;
+  opacity: 0.85;
+}
+
+.omni-titles h1 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(26px, 4vw, 38px);
+  letter-spacing: 0.04em;
+  line-height: 0.95;
+  margin: 0;
+  color: #dceaf6;
+  // A vertical-letter stack (each character wrapping onto its own line) is
+  // what an unconstrained flex-shrunk heading does once its box gets
+  // narrower than one word — nowrap + ellipsis truncates instead.
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  span { color: var(--accent); }
+}
+
+/* ---------- Group lookup ---------- */
+// Group code now lives in the header, to the right of Compare, instead of
+// its own row below — see the template comment. field-label collapses to
+// a tiny caption above the input so the whole control stays header-height.
+.group-lookup-input-wrap {
+  width: 92px;
+  flex-shrink: 0;
+
+  .field-label {
+    font-size: 8px;
+    margin-bottom: 3px;
+    text-align: center;
+  }
+}
+
+.group-code-input {
+  text-align: center;
+  letter-spacing: 0.3em;
+  font-size: 15px;
+  padding: 7px 10px;
+}
+
+.group-lookup-status-wrap {
+  margin-bottom: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.group-banner {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 14px;
+  transition: color 0.3s ease;
+}
+
+.group-banner-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+// The number is the headline; the word under it is a caption — that split
+// is the hierarchy that was missing when CELL/GENERATION/COHORT and their
+// digits all ran together at one flat size.
+.group-banner-value {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(48px, 9vw, 88px);
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.group-banner-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.group-banner-sep {
+  align-self: center;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(32px, 5vw, 52px);
+  opacity: 0.3;
+  transform: translateY(-8px);
+}
+
+.group-lookup-status {
+  font-family: 'Barlow', sans-serif;
+  font-size: 13px;
+  color: #6b7d8c;
+}
+
+/* ---------- Workspace grid: form (left) + results (right) ---------- */
+.editors {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.editor {
+  display: grid;
+  grid-template-columns: minmax(340px, 410px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  min-width: 0;
+
+  @media (max-width: 920px) { grid-template-columns: 1fr; }
+}
+
+/* Compare: N workspaces side by side, each stacking form over results. */
+.editors.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(14px, 2vw, 32px);
+  align-items: start;
+
+  .editor { grid-template-columns: 1fr; }
+}
+
+.editors.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.editors.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* Progressive collapse as width shrinks (3/4 first, then everything). */
+@media (max-width: 1200px) {
+  .editors.cols-3,
+  .editors.cols-4 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 920px) {
+  .editors.compare { grid-template-columns: 1fr; }
+}
+
+/* ---------- Entry form pane ---------- */
+.form-pane {
+  border-radius: 12px;
+  padding: 18px 18px 16px;
+  min-width: 0;
+  // Gradient border via padding-box/border-box clipping, same trick the
+  // result cards below use — the entry form now tints/sweeps to the
+  // athlete's own rank color too, instead of staying a fixed dark panel
+  // no matter who's loaded. Ground uses --rbc-bg (the same dark per-rank
+  // anchor the result-hero card uses), not a hardcoded navy — that was the
+  // bug: the border/glare were rank-aware but the fill was still a flat
+  // fixed color, so the card read as "still blue" underneath.
+  border: 1px solid transparent;
+  background:
+    var(--rbc-glare, none) padding-box,
+    linear-gradient(var(--rbc-bg, #0a0a0a), var(--rbc-bg, #0a0a0a)) padding-box,
+    var(--rbc-grad, linear-gradient(var(--rbc, #2a2a2a), var(--rbc, #2a2a2a))) border-box;
+}
+
+.field { margin-bottom: 14px; }
+
+.field-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #88a6bf;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.text-input {
+  width: 100%;
+  color: #dceaf6;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 16px;
+  letter-spacing: 0.03em;
+  padding: 10px 12px;
+  outline: none;
+  border-radius: 8px;
+  transition: background 0.15s;
+  // Gradient border via padding-box/border-box clipping, same trick as
+  // .fr-input-wrap — shows the moving chromium sweep at S-Rank instead of
+  // one flat colour.
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--rbc-bg, #131313), var(--rbc-bg, #131313)) padding-box,
+    var(--rbc-grad, linear-gradient(#2a2a2a, #2a2a2a)) border-box;
+
+  &:focus {
+    background:
+      linear-gradient(var(--rbc-bg, #131313), var(--rbc-bg, #131313)) padding-box,
+      var(--rbc-grad, linear-gradient(var(--accent), var(--accent))) border-box;
+  }
+  &::placeholder { color: #4a6378; }
+}
+
+/* ---------- client combobox ---------- */
+.combo {
+  position: relative;
+
+  .combo-input { padding-right: 42px; }
+}
+
+.combo-toggle {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-left: 1px solid color-mix(in srgb, var(--rbc, #2a2a2a) 45%, #2a2a2a);
+  border-radius: 0 8px 8px 0;
+  color: #88a6bf;
+  cursor: pointer;
+  transition: color 0.15s, transform 0.15s;
+
+  ion-icon { font-size: 15px; transition: transform 0.15s; }
+  &:hover { color: var(--rbc, var(--accent)); }
+}
+
+.combo.open .combo-toggle ion-icon { transform: rotate(180deg); }
+
+.combo-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  background: #1a1a1a;
+  border: 1px solid #1d4d68;
+  border-radius: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+}
+
+.combo-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #2a2a2a;
+  color: #dceaf6;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 16px;
+  letter-spacing: 0.03em;
+  padding: 11px 14px;
+  cursor: pointer;
+
+  &:last-child { border-bottom: none; }
+  &:hover { background: #2a2a2a; color: #ffffff; }
+  &.selected { color: var(--accent); }
+}
+
+.combo-empty {
+  padding: 12px 14px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 14px;
+  color: #4a6378;
+}
+
+.history-controls {
+  display: flex;
+  gap: 8px;
+
+  select { flex: 1; cursor: pointer; }
+}
+
+.history-loading {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #88a6bf;
+  margin: 0 0 14px;
+  animation: pulseFade 1.2s ease-in-out infinite;
+}
+
+@keyframes pulseFade {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+.delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  flex-shrink: 0;
+  background: rgba(255, 90, 106, 0.1);
+  border: 1px solid #ff5a6a;
+  color: #ff5a6a;
+  border-radius: 8px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) { background: rgba(255, 90, 106, 0.2); }
+  &:disabled { opacity: 0.4; cursor: default; }
+  ion-icon { font-size: 16px; }
+}
+
+/* ---------- Compact form sections ---------- */
+.form-section {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #1a1a1a;
+}
+
+.fs-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 14px;
+  letter-spacing: 0.14em;
+  // Rank color once a result exists (falls back to the fixed cyan accent
+  // for a brand-new/UNRANKED athlete) — matches the athlete's own tint
+  // instead of a fixed color unrelated to their rank.
+  color: var(--rbc, var(--accent));
+  margin-bottom: 8px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 170px);
+  gap: 10px;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.fr-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #dceaf6;
+  line-height: 1.3;
+  min-width: 0;
+}
+
+.fr-hint {
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: none;
+  color: var(--rbc, var(--accent));
+  min-height: 12px;
+}
+
+.fr-inputs {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fr-input-wrap {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  border-radius: 8px;
+  padding: 0 8px 0 10px;
+  transition: background 0.15s;
+  // Gradient border via padding-box/border-box clipping, same trick as the
+  // rank badges — at S-Rank the field outline shows the moving chromium
+  // sweep instead of one flat colour (color-mix can't blend a gradient, so
+  // this is the full-strength sweep, same as every other border on this
+  // athlete's panel).
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--rbc-bg, #131313), var(--rbc-bg, #131313)) padding-box,
+    var(--rbc-grad, linear-gradient(#2a2a2a, #2a2a2a)) border-box;
+
+  &:focus-within {
+    background:
+      linear-gradient(var(--rbc-bg, #131313), var(--rbc-bg, #131313)) padding-box,
+      var(--rbc-grad, linear-gradient(var(--accent), var(--accent))) border-box;
+  }
+  &--reps { flex: 0.8; }
+}
+
+.fr-input {
+  width: 100%;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: #dceaf6;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 17px;
+  font-weight: 500;
+  padding: 8px 0;
+  outline: none;
+  letter-spacing: 0.02em;
+
+  &::placeholder { color: #4a6378; }
+}
+
+.fr-suffix {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4a6378;
+  margin-left: 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+// Unit picker for the two timed-distance fields (30 Min Run, 2 Min Speed) —
+// same visual weight as .fr-suffix so it doesn't look like a bigger control
+// than it is, but an actual <select> underneath.
+.fr-unit-select {
+  flex-shrink: 0;
+  margin-left: 5px;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rbc, #6b7d8c);
+  cursor: pointer;
+
+  option {
+    background: #131313;
+    color: #dceaf6;
+    text-transform: none;
+  }
+}
+
+/* ---------- Calculate ---------- */
+.error-msg {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: #ff5a6a;
+  margin: 12px 0 0;
+}
+
+.save-note {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: #4a6378;
+  text-align: center;
+  margin: 8px 0 0;
+
+  &--warn { color: #f5b942; }
+}
+
+.backdate-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: #88a6bf;
+  text-decoration: underline;
+  cursor: pointer;
+
+  &:hover { color: var(--accent); }
+}
+
+.backdate-row { margin-top: 10px; }
+
+.backdate-controls {
+  display: flex;
+  gap: 8px;
+
+  input { flex: 1; }
+}
+
+.backdate-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  color: #88a6bf;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 12px;
+  cursor: pointer;
+
+  &:hover { color: var(--accent); border-color: var(--accent); }
+  ion-icon { font-size: 14px; }
+}
+
+.calc-btn {
+  width: 100%;
+  // Gradient fill — at S-Rank the button shows the moving chromium sweep
+  // directly (backgrounds take a gradient image natively, no border trick
+  // needed here since this is a filled button, not an outline).
+  background: var(--rbc-grad, linear-gradient(var(--rbc, var(--accent)), var(--rbc, var(--accent))));
+  color: #0a0a0b;
+  border: none;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 17px;
+  letter-spacing: 0.15em;
+  padding: 14px 32px;
+  cursor: pointer;
+  border-radius: 8px;
+  margin-top: 16px;
+  transition: opacity 0.15s, transform 0.1s;
+
+  &:hover:not(:disabled) { opacity: 0.9; }
+  &:active:not(:disabled) { transform: scale(0.99); }
+  &:disabled { opacity: 0.6; cursor: default; }
+}
+
+/* ---------- Results pane ---------- */
+.result-pane {
+  position: sticky;
+  top: 8px;
+  min-width: 0;
+
+  @media (max-width: 920px) { position: static; }
+}
+
+.editors.compare .result-pane { position: static; }
+
+.result-empty {
+  border: 1px dashed #2a2a2a;
+  background: #0a0a0a;
+  border-radius: 12px;
+  padding: 72px 24px;
+  text-align: center;
+
+  ion-icon { font-size: 34px; color: #4a6378; }
+
+  h3 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 0.12em;
+    color: #88a6bf;
+    margin: 14px 0 6px;
+  }
+
+  p {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 14px;
+    color: #4a6378;
+    margin: 0;
+    line-height: 1.6;
+  }
+}
+
+.result-panel {
+  animation: fadeUp 0.4s ease both;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+// Toggle: true tints the hero + sub-card borders/backgrounds to the current
+// rank color (via the --rbc custom property .result-panel sets in the
+// template). false reverts every card here to the original fixed
+// steel-blue theme. One-line revert if the tinted look doesn't stick.
+$rank-tint-cards: true;
+
+.result-hero {
+  // --rbc-bg is a deliberately dark, low-lightness anchor per rank (not the
+  // vibrant --rbc badge/graph color) — see rankGradientBgColor's comment for
+  // why reusing --rbc here blew the card lightness way past "dark".
+  //
+  // Gradient border via padding-box/border-box clipping (mirrors Project
+  // 000's cards exactly): the ground (+ S-Rank glare wash) is clipped to
+  // the padding box, --rbc-grad is painted to the border box, so the
+  // chromium sweep shows through the frame instead of one flat colour.
+  @if $rank-tint-cards {
+    border: 1px solid transparent;
+    background:
+    var(--rbc-glare, none) padding-box,
+    linear-gradient(var(--rbc-bg, #0a0a0a), var(--rbc-bg, #0a0a0a)) padding-box,
+    var(--rbc-grad, linear-gradient(var(--rbc, #0a0a0a), var(--rbc, #0a0a0a))) border-box;
+  } @else {
+    border: 1px solid #2a2a2a;
+    background: linear-gradient(135deg, #0a0a0a 0%, #131313 100%);
+  }
+  border-radius: 12px;
+  padding: 22px 24px 18px;
+  margin-bottom: 12px;
+  position: relative;
+  overflow: hidden;
+
+  // subtle rank-colored glow along the top edge
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--rbc, #2a2a2a);
+    opacity: 0.9;
+  }
+}
+
+.result-hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.result-name {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(26px, 4vw, 40px);
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: #dceaf6;
+}
+
+.rank-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+  padding: 4px 14px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  // Gradient border via padding-box/border-box clipping (Project 000's
+  // trick). Solid dark fill on the padding box — not transparent — so the
+  // chip stays legible regardless of what's behind it; an outline-only
+  // chip left the white S-Rank text and border with nothing to sit on and
+  // made both disappear. 2px (not 1px) so the moving chromium sweep is
+  // actually wide enough to read as a gradient rather than one flat line.
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--rbc-bg, #0a0a0a), var(--rbc-bg, #0a0a0a)) padding-box,
+    var(--rbc-grad, linear-gradient(currentColor, currentColor)) border-box;
+}
+
+.rank-letter {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 36px;
+  letter-spacing: 0.02em;
+}
+
+.rank-caption {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.25em;
+  margin-top: 2px;
+  opacity: 0.85;
+}
+
+.omni-score-row {
+  margin-top: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.omni-score-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: #88a6bf;
+}
+
+.omni-score-value {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 56px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.level-delta {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.score-bar-wrap { margin-top: 12px; }
+.score-bar-bg {
+  height: 3px;
+  background: if($rank-tint-cards, color-mix(in srgb, var(--rbc, #2a2a2a) 30%, #0a0a0a), #2a2a2a);
+  overflow: hidden;
+  border-radius: 2px;
+}
+.score-bar-fill {
+  height: 100%;
+  width: 0;
+  // ease-in-out: accelerates, then decelerates into the new value
+  transition: width 0.9s cubic-bezier(0.65, 0, 0.35, 1);
+
+  &.no-anim { transition: none; }
+}
+
+.sub-scores {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+
+  @media (max-width: 560px) { grid-template-columns: repeat(2, 1fr); }
+}
+
+.sub-card {
+  @if $rank-tint-cards {
+    border: 1px solid transparent;
+    background:
+    var(--rbc-glare, none) padding-box,
+    linear-gradient(var(--rbc-bg, #1a1a1a), var(--rbc-bg, #1a1a1a)) padding-box,
+    var(--rbc-grad, linear-gradient(var(--rbc, #1a1a1a), var(--rbc, #1a1a1a))) border-box;
+  } @else {
+    border: 1px solid #2a2a2a;
+    background: #1a1a1a;
+  }
+  border-radius: 8px;
+  padding: 12px 12px 10px;
+  min-width: 0;
+}
+
+.sub-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+  gap: 4px;
+}
+
+.sub-card-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #88a6bf;
+}
+
+.sub-card-delta {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.sub-card-value {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 26px;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.sub-bar-bg {
+  height: 2px;
+  background: if($rank-tint-cards, color-mix(in srgb, var(--rbc, #2a2a2a) 30%, #0a0a0a), #2a2a2a);
+  margin-top: 7px;
+}
+.sub-bar-fill { height: 100%; width: 0; transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* ---------- on-page insights (chart + impact list) ---------- */
+.insight-block {
+  @if $rank-tint-cards {
+    border: 1px solid transparent;
+    background:
+    var(--rbc-glare, none) padding-box,
+    linear-gradient(var(--rbc-bg, #0a0a0a), var(--rbc-bg, #0a0a0a)) padding-box,
+    var(--rbc-grad, linear-gradient(var(--rbc, #0a0a0a), var(--rbc, #0a0a0a))) border-box;
+  } @else {
+    border: 1px solid #2a2a2a;
+    background: #0a0a0a;
+  }
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 12px;
+}
+
+.insight-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  color: #88a6bf;
+  margin-bottom: 10px;
+
+  ion-icon { font-size: 14px; }
+}
+
+/* Radar + impact list share one row (similar heights). */
+.insight-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+  gap: 12px;
+  margin-top: 12px;
+  align-items: stretch;
+
+  .insight-block { margin-top: 0; min-width: 0; }
+
+  @media (max-width: 1080px) { grid-template-columns: 1fr; }
+}
+
+.editors.compare .insight-row { grid-template-columns: 1fr; }
+
+.mini-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+
+  .chart-lvl {
+    font-size: 11px;
+    font-weight: 600;
+    text-anchor: middle;
+    font-family: 'Barlow Condensed', sans-serif;
+  }
+
+  .chart-date {
+    fill: #4a6378;
+    font-size: 10px;
+    text-anchor: middle;
+    font-family: 'Barlow Condensed', sans-serif;
+  }
+}
+
+.radar-chart {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  height: auto;
+  margin: 0 auto;
+
+  .radar-ring {
+    fill: none;
+    stroke: #2a2a2a;
+    stroke-width: 1;
+  }
+
+  .radar-axis {
+    stroke: #1a1a1a;
+    stroke-width: 1;
+  }
+
+  .radar-prev {
+    fill: none;
+    stroke: #88a6bf;
+    stroke-width: 1.5;
+    stroke-dasharray: 4 4;
+  }
+
+  .radar-current {
+    fill-opacity: 0.18;
+    stroke-width: 2;
+    stroke-linejoin: round;
+  }
+
+  .radar-label {
+    fill: #88a6bf;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-family: 'Barlow Condensed', sans-serif;
+  }
+}
+
+.legend-swatch--dashed {
+  background: none;
+  border-top: 2px dashed #88a6bf;
+  height: 0;
+}
+
+/* Comparison-baseline picker inside the radar legend. */
+.legend-compare {
+  gap: 5px;
+}
+
+.compare-vs {
+  color: #4a6378;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.compare-select {
+  background: if($rank-tint-cards, var(--rbc-bg, #1a1a1a), #1a1a1a);
+  border: 1px solid if($rank-tint-cards, var(--rbc, #2a2a2a), #2a2a2a);
+  border-radius: 6px;
+  color: #dceaf6;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 3px 6px;
+  cursor: pointer;
+  outline: none;
+  max-width: 150px;
+
+  &:hover { border-color: if($rank-tint-cards, var(--rbc, #1d4d68), #1d4d68); }
+  &:focus { border-color: if($rank-tint-cards, var(--rbc, #00d4ff), var(--accent)); }
+}
+
+/* Radar header row with the Raw / Adjusted and 1:1 / Fit toggles. */
+.insight-title--split {
+  justify-content: space-between;
+
+  span { display: inline-flex; align-items: center; gap: 7px; }
+}
+
+.scale-toggles {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.legend-zoom { color: #f5b942; }
+
+.scale-toggle {
+  display: inline-flex;
+  border: 1px solid if($rank-tint-cards, var(--rbc, #2a2a2a), #2a2a2a);
+  border-radius: 6px;
+  overflow: hidden;
+
+  button {
+    background: #131313;
+    border: none;
+    color: #4a6378;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+
+    & + button { border-left: 1px solid if($rank-tint-cards, var(--rbc, #2a2a2a), #2a2a2a); }
+    &:hover { color: #88a6bf; }
+    &.on {
+      background: if($rank-tint-cards, color-mix(in srgb, var(--rbc, #00d4ff) 16%, transparent), rgba(0, 212, 255, 0.16));
+      color: if($rank-tint-cards, var(--rbc, #00d4ff), #00d4ff);
+    }
+  }
+}
+
+.radar-note {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: #4a6378;
+  margin-top: 8px;
+  line-height: 1.4;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #1a1a1a;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #88a6bf;
+
+  &.legend-level { color: #dceaf6; }
+}
+
+.legend-swatch {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.impact-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #1a1a1a;
+
+  &:last-child { border-bottom: none; padding-bottom: 0; }
+}
+
+.impact-num {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 15px;
+  color: #4a6378;
+}
+
+.impact-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #dceaf6;
+}
+
+.impact-detail {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+  color: #88a6bf;
+}
+
+.impact-gain {
+  text-align: right;
+}
+
+.impact-gain-val {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.impact-gain-sub {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4a6378;
+}
+
+.print-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 1px solid #1d4d68;
+  color: #88a6bf;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  padding: 13px 24px;
+  cursor: pointer;
+  margin-top: 12px;
+  border-radius: 8px;
+  transition: border-color 0.15s, color 0.15s;
+
+  &:hover {
+    border-color: if($rank-tint-cards, var(--rbc, #00d4ff), var(--accent));
+    color: if($rank-tint-cards, var(--rbc, #00d4ff), var(--accent));
+  }
+  ion-icon { font-size: 16px; }
+}
+
+/* ---------- PDF modal ---------- */
+.pdf-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  flex-direction: column;
+
+  &.open { display: flex; }
+}
+.pdf-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); }
+.pdf-shell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #0a0a0a;
+  border-bottom: 1px solid #2a2a2a;
+  flex-shrink: 0;
+}
+.pdf-toolbar-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--accent, #00d4ff);
+}
+.pdf-actions { display: flex; align-items: center; gap: 10px; }
+.pdf-download {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #00d4ff;
+  border: none;
+  color: #0a0a0b;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  padding: 7px 16px;
+  cursor: pointer;
+  border-radius: 6px;
+
+  &:hover { opacity: 0.9; }
+  ion-icon { font-size: 13px; }
+}
+.pdf-close {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: none;
+  border: 1px solid #1d4d68;
+  color: #88a6bf;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  padding: 6px 14px;
+  cursor: pointer;
+  border-radius: 6px;
+
+  &:hover { border-color: #00d4ff; color: #00d4ff; }
+  ion-icon { font-size: 13px; }
+}
+.pdf-scroll {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 20px;
+}
+.pdf-scale-wrap { width: 794px; transform-origin: top center; }
+.pdf-page {
+  width: 794px;
+  height: 1123px;
+  max-height: 1123px;
+  overflow: hidden;
+  background: #ffffff;
+  color: #111114;
+  padding: 36px 44px 32px;
+  font-family: 'Barlow', sans-serif;
+  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.7), 0 0 0 1px #e0e0e0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- Mode toggle (compare 1–4 athletes) ---------- */
+.mode-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.mode-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #4a6378;
+}
+
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+
+  button {
+    background: #131313;
+    border: none;
+    color: #88a6bf;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 9px 18px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+
+    & + button { border-left: 1px solid #2a2a2a; }
+    &:hover { color: #dceaf6; }
+    &.on { background: color-mix(in srgb, var(--rbc, #00d4ff) 16%, transparent); color: var(--rbc, #00d4ff); }
+  }
+}
+
+/* In a 2-wide compare column the 5 sub-score cards wrap instead of forcing 5 across. */
+.editors.compare .sub-scores {
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+}
+
+/* 3/4-wide compare: keep all 5 category cards side by side (labels abbreviate to fit). */
+.editors.cols-3 .sub-scores,
+.editors.cols-4 .sub-scores {
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.editors.cols-3 .sub-card,
+.editors.cols-4 .sub-card {
+  padding: 8px 6px 7px;
+}
+
+.editors.cols-3 .sub-card-value,
+.editors.cols-4 .sub-card-value {
+  font-size: 20px;
+}
+
+@media (max-width: 700px) {
+  .editors.cols-3 .sub-scores,
+  .editors.cols-4 .sub-scores {
+    grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  }
+}
+
+/* ---- Current/Goals tab, mirroring Project 000's toggle ---- */
+.view-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+
+  button {
+    flex: 1;
+    padding: 8px 0;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--rbc, #2a2a2a) 45%, #2a2a2a);
+    background: var(--rbc-bg, #131313);
+    color: #4a6378;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+
+    // Rank-tinted active state, same as everything else on this athlete's
+    // panel — was a fixed cyan regardless of who was loaded.
+    &.active {
+      border-color: var(--rbc, #00d4ff);
+      background: color-mix(in srgb, var(--rbc, #00d4ff) 14%, transparent);
+      color: var(--rbc, #00d4ff);
+    }
+  }
+}
+
+.goal-calc-btn {
+  border-color: var(--rbc, #00d4ff);
+}

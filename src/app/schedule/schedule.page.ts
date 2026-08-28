@@ -1,25 +1,56 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
-import { IonContent, IonHeader, IonTitle, IonToolbar, IonIcon, LoadingController, AlertController } from '@ionic/angular/standalone';
+import { Router, RouterModule } from '@angular/router';
+import { IonContent, IonIcon, IonModal, ToastController, ViewWillEnter } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { addCircleOutline, createOutline, peopleOutline, calendarOutline, settingsOutline, close, trashOutline, save, add, trash, today, arrowBack } from 'ionicons/icons';
-import { FirebaseService, Session } from '../services/firebase.service';
+import {
+  arrowBack,
+  chevronBackOutline,
+  chevronForwardOutline,
+  calendarOutline,
+  timeOutline,
+  peopleOutline,
+  cubeOutline,
+  closeOutline,
+  checkmarkCircle,
+  removeCircle,
+  closeCircle,
+  ellipseOutline,
+  pencilOutline,
+  arrowUndoOutline,
+  swapHorizontalOutline,
+  barbellOutline,
+  addOutline,
+  trashOutline
+} from 'ionicons/icons';
+import { FirebaseService, PackageRecord, CheckIn, AttendanceStatus, SessionOverride, SingleSession, ClientProfile, localDateString } from '../services/firebase.service';
+import { CalendarSyncService } from '../services/calendar-sync.service';
+import { AuthService, TRAINERS, trainerName } from '../services/auth.service';
+import {
+  ScheduleEntry,
+  generateScheduleForRange,
+  startOfWeek,
+  addDays,
+  formatTime12h
+} from '../services/schedule.util';
 
-interface NewSession {
-  name: string;
-  participants: string[];
-  startDate: string;
-  time: string;
-  daysOfWeek: number[];
-  sessionCount: number;
+type ViewMode = 'week' | 'month';
+
+interface DayColumn {
+  date: Date;
+  dateKey: string;
+  label: string;     // 'Mon'
+  dayNum: number;    // 8
+  isToday: boolean;
+  isPast: boolean;
+  inMonth: boolean;  // false for adjacent-month padding days in month view
+  entries: ScheduleEntry[];
 }
 
-interface WeekDay {
-  label: string;
-  date: Date;
-  dayIndex: number;
+interface SessionClient {
+  id: string | null;
+  name: string;
 }
 
 @Component({
@@ -27,634 +58,665 @@ interface WeekDay {
   templateUrl: './schedule.page.html',
   styleUrls: ['./schedule.page.scss'],
   standalone: true,
-  imports: [IonContent, IonHeader, IonTitle, IonToolbar, IonIcon, CommonModule, FormsModule]
+  imports: [IonContent, IonIcon, IonModal, CommonModule, FormsModule, RouterModule]
 })
-export class SchedulePage implements OnInit {
-  sidebarOpen = false;
-  formPageActive = false;
-  isEditMode = false;
-  editingSession: Session | null = null;
-  viewMode = 'weekly';
-  currentDate = new Date();
-  monthYearText = '';
-  sessionData: Session[] = [];
-  weekDays: WeekDay[] = [];
-  timeSlots: number[] = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
-  
-  // Student suggestions
-  allStudentNames: string[] = [];
-  filteredSuggestions: string[][] = []; // Array of suggestions for each participant input
-  
-  newSession: NewSession = {
-    name: '',
-    participants: [''],
-    startDate: '',
-    time: '',
-    daysOfWeek: [],
-    sessionCount: 8
-  };
+export class SchedulePage implements OnInit, ViewWillEnter {
+  loading = true;
+  packages: PackageRecord[] = [];
+  overrides: SessionOverride[] = [];
+  singleSessions: SingleSession[] = [];
+  clients: ClientProfile[] = [];
+  weekCheckIns: CheckIn[] = [];
+  viewMode: ViewMode = 'week';
+  cursor: Date = new Date();        // reference date for the visible range
+  days: DayColumn[] = [];
+  weeks: DayColumn[][] = [];        // month view: rows of 7 days
+  private dayKeys: string[] = [];
+
+  // Session detail modal
+  selectedEntry: ScheduleEntry | null = null;
+  selectedDay: DayColumn | null = null;
+  selectedClients: SessionClient[] = [];   // stable list for the open session
+  isSessionOpen = false;
+  // Rows currently saving in the background — per-row, not global, so
+  // checking someone in never blocks tapping the next person.
+  busyRowKeys = new Set<string>();
+
+  // Reschedule form (within the session modal) — package occurrences only.
+  reschedOpen = false;
+  reschedDate = '';
+  reschedTime = '';
+  reschedBusy = false;
+
+  // Add/edit single-session form (its own modal, separate from the
+  // session-detail one — creating needs a client picker, date, time,
+  // duration, and type, none of which the detail sheet has room for).
+  addSessionOpen = false;
+  addSessionBusy = false;
+  singleActionBusy = false; // delete, specifically — edit routes through the same save path as create
+  editingSingleSessionId: string | null = null;
+  addForm: {
+    date: string;
+    time: string;
+    durationMinutes: number;
+    sessionType: 'Private' | 'Semi' | 'Group';
+    title: string;
+    clientIds: string[];
+    trainerId: string;
+  } = { date: '', time: '', durationMinutes: 60, sessionType: 'Private', title: '', clientIds: [], trainerId: '' };
+
+  trainers = TRAINERS;
+  // '' = show every trainer's sessions; otherwise only that trainer's.
+  trainerFilter = '';
 
   constructor(
-    private firebaseService: FirebaseService,
-    private loadingController: LoadingController,
-    private alertController: AlertController,
-    private router: Router
+    private firebase: FirebaseService,
+    private router: Router,
+    private toastController: ToastController,
+    private calendarSync: CalendarSyncService,
+    private auth: AuthService
   ) {
-    addIcons({ addCircleOutline, createOutline, peopleOutline, calendarOutline, settingsOutline, today, close, trashOutline, add, trash, save, arrowBack });
+    addIcons({
+      arrowBack,
+      chevronBackOutline,
+      chevronForwardOutline,
+      calendarOutline,
+      timeOutline,
+      peopleOutline,
+      cubeOutline,
+      closeOutline,
+      checkmarkCircle,
+      removeCircle,
+      closeCircle,
+      ellipseOutline,
+      pencilOutline,
+      arrowUndoOutline,
+      swapHorizontalOutline,
+      barbellOutline,
+      addOutline,
+      trashOutline
+    });
+  }
+
+  // Launch the live-session HUD pre-loaded with this client's current workout.
+  startLiveSession(client: SessionClient) {
+    this.closeSession();
+    this.router.navigate(['/live-session'], {
+      queryParams: client.id ? { clientId: client.id } : {}
+    });
   }
 
   async ngOnInit() {
-    this.generateCalendar(this.currentDate);
-    await this.loadSessions();
-    await this.loadStudentNames();
+    this.loadClients();
+    await this.loadSchedule(true);
   }
 
-  async loadSessions() {
-    const loading = await this.loadingController.create({
-      message: 'Loading sessions...'
-    });
-    await loading.present();
+  async ionViewWillEnter() {
+    await this.loadSchedule(false);
+  }
 
+  // Loaded once, separately from loadSchedule — the client list doesn't
+  // change as often as the schedule itself, and it's only needed for the
+  // add-session client picker.
+  private async loadClients() {
     try {
-      this.sessionData = await this.firebaseService.getSessions();
-      console.log('Loaded sessions from Firebase:', this.sessionData);
-    } catch (error) {
-      console.error('Error loading sessions:', error);
-      const alert = await this.alertController.create({
-        header: 'Error',
-        message: 'Failed to load sessions. Please check your internet connection.',
-        buttons: ['OK']
-      });
-      await alert.present();
-    } finally {
-      await loading.dismiss();
+      this.clients = await this.firebase.listClientProfiles();
+    } catch (err) {
+      console.error('Schedule: failed to load clients', err);
     }
   }
 
-  async loadStudentNames() {
+  private async loadSchedule(showLoading: boolean) {
+    if (showLoading) this.loading = true;
     try {
-      // Get all unique student names from waivers and existing sessions
-      const [waivers, sessions] = await Promise.all([
-        this.firebaseService.getAllWaivers(),
-        this.firebaseService.getSessions()
+      [this.packages, this.overrides, this.singleSessions] = await Promise.all([
+        this.firebase.listPackages(),
+        this.firebase.listSessionOverrides(),
+        this.firebase.listSingleSessions()
       ]);
-
-      const studentNamesSet = new Set<string>();
-      
-      // Add names from waivers
-      waivers.forEach(waiver => {
-        if (waiver.studentName && waiver.studentName.trim()) {
-          studentNamesSet.add(waiver.studentName.trim());
-        }
-      });
-      
-      // Add names from session participants
-      sessions.forEach(session => {
-        session.participants.forEach(participant => {
-          if (participant && participant.trim()) {
-            studentNamesSet.add(participant.trim());
-          }
-        });
-      });
-
-      // Convert to sorted array
-      this.allStudentNames = Array.from(studentNamesSet).sort((a, b) => a.localeCompare(b));
-      console.log('Loaded student names for autofill:', this.allStudentNames);
-      
-      // Initialize suggestions array
-      this.updateFilteredSuggestions();
-    } catch (error) {
-      console.error('Error loading student names:', error);
+      await this.autoMarkNoShows();
+    } catch (err) {
+      console.error('Schedule: failed to load schedule data', err);
     }
+    await this.rebuild();
+    this.loading = false;
+    this.syncCalendarInBackground();
   }
 
-  updateFilteredSuggestions() {
-    this.filteredSuggestions = this.newSession.participants.map(() => []);
-  }
+  // How many days back to sweep for missed check-ins each time the schedule loads.
+  private static readonly NO_SHOW_LOOKBACK_DAYS = 14;
 
-  onParticipantInput(index: number, value: string) {
-    this.newSession.participants[index] = value;
-    
-    if (value.trim()) {
-      // Filter suggestions based on input
-      this.filteredSuggestions[index] = this.allStudentNames.filter(name =>
-        name.toLowerCase().includes(value.toLowerCase()) &&
-        !this.newSession.participants.includes(name) // Don't suggest already selected names
-      ).slice(0, 5); // Limit to 5 suggestions
-    } else {
-      // Show all available names when input is empty
-      this.filteredSuggestions[index] = this.allStudentNames.filter(name =>
-        !this.newSession.participants.includes(name)
-      ).slice(0, 8); // Show more when no filter
+  // Once a session's day has fully passed with nobody marked present/excused/
+  // unexcused, default it to "no-show" automatically — coaches shouldn't have
+  // to manually flag every miss. Idempotent: only fills in clients that still
+  // have no check-in record, so re-running (e.g. on every page visit) is safe.
+  private async autoMarkNoShows() {
+    const todayKey = localDateString();
+    const start = addDays(new Date(), -SchedulePage.NO_SHOW_LOOKBACK_DAYS);
+    const end = addDays(new Date(), -1); // through yesterday only
+    const pastEntries = generateScheduleForRange(this.packages, start, end, this.overrides, this.singleSessions)
+      .filter(e => e.dateKey < todayKey);
+    if (pastEntries.length === 0) return;
+
+    const dateKeys = Array.from(new Set(pastEntries.map(e => e.dateKey)));
+    let pastCheckIns: CheckIn[];
+    try {
+      pastCheckIns = await this.firebase.getCheckInsForDates(dateKeys);
+    } catch (err) {
+      console.error('Schedule: failed to load check-ins for no-show sweep', err);
+      return;
     }
-  }
 
-  selectSuggestion(participantIndex: number, suggestion: string) {
-    this.newSession.participants[participantIndex] = suggestion;
-    this.filteredSuggestions[participantIndex] = []; // Clear suggestions after selection
-  }
-
-  clearSuggestions(index: number) {
-    // Delay clearing to allow for click on suggestion
-    setTimeout(() => {
-      this.filteredSuggestions[index] = [];
-    }, 150);
-  }
-
-  showAllStudentSuggestions(index: number) {
-    // Show available students when clicking on empty input
-    if (!this.newSession.participants[index].trim()) {
-      this.filteredSuggestions[index] = this.allStudentNames.filter(name =>
-        !this.newSession.participants.includes(name)
-      ).slice(0, 8);
-    }
-  }
-
-  toggleSidebar(event: Event) {
-    event.stopPropagation();
-    this.sidebarOpen = !this.sidebarOpen;
-  }
-
-  showFormPage() {
-    console.log('Opening form page for new session');
-    this.isEditMode = false;
-    this.editingSession = null;
-    this.resetNewSession();
-    this.formPageActive = true;
-    this.sidebarOpen = false;
-  }
-
-  showEditPage(session: Session) {
-    console.log('Opening form page for editing session:', session);
-    this.isEditMode = true;
-    this.editingSession = session;
-    
-    // Populate form with existing session data
-    const sessionDate = new Date(session.date);
-    this.newSession = {
-      name: session.name,
-      participants: [...session.participants],
-      startDate: sessionDate.toISOString().split('T')[0],
-      time: sessionDate.toTimeString().slice(0, 5),
-      daysOfWeek: [sessionDate.getDay()],
-      sessionCount: 1
+    const hasCheckIn = (entry: ScheduleEntry, client: SessionClient) => {
+      const nameKey = client.name.trim().toLowerCase();
+      return pastCheckIns.some(c => c.date === entry.dateKey &&
+        ((!!c.clientId && !!client.id && c.clientId === client.id) || c.clientName.trim().toLowerCase() === nameKey));
     };
-    
-    this.formPageActive = true;
-    this.sidebarOpen = false;
-  }
 
-  hideFormPage() {
-    this.formPageActive = false;
-    this.isEditMode = false;
-    this.editingSession = null;
-    this.resetNewSession();
-  }
-
-  prevPeriod() {
-    if (this.viewMode === 'monthly') {
-      this.currentDate.setMonth(this.currentDate.getMonth() - 1);
-    } else {
-      this.currentDate.setDate(this.currentDate.getDate() - 7);
-    }
-    this.generateCalendar(this.currentDate);
-  }
-
-  nextPeriod() {
-    if (this.viewMode === 'monthly') {
-      this.currentDate.setMonth(this.currentDate.getMonth() + 1);
-    } else {
-      this.currentDate.setDate(this.currentDate.getDate() + 7);
-    }
-    this.generateCalendar(this.currentDate);
-  }
-
-  onViewModeChange() {
-    this.generateCalendar(this.currentDate);
-  }
-
-  addParticipant() {
-    this.newSession.participants.push('');
-    this.filteredSuggestions.push([]); // Add empty suggestions for new participant
-  }
-
-  removeParticipant(index: number) {
-    if (this.newSession.participants.length > 1) {
-      this.newSession.participants.splice(index, 1);
-      this.filteredSuggestions.splice(index, 1); // Remove suggestions for removed participant
-    }
-  }
-
-  addExistingStudent(studentName: string) {
-    // Find first empty participant slot or add new one
-    const emptyIndex = this.newSession.participants.findIndex(p => !p.trim());
-    if (emptyIndex >= 0) {
-      this.newSession.participants[emptyIndex] = studentName;
-    } else {
-      this.newSession.participants.push(studentName);
-      this.filteredSuggestions.push([]);
-    }
-    // Clear suggestions after adding
-    this.updateFilteredSuggestions();
-  }
-
-  toggleDay(dayIndex: number) {
-    const index = this.newSession.daysOfWeek.indexOf(dayIndex);
-    if (index > -1) {
-      this.newSession.daysOfWeek.splice(index, 1);
-    } else {
-      this.newSession.daysOfWeek.push(dayIndex);
-    }
-  }
-
-  trackParticipant(index: number): number {
-    return index;
-  }
-
-  formatHour(hour: number): string {
-    const suffix = hour >= 12 ? 'pm' : 'am';
-    const hour12 = hour % 12 === 0 ? 12 : hour % 12;
-    return `${hour12}${suffix}`;
-  }
-
-  generateCalendar(date: Date) {
-    this.monthYearText = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-    
-    if (this.viewMode === 'weekly') {
-      this.generateWeeklyView(date);
-    }
-  }
-
-  generateWeeklyView(date: Date) {
-    const startOfWeek = new Date(date);
-    startOfWeek.setDate(date.getDate() - date.getDay());
-    
-    this.weekDays = [];
-    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-    
-    for (let i = 0; i < 7; i++) {
-      const dayDate = new Date(startOfWeek);
-      dayDate.setDate(dayDate.getDate() + i);
-      
-      this.weekDays.push({
-        label: days[i],
-        date: new Date(dayDate),
-        dayIndex: i
-      });
-    }
-  }
-
-  formatDate(date: Date): string {
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    return `${day}/${month}`;
-  }
-
-  getSessionForSlot(date: Date, hour: number): Session | null {
-    const targetDate = new Date(date);
-    targetDate.setHours(hour, 0, 0, 0);
-    
-    const session = this.sessionData.find(s => {
-      const sessionDate = new Date(s.date);
-      return sessionDate.getFullYear() === targetDate.getFullYear() &&
-             sessionDate.getMonth() === targetDate.getMonth() &&
-             sessionDate.getDate() === targetDate.getDate() &&
-             sessionDate.getHours() === targetDate.getHours();
-    });
-    
-    return session || null;
-  }
-
-  isLastSessionInSeries(session: Session): boolean {
-    if (!session) return false;
-    
-    // Find all sessions with the same name and participants
-    const seriesSessions = this.sessionData.filter(s => 
-      s.name === session.name &&
-      s.participants.length === session.participants.length &&
-      s.participants.every((participant, index) => participant === session.participants[index])
-    );
-    
-    // Sort sessions by date to find the last one
-    const sortedSessions = seriesSessions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    
-    // Check if this session is the last one in the sorted array
-    const lastSession = sortedSessions[sortedSessions.length - 1];
-    return session.id === lastSession.id;
-  }
-
-  onTimeSlotClick(date: Date, hour: number) {
-    const session = this.getSessionForSlot(date, hour);
-    if (session) {
-      // Edit existing session
-      this.showEditPage(session);
-    } else {
-      // Create new session at this time slot
-      const clickedDate = new Date(date);
-      clickedDate.setHours(hour, 0, 0, 0);
-      
-      this.newSession = {
-        name: '',
-        participants: [''],
-        startDate: clickedDate.toISOString().split('T')[0],
-        time: clickedDate.toTimeString().slice(0, 5),
-        daysOfWeek: [clickedDate.getDay()],
-        sessionCount: 8
-      };
-      
-      this.showFormPage();
-    }
-  }
-
-  testButton() {
-    console.log('Test button clicked!');
-    alert('Button click works!');
-  }
-
-  async deleteSession() {
-    if (!this.editingSession?.id) return;
-
-    // Find future sessions with the same name and participants (excluding the current one)
-    const futureSessions = this.sessionData.filter(session => 
-      session.id !== this.editingSession!.id && // Exclude the current session
-      session.name === this.editingSession!.name &&
-      session.participants.length === this.editingSession!.participants.length &&
-      session.participants.every((participant, index) => participant === this.editingSession!.participants[index]) &&
-      new Date(session.date) > new Date(this.editingSession!.date) // Only future sessions
-    );
-
-    const hasFutureSessions = futureSessions.length > 0;
-
-    const alert = await this.alertController.create({
-      header: 'Delete Session',
-      message: hasFutureSessions 
-        ? `Found ${futureSessions.length} future session${futureSessions.length > 1 ? 's' : ''} in this series. What would you like to delete?`
-        : 'Are you sure you want to delete this session?',
-      buttons: [
-        {
-          text: 'Cancel',
-          role: 'cancel'
-        },
-        ...(hasFutureSessions ? [
-          {
-            text: 'Just This Session',
-            handler: async () => {
-              await this.performDelete([this.editingSession!.id!], 'Session deleted successfully!');
-            }
-          },
-          {
-            text: `All Future Sessions (${futureSessions.length + 1})`,
-            role: 'destructive',
-            handler: async () => {
-              // Include current session + all future sessions
-              const allSessionIds = [this.editingSession!.id!, ...futureSessions.map(s => s.id!)].filter(id => id);
-              const totalCount = allSessionIds.length;
-              await this.performDelete(allSessionIds, `Successfully deleted ${totalCount} session${totalCount > 1 ? 's' : ''}!`);
-            }
-          }
-        ] : [
-          {
-            text: 'Delete',
-            role: 'destructive',
-            handler: async () => {
-              await this.performDelete([this.editingSession!.id!], 'Session deleted successfully!');
-            }
-          }
-        ])
-      ]
-    });
-    await alert.present();
-  }
-
-  private async performDelete(sessionIds: string[], successMessage: string) {
-    const loading = await this.loadingController.create({
-      message: sessionIds.length > 1 ? 'Deleting sessions...' : 'Deleting session...'
-    });
-    await loading.present();
-
-    try {
-      // Delete all sessions
-      for (const sessionId of sessionIds) {
-        await this.firebaseService.deleteSession(sessionId);
-      }
-      
-      await this.loadSessions();
-      this.hideFormPage();
-      
-      const successAlert = await this.alertController.create({
-        header: 'Success',
-        message: successMessage,
-        buttons: ['OK']
-      });
-      await successAlert.present();
-    } catch (error) {
-      console.error('Error deleting session(s):', error);
-      const errorAlert = await this.alertController.create({
-        header: 'Error',
-        message: 'Failed to delete session(s). Please try again.',
-        buttons: ['OK']
-      });
-      await errorAlert.present();
-    } finally {
-      await loading.dismiss();
-    }
-  }
-
-  async saveSession() {
-    console.log('Starting saveSession...');
-    console.log('Form data:', this.newSession);
-    console.log('Edit mode:', this.isEditMode);
-    
-    // Basic validation
-    if (!this.newSession.name || !this.newSession.startDate || !this.newSession.time) {
-      console.log('Validation failed - missing required fields');
-      const alert = await this.alertController.create({
-        header: 'Validation Error',
-        message: 'Please fill in all required fields',
-        buttons: ['OK']
-      });
-      await alert.present();
-      return;
-    }
-
-    if (!this.isEditMode && (!this.newSession.sessionCount || this.newSession.sessionCount < 1)) {
-      const alert = await this.alertController.create({
-        header: 'Validation Error',
-        message: 'Please enter a valid number of sessions',
-        buttons: ['OK']
-      });
-      await alert.present();
-      return;
-    }
-    
-    if (this.newSession.daysOfWeek.length === 0) {
-      console.log('Validation failed - no days selected');
-      const alert = await this.alertController.create({
-        header: 'Validation Error',
-        message: 'Please select at least one day of the week',
-        buttons: ['OK']
-      });
-      await alert.present();
-      return;
-    }
-
-    const loading = await this.loadingController.create({
-      message: this.isEditMode ? 'Updating session...' : 'Saving sessions...'
-    });
-    await loading.present();
-
-    try {
-      const sessionName = this.newSession.name;
-      const [hour, minute] = this.newSession.time.split(':').map(Number);
-      const participants = this.newSession.participants.filter(p => p.trim() !== '');
-
-      if (this.isEditMode && this.editingSession) {
-        // Update existing session
-        const sessionDate = new Date(this.newSession.startDate);
-        sessionDate.setHours(hour, minute, 0, 0);
-        
-        await this.firebaseService.updateSession(this.editingSession.id!, {
-          name: sessionName,
-          participants: participants,
-          date: sessionDate
-        });
-        
-        console.log('Updated session');
-        
-        // Reload sessions from Firebase
-        await this.loadSessions();
-        
-        this.hideFormPage();
-        this.generateCalendar(this.currentDate);
-        
-        const alert = await this.alertController.create({
-          header: 'Success',
-          message: 'Session updated successfully!',
-          buttons: ['OK']
-        });
-        await alert.present();
-      } else {
-        // Create new sessions
-        const startDate = new Date(this.newSession.startDate);
-        const days = this.newSession.daysOfWeek.map(day => parseInt(day.toString()));
-        const totalSessions = this.newSession.sessionCount;
-
-        console.log('Creating', totalSessions, 'sessions for:', sessionName, 'on days:', days, 'at', hour + ':' + minute);
-
-        let sessionsCreated = 0;
-        const sessionsToSave: Omit<Session, 'id'>[] = [];
-        let currentDate = new Date(startDate);
-        
-        while (sessionsCreated < totalSessions) {
-          const dayOfWeek = currentDate.getDay();
-          
-          // Check if this day is in our selected days
-          if (days.includes(dayOfWeek) && currentDate >= startDate) {
-            const sessionDate = new Date(currentDate);
-            sessionDate.setHours(hour, minute, 0, 0);
-            
-            sessionsToSave.push({ 
-              date: sessionDate, 
-              name: sessionName,
-              participants: [...participants]
-            });
-            sessionsCreated++;
-          }
-          
-          // Move to next day
-          currentDate.setDate(currentDate.getDate() + 1);
-          
-          // Safety break to prevent infinite loops
-          if (currentDate > new Date(startDate.getTime() + (365 * 24 * 60 * 60 * 1000))) {
-            break;
-          }
+    for (const entry of pastEntries) {
+      const pkg = this.packages.find(p => (p.id || p.packageId) === entry.packageId) || null;
+      for (const client of this.sessionClients(entry)) {
+        if (hasCheckIn(entry, client)) continue;
+        try {
+          await this.firebase.setAttendance({
+            existing: null,
+            client: { id: client.id, fullName: client.name },
+            pkg,
+            date: entry.dateKey,
+            status: 'unexcused'
+          });
+        } catch (err) {
+          console.error('Schedule: failed to auto-mark no-show', err);
         }
-
-        // Save all sessions to Firebase
-        for (const session of sessionsToSave) {
-          await this.firebaseService.saveSession(session);
-        }
-        
-        console.log(`Created ${sessionsCreated} sessions`);
-        
-        // Reload sessions from Firebase
-        await this.loadSessions();
-        
-        this.hideFormPage();
-        this.generateCalendar(this.currentDate);
-        
-        const alert = await this.alertController.create({
-          header: 'Success',
-          message: `Successfully created ${sessionsCreated} sessions!`,
-          buttons: ['OK']
-        });
-        await alert.present();
       }
-      
-      console.log('saveSession completed');
-    } catch (error) {
-      console.error('Error saving sessions:', error);
-      const alert = await this.alertController.create({
-        header: 'Error',
-        message: 'Failed to save sessions. Please try again.',
-        buttons: ['OK']
-      });
-      await alert.present();
-    } finally {
-      await loading.dismiss();
     }
   }
 
-  resetNewSession() {
-    this.newSession = {
-      name: '',
-      participants: [''],
-      startDate: '',
+  // Turned on/off from Settings, not here — this just fires the sync
+  // whenever the schedule data changes, same as always. See
+  // CalendarSyncService and settings.page.ts for the enable/disable toggle.
+  //
+  // Syncs a rolling window (today → +60 days) regardless of which week/month
+  // is currently on screen, so the device calendar always reflects the
+  // near-term schedule rather than just whatever the coach happens to be
+  // looking at. Fire-and-forget — a slow or failed background sync should
+  // never hold up the schedule itself.
+  private syncCalendarInBackground(): void {
+    if (!this.calendarSync.isEnabled) return;
+    const start = new Date();
+    const end = addDays(start, 60);
+    const entries = generateScheduleForRange(this.packages, start, end, this.overrides, this.singleSessions);
+    this.calendarSync.sync(entries).catch(err => console.error('Schedule: background calendar sync failed', err));
+  }
+
+  private async rebuild() {
+    if (this.viewMode === 'month') {
+      await this.buildMonth();
+    } else {
+      await this.buildWeek();
+    }
+  }
+
+  // Turn a contiguous run of days into DayColumns bucketed with their sessions.
+  private buildDays(start: Date, count: number, monthRef?: number): DayColumn[] {
+    const end = addDays(start, count - 1);
+    const entries = generateScheduleForRange(this.packages, start, end, this.overrides, this.singleSessions);
+    const todayKey = localDateString();
+    const days: DayColumn[] = [];
+    for (let i = 0; i < count; i++) {
+      const date = addDays(start, i);
+      const dateKey = localDateString(date);
+      days.push({
+        date,
+        dateKey,
+        label: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        dayNum: date.getDate(),
+        isToday: dateKey === todayKey,
+        isPast: dateKey < todayKey,
+        inMonth: monthRef === undefined ? true : date.getMonth() === monthRef,
+        entries: entries
+          .filter(e => e.dateKey === dateKey)
+          .filter(e => !this.trainerFilter || e.trainerId === this.trainerFilter)
+          .sort((a, b) => (a.time || '99').localeCompare(b.time || '99'))
+      });
+    }
+    return days;
+  }
+
+  private async buildWeek() {
+    const start = startOfWeek(this.cursor);
+    this.days = this.buildDays(start, 7);
+    this.weeks = [];
+    this.dayKeys = this.days.map(d => d.dateKey);
+    await this.refreshCheckIns();
+  }
+
+  private async buildMonth() {
+    const monthStart = new Date(this.cursor.getFullYear(), this.cursor.getMonth(), 1);
+    const gridStart = startOfWeek(monthStart);
+    const allDays = this.buildDays(gridStart, 42, this.cursor.getMonth());
+    this.days = allDays;
+    this.weeks = [];
+    for (let i = 0; i < allDays.length; i += 7) {
+      this.weeks.push(allDays.slice(i, i + 7));
+    }
+    this.dayKeys = allDays.map(d => d.dateKey);
+    await this.refreshCheckIns();
+  }
+
+  private async refreshCheckIns() {
+    try {
+      this.weekCheckIns = await this.firebase.getCheckInsForDates(this.dayKeys);
+    } catch (err) {
+      console.error('Schedule: failed to load check-ins', err);
+      this.weekCheckIns = [];
+    }
+  }
+
+  // Name to show on a session card ('' when unassigned — the card just omits it).
+  trainerLabel(entry: ScheduleEntry): string {
+    return entry.trainerId ? trainerName(entry.trainerId) : '';
+  }
+
+  async setTrainerFilter(trainerId: string) {
+    if (this.trainerFilter === trainerId) return;
+    this.trainerFilter = trainerId;
+    await this.rebuild();
+  }
+
+  async setView(mode: ViewMode) {
+    if (this.viewMode === mode) return;
+    this.viewMode = mode;
+    await this.rebuild();
+  }
+
+  get rangeLabel(): string {
+    if (this.viewMode === 'month') {
+      return this.cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+    const start = startOfWeek(this.cursor);
+    const end = addDays(start, 6);
+    const sameMonth = start.getMonth() === end.getMonth();
+    const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const endStr = end.toLocaleDateString('en-US', sameMonth
+      ? { day: 'numeric' }
+      : { month: 'short', day: 'numeric' });
+    return `${startStr} – ${endStr}, ${end.getFullYear()}`;
+  }
+
+  // Short weekday headers for the month grid.
+  get weekdayHeaders(): string[] {
+    const start = startOfWeek(new Date());
+    return Array.from({ length: 7 }, (_, i) =>
+      addDays(start, i).toLocaleDateString('en-US', { weekday: 'short' })
+    );
+  }
+
+  get hasAnySessions(): boolean {
+    return this.days.some(d => d.entries.length > 0);
+  }
+
+  get activePackageCount(): number {
+    return this.packages.filter(p => p.status === 'active').length;
+  }
+
+  async prev() {
+    this.cursor = this.viewMode === 'month'
+      ? new Date(this.cursor.getFullYear(), this.cursor.getMonth() - 1, 1)
+      : addDays(this.cursor, -7);
+    await this.rebuild();
+  }
+
+  async next() {
+    this.cursor = this.viewMode === 'month'
+      ? new Date(this.cursor.getFullYear(), this.cursor.getMonth() + 1, 1)
+      : addDays(this.cursor, 7);
+    await this.rebuild();
+  }
+
+  async goToday() {
+    this.cursor = new Date();
+    await this.rebuild();
+  }
+
+  // The check-in record (if any) for a given client on a given session date.
+  private findCheckIn(entry: ScheduleEntry, client: SessionClient): CheckIn | null {
+    const nameKey = client.name.trim().toLowerCase();
+    return this.weekCheckIns.find(c =>
+      c.date === entry.dateKey &&
+      ((!!c.clientId && !!client.id && c.clientId === client.id) ||
+        c.clientName.trim().toLowerCase() === nameKey)
+    ) || null;
+  }
+
+  isClientCheckedIn(entry: ScheduleEntry, clientName: string): boolean {
+    return this.findCheckIn(entry, { id: null, name: clientName })?.status === 'present';
+  }
+
+  // 'present' | 'excused' | 'unexcused' | 'none'
+  clientStatus(entry: ScheduleEntry, client: SessionClient): AttendanceStatus | 'none' {
+    return this.findCheckIn(entry, client)?.status ?? 'none';
+  }
+
+  showAttendance(day: DayColumn): boolean {
+    return day.isToday || day.isPast;
+  }
+
+  // Pair up the parallel name/id arrays into client objects.
+  sessionClients(entry: ScheduleEntry | null): SessionClient[] {
+    if (!entry) return [];
+    return entry.clientNames.map((name, i) => ({
+      id: entry.clientIds[i] ?? null,
+      name
+    }));
+  }
+
+  openSession(entry: ScheduleEntry, day: DayColumn) {
+    this.selectedEntry = entry;
+    this.selectedDay = day;
+    this.selectedClients = this.sessionClients(entry);
+    this.reschedOpen = false;
+    this.reschedDate = entry.dateKey;
+    this.reschedTime = entry.time || entry.originalTime || '';
+    this.isSessionOpen = true;
+  }
+
+  closeSession() {
+    this.isSessionOpen = false;
+    this.selectedEntry = null;
+    this.selectedDay = null;
+    this.selectedClients = [];
+    this.reschedOpen = false;
+  }
+
+  // ----- Reschedule (single occurrence only) -----
+  toggleReschedule() {
+    if (this.selectedEntry) {
+      this.reschedDate = this.selectedEntry.dateKey;
+      this.reschedTime = this.selectedEntry.time || this.selectedEntry.originalTime || '';
+    }
+    this.reschedOpen = !this.reschedOpen;
+  }
+
+  async saveReschedule() {
+    const entry = this.selectedEntry;
+    if (!entry || this.reschedBusy) return;
+    if (!this.reschedDate) {
+      await this.presentToast('Pick a date', 'danger');
+      return;
+    }
+    this.reschedBusy = true;
+    try {
+      await this.firebase.setSessionOverride({
+        id: entry.overrideId,
+        packageId: entry.packageId,
+        originalDate: entry.originalDateKey,
+        newDate: this.reschedDate,
+        newTime: this.reschedTime || ''
+      });
+      this.closeSession();
+      await this.loadSchedule(false);
+      await this.presentToast('Session rescheduled');
+    } catch (err) {
+      console.error('Schedule: failed to reschedule', err);
+      await this.presentToast('Could not reschedule', 'danger');
+    } finally {
+      this.reschedBusy = false;
+    }
+  }
+
+  // Restore a rescheduled occurrence back to its original recurring slot.
+  async revertReschedule() {
+    const entry = this.selectedEntry;
+    if (!entry || !entry.overrideId || this.reschedBusy) return;
+    this.reschedBusy = true;
+    try {
+      await this.firebase.deleteSessionOverride(entry.overrideId);
+      this.closeSession();
+      await this.loadSchedule(false);
+      await this.presentToast('Reschedule reverted');
+    } catch (err) {
+      console.error('Schedule: failed to revert reschedule', err);
+      await this.presentToast('Could not revert', 'danger');
+    } finally {
+      this.reschedBusy = false;
+    }
+  }
+
+  // ----- One-off sessions (not tied to any package) -----
+  // `dateKey` prefills the date when opened from a specific day cell;
+  // opened from the header "+" it defaults to today.
+  openAddSession(dateKey?: string) {
+    this.editingSingleSessionId = null;
+    this.addForm = {
+      date: dateKey || localDateString(),
       time: '',
-      daysOfWeek: [],
-      sessionCount: 8
+      durationMinutes: 60,
+      sessionType: 'Private',
+      title: '',
+      clientIds: [],
+      // Whoever is signed in is almost always the one running a session they add.
+      trainerId: this.auth.getCurrentTrainerId() || ''
     };
-    this.updateFilteredSuggestions(); // Reset suggestions array
+    this.addSessionOpen = true;
   }
 
-  goToCurrentWeek() {
-    this.currentDate = new Date();
-    this.generateCalendar(this.currentDate);
+  // Single sessions have no recurring slot to revert to, so editing changes
+  // the record directly rather than going through SessionOverride.
+  openEditSingleSession(entry: ScheduleEntry) {
+    if (!entry.isSingle || !entry.singleSessionId) return;
+    const session = this.singleSessions.find(s => s.id === entry.singleSessionId);
+    if (!session) return;
+    this.editingSingleSessionId = session.id!;
+    this.addForm = {
+      date: session.date,
+      time: session.time || '',
+      durationMinutes: session.durationMinutes || 60,
+      sessionType: session.sessionType,
+      title: session.title || '',
+      clientIds: [...session.clientIds],
+      trainerId: session.trainerId || ''
+    };
+    this.closeSession();
+    this.addSessionOpen = true;
   }
 
-  calculateWeeks(): number {
-    if (this.newSession.daysOfWeek.length === 0) return 0;
-    return Math.ceil(this.newSession.sessionCount / this.newSession.daysOfWeek.length);
+  closeAddSession() {
+    this.addSessionOpen = false;
+    this.editingSingleSessionId = null;
   }
 
-  isToday(date: Date): boolean {
-    const today = new Date();
-    return date.getDate() === today.getDate() &&
-           date.getMonth() === today.getMonth() &&
-           date.getFullYear() === today.getFullYear();
+  isAddClientSelected(id: string): boolean {
+    return this.addForm.clientIds.includes(id);
   }
 
-  isPastDate(date: Date): boolean {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const compareDate = new Date(date);
-    compareDate.setHours(0, 0, 0, 0);
-    return compareDate < today;
+  toggleAddClient(id: string) {
+    const i = this.addForm.clientIds.indexOf(id);
+    if (i > -1) this.addForm.clientIds.splice(i, 1);
+    else this.addForm.clientIds.push(id);
   }
 
-  isFutureDate(date: Date): boolean {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const compareDate = new Date(date);
-    compareDate.setHours(0, 0, 0, 0);
-    return compareDate > today;
+  async saveAddSession() {
+    if (this.addSessionBusy) return;
+    if (!this.addForm.date) {
+      await this.presentToast('Pick a date', 'danger');
+      return;
+    }
+    this.addSessionBusy = true;
+    try {
+      const idToName = new Map(this.clients.filter(c => c.id).map(c => [c.id!, c.fullName]));
+      const clientNames = this.addForm.clientIds.map(id => idToName.get(id) || '').filter(Boolean);
+      const title = this.addForm.title.trim() || (clientNames.length ? clientNames.join(', ') : 'Session');
+      await this.firebase.saveSingleSession({
+        id: this.editingSingleSessionId || undefined,
+        date: this.addForm.date,
+        time: this.addForm.time || '',
+        durationMinutes: this.addForm.durationMinutes || 60,
+        sessionType: this.addForm.sessionType,
+        title,
+        clientIds: this.addForm.clientIds,
+        clientNames,
+        trainerId: this.addForm.trainerId || ''
+      });
+      const wasEditing = !!this.editingSingleSessionId;
+      this.closeAddSession();
+      await this.loadSchedule(false);
+      await this.presentToast(wasEditing ? 'Session updated' : 'Session added');
+    } catch (err) {
+      console.error('Schedule: failed to save single session', err);
+      await this.presentToast('Could not save session', 'danger');
+    } finally {
+      this.addSessionBusy = false;
+    }
   }
 
-  goToHome() {
-    this.router.navigate(['/home']);
+  async deleteSingleSession() {
+    const entry = this.selectedEntry;
+    if (!entry?.isSingle || !entry.singleSessionId || this.singleActionBusy) return;
+    this.singleActionBusy = true;
+    try {
+      await this.firebase.deleteSingleSession(entry.singleSessionId);
+      this.closeSession();
+      await this.loadSchedule(false);
+      await this.presentToast('Session deleted');
+    } catch (err) {
+      console.error('Schedule: failed to delete single session', err);
+      await this.presentToast('Could not delete session', 'danger');
+    } finally {
+      this.singleActionBusy = false;
+    }
   }
 
-  goToStudents() {
-    this.router.navigate(['/students']);
+  // "Mon, Jun 9" for an arbitrary YYYY-MM-DD key.
+  dateKeyLabel(key: string): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(key);
+    if (!m) return key;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  // Stable identity for *ngFor so attendance rows aren't recreated on each
+  // change-detection pass (which would break in-flight taps).
+  trackClient(_index: number, client: SessionClient): string {
+    return client.id || client.name;
+  }
+
+  private rowKey(entry: ScheduleEntry, client: SessionClient): string {
+    return `${entry.dateKey}|${entry.packageId}|${client.id || client.name}`;
+  }
+
+  isRowBusy(entry: ScheduleEntry, client: SessionClient): boolean {
+    return this.busyRowKeys.has(this.rowKey(entry, client));
+  }
+
+  // Set or toggle a client's attendance for the selected session.
+  // Clicking the already-active status clears the record (back to unmarked).
+  //
+  // The UI updates optimistically (right away, from local state) and the
+  // actual Firestore round trip — which can take a couple seconds — runs in
+  // the background. Only the row being changed locks; every other row stays
+  // tappable so check-ins can be fired off rapid-fire. On failure the
+  // optimistic change rolls back and an error toast explains why.
+  async setStatus(entry: ScheduleEntry, client: SessionClient, status: AttendanceStatus) {
+    const key = this.rowKey(entry, client);
+    if (this.busyRowKeys.has(key)) return;
+    this.busyRowKeys.add(key);
+
+    const existing = this.findCheckIn(entry, client);
+    const pkg = this.packages.find(p => (p.id || p.packageId) === entry.packageId) || null;
+    const clearing = !!existing && existing.status === status;
+    const previousCheckIns = this.weekCheckIns;
+
+    if (clearing) {
+      this.weekCheckIns = this.weekCheckIns.filter(c => c !== existing);
+    } else {
+      const optimistic: CheckIn = {
+        id: existing?.id,
+        clientId: client.id ?? null,
+        clientName: client.name,
+        date: entry.dateKey,
+        checkInTime: existing?.checkInTime ?? new Date().toISOString(),
+        packageId: pkg?.id ?? null,
+        packageName: pkg?.packageName ?? '',
+        sessionType: pkg?.sessionType ?? '',
+        decremented: status !== 'excused',
+        status,
+        sessionsRemainingAfter: existing?.sessionsRemainingAfter ?? null,
+        packageTotalSessions: pkg?.totalSessions ?? null,
+        createdAt: existing?.createdAt ?? new Date().toISOString()
+      };
+      this.weekCheckIns = existing
+        ? this.weekCheckIns.map(c => (c === existing ? optimistic : c))
+        : [...this.weekCheckIns, optimistic];
+    }
+
+    try {
+      if (clearing) {
+        const remaining = await this.firebase.undoCheckIn(existing!);
+        if (pkg?.id && remaining != null) pkg.sessionsRemaining = remaining;
+        this.presentToast(`${client.name} — cleared`);
+      } else {
+        const saved = await this.firebase.setAttendance({
+          existing,
+          client: { id: client.id, fullName: client.name },
+          pkg,
+          date: entry.dateKey,
+          status
+        });
+        // Reconcile the optimistic record with the real one (id, sessionsRemainingAfter).
+        this.weekCheckIns = this.weekCheckIns.map(c =>
+          c.date === entry.dateKey &&
+          c.packageId === (pkg?.id ?? null) &&
+          ((!!c.clientId && !!client.id && c.clientId === client.id) || c.clientName === client.name)
+            ? saved
+            : c
+        );
+        if (pkg?.id && saved.sessionsRemainingAfter != null) pkg.sessionsRemaining = saved.sessionsRemainingAfter;
+        this.presentToast(`${client.name} — ${this.statusLabel(status)}`);
+      }
+    } catch (err) {
+      console.error('Schedule: failed to set attendance', err);
+      this.weekCheckIns = previousCheckIns;
+      this.presentToast('Could not save attendance', 'danger');
+    } finally {
+      this.busyRowKeys.delete(key);
+    }
+  }
+
+  statusLabel(status: AttendanceStatus | 'none'): string {
+    switch (status) {
+      case 'present': return 'Present';
+      case 'excused': return 'Excused';
+      case 'unexcused': return 'Unexcused';
+      default: return 'Not marked';
+    }
+  }
+
+  private async presentToast(message: string, color: 'success' | 'danger' = 'success') {
+    const toast = await this.toastController.create({ message, duration: 1400, position: 'bottom', color });
+    await toast.present();
+  }
+
+  get selectedDateLabel(): string {
+    if (!this.selectedDay) return '';
+    return this.selectedDay.date.toLocaleDateString('en-US', {
+      weekday: 'long', month: 'short', day: 'numeric'
+    });
+  }
+
+  formatTime(time: string): string {
+    return formatTime12h(time) || 'Time TBD';
+  }
+
+  typeClass(sessionType: string): string {
+    switch (sessionType) {
+      case 'Private': return 'private';
+      case 'Semi': return 'semi';
+      default: return 'group';
+    }
+  }
+
+  goBack() {
+    this.router.navigateByUrl('/home');
   }
 }

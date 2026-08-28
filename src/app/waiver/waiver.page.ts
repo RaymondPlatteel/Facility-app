@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { IonContent, IonHeader, IonTitle, IonToolbar, IonIcon, IonButton, IonButtons, LoadingController, AlertController } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import { arrowBack } from 'ionicons/icons';
-import { FirebaseService, WaiverData } from '../services/firebase.service';
+import { FirebaseService, WaiverData, ClientProfile } from '../services/firebase.service';
 
 @Component({
   selector: 'app-waiver',
@@ -20,6 +20,10 @@ export class WaiverPage implements OnInit, AfterViewInit {
   showChildForm = false;
   showSignatureModal = false;
   signatureContext: 'adult' | 'child' = 'adult';
+
+  clients: ClientProfile[] = [];
+  adultClientId: string | null = null;
+  childClientId: string | null = null;
 
   adult = {
     fullName: '',
@@ -56,7 +60,27 @@ export class WaiverPage implements OnInit, AfterViewInit {
     addIcons({ arrowBack });
   }
 
-  ngOnInit() {}
+  ngOnInit() {
+    this.firebaseService.listClientProfiles().then(clients => {
+      this.clients = clients.sort((a, b) => a.fullName.localeCompare(b.fullName));
+    });
+  }
+
+  onSelectAdultClient() {
+    const client = this.clients.find(c => c.id === this.adultClientId);
+    if (!client) return;
+    this.adult.fullName = client.fullName;
+    this.adult.phone = client.phone ?? '';
+    this.adult.email = client.email ?? '';
+  }
+
+  onSelectChildClient() {
+    const client = this.clients.find(c => c.id === this.childClientId);
+    if (!client) return;
+    this.child.childName = client.fullName;
+    this.child.guardianPhone = client.phone ?? '';
+    this.child.guardianEmail = client.email ?? '';
+  }
 
   ngAfterViewInit() {
     // Canvas context will be set when modal is opened
@@ -175,9 +199,11 @@ export class WaiverPage implements OnInit, AfterViewInit {
 
   resetAdultForm() {
     this.adult = { fullName: '', phone: '', email: '', agree: false, signed: false, signatureDataUrl: '', signatureDate: '' };
+    this.adultClientId = null;
   }
   resetChildForm() {
     this.child = { childName: '', guardianName: '', guardianPhone: '', guardianEmail: '', agree: false, signed: false, signatureDataUrl: '', signatureDate: '' };
+    this.childClientId = null;
   }
 
   async submitWaiver(type: 'adult' | 'child') {
@@ -196,6 +222,7 @@ export class WaiverPage implements OnInit, AfterViewInit {
         studentName: type === 'adult' ? this.adult.fullName : this.child.childName,
         signedDate: new Date().toISOString(),
         signatureDataUrl: type === 'adult' ? this.adult.signatureDataUrl : this.child.signatureDataUrl,
+        clientId: type === 'adult' ? this.adultClientId : this.childClientId,
         createdAt: new Date().toISOString()
       };
 

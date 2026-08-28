@@ -1,0 +1,117 @@
+<ion-content [fullscreen]="true">
+  <div class="control-room">
+
+    <!-- Header -->
+    <div class="cr-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back">
+        <ion-icon name="arrow-back"></ion-icon>
+      </button>
+      <div class="cr-title">
+        <h1>ADMIN ANALYTICS</h1>
+        <p>{{ dateLabel }}</p>
+      </div>
+      <div class="cr-clock">{{ clock }}</div>
+    </div>
+
+    <div *ngIf="loading" class="state-msg">Bringing systems online…</div>
+
+    <ng-container *ngIf="!loading">
+      <!-- KPI row -->
+      <div class="kpi-row">
+        <div class="kpi">
+          <ion-icon name="log-in-outline"></ion-icon>
+          <div class="kpi-value">{{ todayCheckIns.length }}</div>
+          <div class="kpi-label">Checked in today</div>
+        </div>
+        <div class="kpi">
+          <ion-icon name="calendar-outline"></ion-icon>
+          <div class="kpi-value">{{ expectedTodayCount }}</div>
+          <div class="kpi-label">Expected today</div>
+        </div>
+        <div class="kpi">
+          <ion-icon name="people-outline"></ion-icon>
+          <div class="kpi-value">{{ activeClientCount }}</div>
+          <div class="kpi-label">Active clients</div>
+        </div>
+        <div class="kpi">
+          <ion-icon name="cube-outline"></ion-icon>
+          <div class="kpi-value">{{ activePackageCount }}</div>
+          <div class="kpi-label">Active packages</div>
+        </div>
+      </div>
+
+      <div class="cr-grid">
+        <!-- Today's sessions -->
+        <section class="cr-panel">
+          <h2><ion-icon name="calendar-outline"></ion-icon> Today's Sessions</h2>
+          <div *ngIf="todayEntries.length === 0" class="empty-note">
+            No sessions scheduled today.
+          </div>
+          <div class="today-entry" *ngFor="let entry of todayEntries">
+            <div class="entry-time">{{ formatEntryTime(entry.time) }}</div>
+            <div class="entry-info">
+              <div class="entry-name">{{ entry.packageName }}</div>
+              <div class="entry-clients">
+                <span class="client-tag"
+                  *ngFor="let client of entry.clientNames"
+                  [class.in]="isClientCheckedIn(entry, client)">
+                  <ion-icon *ngIf="isClientCheckedIn(entry, client)" name="checkmark-circle"></ion-icon>
+                  {{ client }}
+                </span>
+                <span *ngIf="entry.clientNames.length === 0" class="empty-note">no clients linked</span>
+              </div>
+            </div>
+            <div class="entry-type">{{ entry.sessionType }}</div>
+          </div>
+        </section>
+
+        <!-- Live activity -->
+        <section class="cr-panel">
+          <h2><ion-icon name="pulse-outline"></ion-icon> Activity Feed</h2>
+          <div *ngIf="todayCheckIns.length === 0" class="empty-note">
+            No check-ins yet today — they'll appear here live from the kiosk.
+          </div>
+          <div class="feed-row" *ngFor="let c of todayCheckIns">
+            <span class="feed-time">{{ formatCheckInTime(c.checkInTime) }}</span>
+            <span class="feed-name">{{ c.clientName }}</span>
+            <span class="feed-detail" *ngIf="c.decremented">
+              −1 · {{ c.sessionsRemainingAfter }} left
+            </span>
+            <span class="feed-detail warn" *ngIf="!c.decremented">no package</span>
+          </div>
+        </section>
+
+        <!-- Alerts -->
+        <section class="cr-panel">
+          <h2><ion-icon name="alert-circle-outline"></ion-icon> Alerts</h2>
+          <div *ngIf="alerts.length === 0" class="empty-note ok">
+            ✓ All clear — no packages running low or expiring soon.
+          </div>
+          <div class="alert-row" *ngFor="let alert of alerts" [class.danger]="alert.level === 'danger'">
+            <div>
+              <div class="alert-name">{{ alert.packageName }}</div>
+              <div class="alert-sub">{{ alert.clientNames }}</div>
+            </div>
+            <span class="alert-detail">{{ alert.detail }}</span>
+          </div>
+        </section>
+
+        <!-- Week chart -->
+        <section class="cr-panel">
+          <h2><ion-icon name="analytics-outline"></ion-icon> Visits This Week
+            <span class="total">{{ weekVisitCount }}</span>
+          </h2>
+          <div class="bar-chart">
+            <div class="bar-col" *ngFor="let bar of weekBars">
+              <div class="bar-count" [class.zero]="bar.count === 0">{{ bar.count }}</div>
+              <div class="bar-track">
+                <div class="bar-fill" [class.today]="bar.isToday" [style.height.%]="bar.pct"></div>
+              </div>
+              <div class="bar-label" [class.today]="bar.isToday">{{ bar.label }}</div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </ng-container>
+  </div>
+</ion-content>

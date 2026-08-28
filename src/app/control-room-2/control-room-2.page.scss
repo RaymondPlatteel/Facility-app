@@ -1,0 +1,570 @@
+// Control Room 2 - Advanced Dashboard Layout
+.dashboard-content {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+}
+
+.control-room {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+}
+
+.screen {
+  flex: 1;
+  display: grid;
+  gap: 8px;
+}
+
+.left-screen {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.middle-screen {
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr;
+}
+
+.right-screen {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+// Panel Styling - Each panel has unique styling
+.panel {
+  background: rgba(0, 0, 0, 0.95);
+  border-radius: 8px;
+  padding: 8px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  transition: all 0.3s ease;
+}
+
+.panel:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.7);
+}
+
+// Panel Label Styling
+.panel-label {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
+  z-index: 10;
+}
+
+// Cyber Panel - Blue/Green theme
+.cyber-panel {
+  border: 2px solid #00ffff;
+  background: linear-gradient(135deg, rgba(0, 255, 255, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(0, 255, 255, 0.4),
+    inset 0 0 20px rgba(0, 255, 255, 0.1);
+}
+
+.cyber-panel .header-line {
+  color: #00ffff;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+}
+
+// Quantum Panel - Purple/Pink theme
+.quantum-panel {
+  border: 2px solid #ff00ff;
+  background: linear-gradient(135deg, rgba(255, 0, 255, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(255, 0, 255, 0.4),
+    inset 0 0 20px rgba(255, 0, 255, 0.1);
+}
+
+.quantum-panel .header-line {
+  color: #ff00ff;
+  text-shadow: 0 0 10px rgba(255, 0, 255, 0.8);
+}
+
+// Neural Panel - Orange/Yellow theme
+.neural-panel {
+  border: 2px solid #ffaa00;
+  background: linear-gradient(135deg, rgba(255, 170, 0, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(255, 170, 0, 0.4),
+    inset 0 0 20px rgba(255, 170, 0, 0.1);
+}
+
+.neural-panel .header-line {
+  color: #ffaa00;
+  text-shadow: 0 0 10px rgba(255, 170, 0, 0.8);
+}
+
+// Hologram Panel - Cyan/Blue theme
+.hologram-panel {
+  border: 2px solid #00aaff;
+  background: linear-gradient(135deg, rgba(0, 170, 255, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(0, 170, 255, 0.4),
+    inset 0 0 20px rgba(0, 170, 255, 0.1);
+}
+
+.hologram-panel .header-line {
+  color: #00aaff;
+  text-shadow: 0 0 10px rgba(0, 170, 255, 0.8);
+}
+
+// Plasma Panel - Red/Orange theme
+.plasma-panel {
+  border: 2px solid #ff4400;
+  background: linear-gradient(135deg, rgba(255, 68, 0, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(255, 68, 0, 0.4),
+    inset 0 0 20px rgba(255, 68, 0, 0.1);
+}
+
+.plasma-panel .status-header {
+  color: #ff4400;
+  text-shadow: 0 0 10px rgba(255, 68, 0, 0.8);
+}
+
+// Crystal Panel - Green/Teal theme
+.crystal-panel {
+  border: 2px solid #00ff88;
+  background: linear-gradient(135deg, rgba(0, 255, 136, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(0, 255, 136, 0.4),
+    inset 0 0 20px rgba(0, 255, 136, 0.1);
+}
+
+.crystal-panel .db-header {
+  color: #00ff88;
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.8);
+}
+
+// Fusion Panel - Yellow/White theme
+.fusion-panel {
+  border: 2px solid #ffff00;
+  background: linear-gradient(135deg, rgba(255, 255, 0, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(255, 255, 0, 0.4),
+    inset 0 0 20px rgba(255, 255, 0, 0.1);
+}
+
+.fusion-panel .matrix-header {
+  color: #ffff00;
+  text-shadow: 0 0 10px rgba(255, 255, 0, 0.8);
+}
+
+// Temporal Panel - Purple/Blue theme
+.temporal-panel {
+  border: 2px solid #8800ff;
+  background: linear-gradient(135deg, rgba(136, 0, 255, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(136, 0, 255, 0.4),
+    inset 0 0 20px rgba(136, 0, 255, 0.1);
+}
+
+.temporal-panel .quantum-header {
+  color: #8800ff;
+  text-shadow: 0 0 10px rgba(136, 0, 255, 0.8);
+}
+
+// Dimensional Panel - Indigo/Purple theme
+.dimensional-panel {
+  border: 2px solid #4400ff;
+  background: linear-gradient(135deg, rgba(68, 0, 255, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(68, 0, 255, 0.4),
+    inset 0 0 20px rgba(68, 0, 255, 0.1);
+}
+
+.dimensional-panel .satellite-header {
+  color: #4400ff;
+  text-shadow: 0 0 10px rgba(68, 0, 255, 0.8);
+}
+
+// Gravity Panel - Teal/Green theme
+.gravity-panel {
+  border: 2px solid #00ffcc;
+  background: linear-gradient(135deg, rgba(0, 255, 204, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(0, 255, 204, 0.4),
+    inset 0 0 20px rgba(0, 255, 204, 0.1);
+}
+
+.gravity-panel .env-header {
+  color: #00ffcc;
+  text-shadow: 0 0 10px rgba(0, 255, 204, 0.8);
+}
+
+// Energy Panel - Green/Yellow theme
+.energy-panel {
+  border: 2px solid #88ff00;
+  background: linear-gradient(135deg, rgba(136, 255, 0, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(136, 255, 0, 0.4),
+    inset 0 0 20px rgba(136, 255, 0, 0.1);
+}
+
+.energy-panel .power-header {
+  color: #88ff00;
+  text-shadow: 0 0 10px rgba(136, 255, 0, 0.8);
+}
+
+// Stealth Panel - Gray/Silver theme
+.stealth-panel {
+  border: 2px solid #cccccc;
+  background: linear-gradient(135deg, rgba(204, 204, 204, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(204, 204, 204, 0.4),
+    inset 0 0 20px rgba(204, 204, 204, 0.1);
+}
+
+.stealth-panel .surveillance-header {
+  color: #cccccc;
+  text-shadow: 0 0 10px rgba(204, 204, 204, 0.8);
+}
+
+// Teleport Panel - Magenta/Pink theme
+.teleport-panel {
+  border: 2px solid #ff0088;
+  background: linear-gradient(135deg, rgba(255, 0, 136, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(255, 0, 136, 0.4),
+    inset 0 0 20px rgba(255, 0, 136, 0.1);
+}
+
+.teleport-panel .research-header {
+  color: #ff0088;
+  text-shadow: 0 0 10px rgba(255, 0, 136, 0.8);
+}
+
+// Reality Panel - Gold/Yellow theme
+.reality-panel {
+  border: 2px solid #ffdd00;
+  background: linear-gradient(135deg, rgba(255, 221, 0, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(255, 221, 0, 0.4),
+    inset 0 0 20px rgba(255, 221, 0, 0.1);
+}
+
+.reality-panel .info-header {
+  color: #ffdd00;
+  text-shadow: 0 0 10px rgba(255, 221, 0, 0.8);
+}
+
+// Cosmic Panel - Deep Blue/Purple theme
+.cosmic-panel {
+  border: 2px solid #0000ff;
+  background: linear-gradient(135deg, rgba(0, 0, 255, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(0, 0, 255, 0.4),
+    inset 0 0 20px rgba(0, 0, 255, 0.1);
+}
+
+.cosmic-panel .weather-header {
+  color: #0000ff;
+  text-shadow: 0 0 10px rgba(0, 0, 255, 0.8);
+}
+
+// Terminal Panel - Special styling
+.terminal-panel {
+  grid-row: 1 / -1;
+  grid-column: 1 / -1;
+  border: 2px solid #00ff00;
+  background: linear-gradient(135deg, rgba(0, 255, 0, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+  box-shadow: 
+    0 0 15px rgba(0, 255, 0, 0.4),
+    inset 0 0 20px rgba(0, 255, 0, 0.1);
+}
+
+.layout-terminal {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #000000;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  
+  .terminal-header {
+    font-size: 10px;
+    font-weight: bold;
+    color: #00ff00;
+    text-align: center;
+    margin-bottom: 6px;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 3px;
+    border-radius: 2px;
+    text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+  }
+  
+  .terminal-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px;
+    background: #000000;
+    position: relative;
+    
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    
+    &::-webkit-scrollbar {
+      display: none;
+    }
+    
+    .terminal-line {
+      margin-bottom: 1px;
+      line-height: 1.2;
+      
+      .terminal-text {
+        color: #00ff00;
+        font-size: 10px;
+      }
+    }
+    
+    .typing-line {
+      .terminal-cursor {
+        color: #00ff00;
+        animation: blink 1s infinite;
+      }
+    }
+  }
+}
+
+// Common Layout Styles
+.header-line, .status-header, .db-header, .matrix-header, .quantum-header, 
+.satellite-header, .env-header, .power-header, .surveillance-header, 
+.research-header, .info-header, .weather-header {
+  font-size: 10px;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 6px;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 3px;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+// Data Display Styles
+.boot-sequence, .network-stats, .security-log, .hardware-monitor,
+.status-grid, .db-metrics, .neural-flow, .quantum-stack,
+.comm-panel, .env-grid, .power-list, .camera-grid, .research-progress {
+  font-size: 9px;
+  line-height: 1.1;
+  color: #e6edf3;
+}
+
+.boot-step, .stat-item, .log-entry, .monitor-item, .status-cell,
+.metric-row, .flow-line, .stack-item, .comm-item, .env-cell,
+.power-item, .camera-item, .progress-item {
+  margin-bottom: 2px;
+  padding: 1px 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.step-number, .stat-icon, .log-level, .monitor-bar, .cell-icon,
+.metric-key, .flow-dot, .stack-indicator, .comm-icon, .cell-header,
+.power-bullet, .camera-id {
+  display: inline-block;
+  width: 30px;
+  font-weight: bold;
+  color: #3daee9;
+}
+
+.step-text, .stat-data, .log-message, .monitor-label, .cell-value,
+.metric-value, .flow-text, .stack-content, .comm-info, .cell-data,
+.power-text, .camera-status, .progress-text {
+  display: inline-block;
+  margin-left: 4px;
+}
+
+// Progress Bars
+.monitor-bar, .progress-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  margin: 2px 0;
+  overflow: hidden;
+}
+
+.monitor-fill, .progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00ff00, #00ffff);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+// Status Indicators
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.status-cell {
+  text-align: center;
+  padding: 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.cell-icon {
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.cell-label {
+  font-size: 8px;
+  color: #8b949e;
+  margin-bottom: 2px;
+}
+
+.cell-value {
+  font-size: 9px;
+  font-weight: bold;
+  color: #00ff00;
+}
+
+// Weather Grid
+.weather-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.weather-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.weather-item .label {
+  color: #8b949e;
+  font-size: 8px;
+}
+
+.weather-item .value {
+  color: #00ff00;
+  font-size: 8px;
+  font-weight: bold;
+}
+
+// Info Items
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 4px;
+  margin-bottom: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.info-item .label {
+  color: #8b949e;
+  font-size: 8px;
+}
+
+.info-item .value {
+  color: #00ff00;
+  font-size: 8px;
+  font-weight: bold;
+}
+
+// Status Classes
+.online { color: #00ff00; }
+.syncing { color: #ffff00; }
+.secure { color: #00ffff; }
+.optimal { color: #00ff88; }
+.active { color: #ffaa00; }
+.processing { color: #ff00ff; }
+.entangled { color: #8800ff; }
+.connected { color: #0088ff; }
+.stable { color: #00ffcc; }
+.efficient { color: #88ff00; }
+.monitoring { color: #ff0088; }
+.analyzing { color: #ffdd00; }
+.alert { color: #ff4400; }
+.progressive { color: #00aaff; }
+.loading { color: #ffaa00; }
+
+// Blinking Animations
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.blinking {
+  animation: blink 1s infinite;
+}
+
+.pulse {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.fade {
+  animation: fade 3s infinite;
+}
+
+@keyframes fade {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+// Responsive Design
+@media (max-width: 768px) {
+  .control-room {
+    gap: 4px;
+    padding: 4px;
+  }
+  
+  .panel {
+    padding: 4px;
+  }
+  
+  .header-line, .status-header, .db-header, .matrix-header, .quantum-header,
+  .satellite-header, .env-header, .power-header, .surveillance-header,
+  .research-header, .info-header, .weather-header {
+    font-size: 8px;
+    padding: 2px;
+  }
+  
+  .boot-sequence, .network-stats, .security-log, .hardware-monitor,
+  .status-grid, .db-metrics, .neural-flow, .quantum-stack,
+  .comm-panel, .env-grid, .power-list, .camera-grid, .research-progress {
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .left-screen, .middle-screen, .right-screen {
+    gap: 2px;
+  }
+  
+  .panel {
+    padding: 2px;
+  }
+}
+
+
+
+

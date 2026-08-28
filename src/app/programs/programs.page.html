@@ -1,0 +1,83 @@
+<ion-content [fullscreen]="true">
+  <div class="programs-page">
+
+    <!-- Header -->
+    <div class="prog-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back">
+        <ion-icon name="arrow-back"></ion-icon>
+      </button>
+      <div class="prog-title">
+        <h1>Training Programs</h1>
+        <p>Build programs for your clients, then log their sessions</p>
+      </div>
+      <div class="prog-actions">
+        <button class="ghost-btn" (click)="openLogPage()">
+          <ion-icon name="clipboard-outline"></ion-icon> Workout Log
+        </button>
+        <button class="primary-btn" (click)="newProgram()">
+          <ion-icon name="add"></ion-icon> New Program
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="loading" class="state-msg">Loading programs…</div>
+
+    <!-- Empty state -->
+    <div *ngIf="!loading && programs.length === 0" class="empty-programs">
+      <ion-icon name="barbell-outline"></ion-icon>
+      <h3>No programs yet</h3>
+      <p>Create your first training program — set the weekly structure, build each day's exercises, and assign it to clients.</p>
+      <button class="primary-btn large" (click)="newProgram()">
+        <ion-icon name="add"></ion-icon> Create a Program
+      </button>
+    </div>
+
+    <!-- Program cards -->
+    <div class="program-grid" *ngIf="!loading && programs.length > 0">
+      <div class="program-card" *ngFor="let p of programs">
+        <div class="pc-top" (click)="editProgram(p)">
+          <div class="pc-name">{{ p.name }}</div>
+          <div class="pc-desc" *ngIf="p.goals || p.description">{{ p.goals || p.description }}</div>
+          <div class="pc-stats">
+            <span><ion-icon name="calendar-outline"></ion-icon> {{ p.cycles }} {{ cycleLabel(p) }}{{ p.cycles === 1 ? '' : 's' }}</span>
+            <span><ion-icon name="barbell-outline"></ion-icon> {{ trainingDays(p) }} training days</span>
+            <span>{{ exerciseCount(p) }} exercises</span>
+          </div>
+          <div class="pc-clients" *ngIf="(p.assignedClientNames || []).length > 0">
+            <ion-icon name="people-outline"></ion-icon>
+            {{ (p.assignedClientNames || []).join(', ') }}
+          </div>
+          <div class="pc-clients none" *ngIf="(p.assignedClientNames || []).length === 0">
+            <ion-icon name="people-outline"></ion-icon> No clients assigned
+          </div>
+        </div>
+        <div class="pc-actions">
+          <button class="pc-btn log" (click)="logSession(p)">
+            <ion-icon name="clipboard-outline"></ion-icon> Log Session
+          </button>
+          <button class="pc-btn" (click)="editProgram(p)" title="Edit">
+            <ion-icon name="create-outline"></ion-icon>
+          </button>
+          <button class="pc-btn" (click)="duplicateProgram(p)" title="Duplicate">
+            <ion-icon name="copy-outline"></ion-icon>
+          </button>
+          <button class="pc-btn danger" (click)="deleteProgram(p)" title="Delete">
+            <ion-icon name="trash-outline"></ion-icon>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent logs -->
+    <div class="recent-logs" *ngIf="!loading && recentLogs.length > 0">
+      <h2><ion-icon name="reader-outline"></ion-icon> Recent Sessions</h2>
+      <div class="log-row" *ngFor="let log of recentLogs" (click)="openLog(log)">
+        <span class="log-date">{{ logDateLabel(log) }}</span>
+        <span class="log-client">{{ log.clientName }}</span>
+        <span class="log-day">{{ log.dayName || 'Session' }}</span>
+        <span class="log-program">{{ log.programName }}</span>
+        <span class="log-count">{{ log.exercises.length }} exercise{{ log.exercises.length === 1 ? '' : 's' }}</span>
+      </div>
+    </div>
+  </div>
+</ion-content>

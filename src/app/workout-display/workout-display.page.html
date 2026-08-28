@@ -1,0 +1,119 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-title>{{ workout?.name || 'Workout Details' }}</ion-title>
+    <ion-buttons slot="start">
+      <ion-button fill="clear" (click)="goBack()">
+        <ion-icon name="arrow-back" size="large"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-buttons slot="end">
+      <ion-button fill="clear" (click)="editWorkout()" *ngIf="!loading && !error && workout">
+        <ion-icon name="create" size="large"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true" class="workout-display">
+  <!-- Loading State -->
+  <div *ngIf="loading" class="loading-container">
+    <ion-spinner name="crescent" color="primary"></ion-spinner>
+    <h2>Loading workout...</h2>
+  </div>
+
+  <!-- Error State -->
+  <div *ngIf="!loading && error" class="error-container">
+    <ion-icon name="alert-circle" color="danger" size="large"></ion-icon>
+    <h2>{{ error }}</h2>
+    <ion-button fill="outline" (click)="goBack()">
+      <ion-icon name="arrow-back" slot="start"></ion-icon>
+      Go Back
+    </ion-button>
+  </div>
+
+  <!-- Workout Display -->
+  <div *ngIf="!loading && !error && workout" class="workout-container">
+    
+    <!-- Workout Header -->
+    <div class="workout-header">
+      <h1>{{ workout.name }}</h1>
+      <p *ngIf="workout.description" class="workout-description">{{ workout.description }}</p>
+      
+      <div class="workout-meta">
+        <div class="meta-item" *ngIf="workout.totalDuration">
+          <ion-icon name="time-outline"></ion-icon>
+          <span>{{ workout.totalDuration }} minutes</span>
+        </div>
+        <div class="meta-item">
+          <ion-icon name="list-outline"></ion-icon>
+          <span>{{ workout.sections.length }} section{{ workout.sections.length !== 1 ? 's' : '' }}</span>
+        </div>
+        <div class="meta-item" *ngIf="workout.createdAt">
+          <ion-icon name="calendar-outline"></ion-icon>
+          <span>{{ workout.createdAt | date:'MMM d, y' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Equipment -->
+    <div *ngIf="workout.equipment && workout.equipment.length > 0" class="equipment-section">
+      <h3>Equipment Needed</h3>
+      <div class="equipment-list">
+        <ion-chip *ngFor="let equipment of workout.equipment" color="primary">
+          {{ equipment }}
+        </ion-chip>
+      </div>
+    </div>
+
+    <!-- Workout Sections -->
+    <div class="sections-container">
+      <div *ngFor="let section of workout.sections; let sectionIndex = index" class="section-card">
+        <div class="section-header">
+          <h2>{{ section.name | titlecase }}</h2>
+          <div class="section-meta">
+            <span *ngIf="section.duration" class="duration">
+              <ion-icon name="time"></ion-icon>
+              {{ section.duration }} min
+            </span>
+            <span class="exercise-count">
+              {{ section.exercises.length }} exercise{{ section.exercises.length !== 1 ? 's' : '' }}
+            </span>
+          </div>
+        </div>
+        
+        <div *ngIf="section.notes" class="section-notes">
+          <p>{{ section.notes }}</p>
+        </div>
+
+        <!-- Exercises -->
+        <div class="exercises-list">
+          <div *ngFor="let exercise of section.exercises; let exerciseIndex = index" class="exercise-card">
+            <div class="exercise-header">
+              <span class="exercise-number">{{ exerciseIndex + 1 }}</span>
+              <h4>{{ exercise.name }}</h4>
+            </div>
+            
+            <div class="exercise-details">
+              {{ getExerciseDetails(exercise) }}
+            </div>
+            
+            <div *ngIf="exercise.notes" class="exercise-notes">
+              <p>{{ exercise.notes }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tags -->
+    <div *ngIf="workout.tags && workout.tags.length > 0" class="tags-section">
+      <h3>Tags</h3>
+      <div class="tags-list">
+        <ion-chip *ngFor="let tag of workout.tags" color="secondary">
+          {{ tag }}
+        </ion-chip>
+      </div>
+    </div>
+
+  </div>
+</ion-content> 

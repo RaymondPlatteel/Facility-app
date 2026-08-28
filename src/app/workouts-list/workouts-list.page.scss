@@ -1,0 +1,286 @@
+.linking-header {
+  background: #0a1018;
+  border-bottom: 1px solid #00d4ff;
+  padding: 16px;
+  margin-bottom: 8px;
+  
+  .linking-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    
+    ion-icon {
+      color: #00d4ff;
+      font-size: 1.5rem;
+    }
+    
+    h4 {
+      color: #dceaf6;
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0 0 4px 0;
+    }
+    
+    p {
+      color: #00d4ff;
+      font-size: 1.1rem;
+      font-weight: 500;
+      margin: 0;
+    }
+  }
+}
+
+.workouts-container {
+  padding: 16px;
+  background: #01070f;
+  min-height: 100vh;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #88a6bf;
+  
+  ion-icon {
+    font-size: 4rem;
+    margin-bottom: 24px;
+    color: #6a8aa3;
+  }
+  
+  h3 {
+    color: #dceaf6;
+    font-size: 1.4rem;
+    margin: 0 0 12px 0;
+  }
+  
+  p {
+    font-size: 1rem;
+    margin: 0 0 24px 0;
+    line-height: 1.5;
+  }
+  
+  ion-button {
+    --border-radius: 12px;
+    --padding-start: 20px;
+    --padding-end: 20px;
+    --color: #00d4ff;
+    --border-color: #00d4ff;
+  }
+}
+
+.workout-card {
+  background: #070b12;
+  border: 1px solid #133748;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 16px;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.workout-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  
+  .workout-info {
+    flex: 1;
+    min-width: 0; // Prevent text overflow
+    
+    h3 {
+      color: #dceaf6;
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin: 0 0 8px 0;
+      word-wrap: break-word;
+    }
+    
+    .workout-description {
+      color: #b6cfe2;
+      font-size: 0.95rem;
+      margin: 0 0 12px 0;
+      line-height: 1.4;
+      word-wrap: break-word;
+    }
+    
+    .workout-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      
+      .summary-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        color: #88a6bf;
+        font-size: 0.85rem;
+        
+        ion-icon {
+          font-size: 0.9rem;
+        }
+        
+        &:nth-child(1) ion-icon {
+          color: #00d4ff;
+        }
+        
+        &:nth-child(2) ion-icon {
+          color: #00d4ff;
+        }
+        
+        &:nth-child(3) ion-icon {
+          color: #88a6bf;
+        }
+      }
+    }
+  }
+  
+  .workout-actions {
+    margin-left: 16px;
+    
+    ion-button {
+      --border-radius: 8px;
+      --padding-start: 12px;
+      --padding-end: 12px;
+      font-size: 0.85rem;
+      height: 32px;
+    }
+    
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+    }
+  }
+}
+
+.workout-sections {
+  margin-bottom: 16px;
+  
+  h5 {
+    color: #dceaf6;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 0 0 8px 0;
+  }
+  
+  .sections-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    
+    .section-tag {
+      background: #0a1018;
+      border: 1px solid #00d4ff;
+      border-radius: 6px;
+      padding: 4px 8px;
+      color: #00d4ff;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    
+    .more-sections {
+      color: #88a6bf;
+      font-size: 0.8rem;
+      font-style: italic;
+      align-self: center;
+    }
+  }
+}
+
+.workout-equipment {
+  h5 {
+    color: #dceaf6;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 0 0 8px 0;
+  }
+  
+  .equipment-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    
+    .equipment-tag {
+      background: #0a1018;
+      border: 1px solid #6a8aa3;
+      border-radius: 6px;
+      padding: 4px 8px;
+      color: #dceaf6;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    
+    .more-equipment {
+      color: #88a6bf;
+      font-size: 0.8rem;
+      font-style: italic;
+      align-self: center;
+    }
+  }
+}
+
+// Global styles for workout details alert
+:global(.workout-details-alert) {
+  .alert-message {
+    white-space: pre-line;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    text-align: left;
+    max-height: 400px;
+    overflow-y: auto;
+    color: #dceaf6;
+  }
+  
+  .alert-wrapper {
+    --background: #070b12;
+    --color: #dceaf6;
+    max-width: 90vw;
+    max-height: 80vh;
+  }
+  
+  .alert-head {
+    background: #0a1018;
+    border-bottom: 1px solid #133748;
+  }
+  
+  .alert-title {
+    color: #00d4ff;
+    font-weight: 600;
+  }
+  
+  .alert-button {
+    --color: #00d4ff;
+    --background-hover: #133748;
+  }
+}
+
+// Mobile responsive
+@media (max-width: 768px) {
+  .workout-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    
+    .workout-actions {
+      margin-left: 0;
+      
+      .action-buttons {
+        justify-content: flex-end;
+      }
+    }
+  }
+  
+  .workout-summary {
+    flex-direction: column;
+    gap: 8px !important;
+  }
+  
+  .linking-header .linking-info {
+    text-align: center;
+    flex-direction: column;
+    gap: 8px;
+  }
+}

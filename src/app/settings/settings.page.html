@@ -1,0 +1,54 @@
+<ion-content [fullscreen]="true">
+  <div class="settings-page">
+
+    <!-- Header -->
+    <div class="crm-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back">
+        <ion-icon name="arrow-back"></ion-icon>
+      </button>
+      <div class="crm-title">
+        <h1>Settings</h1>
+        <p>App-wide preferences</p>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h2 class="section-heading">Calendar</h2>
+
+      <div class="setting-row" *ngIf="calendarSyncSupported; else unsupported">
+        <div class="setting-row-text">
+          <ion-icon name="calendar-outline"></ion-icon>
+          <div>
+            <div class="setting-row-title">Sync to Apple Calendar</div>
+            <div class="setting-row-detail">
+              Keeps a dedicated "Facility App Schedule" calendar on this device in sync with your training
+              schedule — sessions, reschedules, and cancellations included. Your own calendars are never touched.
+            </div>
+          </div>
+        </div>
+        <button
+          class="toggle-switch"
+          [class.on]="calendarSyncEnabled"
+          [disabled]="calendarSyncBusy"
+          (click)="toggleCalendarSync()"
+          [attr.aria-label]="calendarSyncEnabled ? 'Turn off calendar sync' : 'Turn on calendar sync'"
+        >
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+
+      <ng-template #unsupported>
+        <div class="setting-row setting-row--disabled">
+          <div class="setting-row-text">
+            <ion-icon name="calendar-outline"></ion-icon>
+            <div>
+              <div class="setting-row-title">Sync to Apple Calendar</div>
+              <div class="setting-row-detail">Only available in the iOS app, not in a browser.</div>
+            </div>
+          </div>
+        </div>
+      </ng-template>
+    </div>
+
+  </div>
+</ion-content>

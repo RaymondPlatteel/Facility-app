@@ -1,0 +1,127 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-title>{{ isLinkingMode ? 'Select Workout' : 'Workouts' }}</ion-title>
+    <ion-buttons slot="start">
+      <ion-button fill="clear" (click)="goBack()">
+        <ion-icon name="arrow-back"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <ion-header collapse="condense">
+    <ion-toolbar>
+      <ion-title size="large">{{ isLinkingMode ? 'Select Workout' : 'Workouts' }}</ion-title>
+    </ion-toolbar>
+  </ion-header>
+
+  <div *ngIf="isLinkingMode && currentSession" class="linking-header">
+    <div class="linking-info">
+      <ion-icon name="link-outline"></ion-icon>
+      <div>
+        <h4>Linking workout to:</h4>
+        <p>{{ currentSession.name }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="workouts-container">
+    <div *ngIf="workouts.length === 0" class="empty-state">
+      <ion-icon name="fitness-outline"></ion-icon>
+      <h3>No Workouts Yet</h3>
+      <p>Create your first workout to get started!</p>
+      <ion-button 
+        *ngIf="!isLinkingMode" 
+        fill="outline" 
+        [routerLink]="['/workouts']">
+        <ion-icon name="add" slot="start"></ion-icon>
+        Create Workout
+      </ion-button>
+    </div>
+
+    <div *ngFor="let workout of workouts" class="workout-card">
+      <div class="workout-header">
+        <div class="workout-info">
+          <h3>{{ workout.name }}</h3>
+          <p class="workout-description">{{ workout.description }}</p>
+          <div class="workout-summary">
+            <span class="summary-item">
+              <ion-icon name="time-outline"></ion-icon>
+              {{ workout.totalDuration || 0 }} min
+            </span>
+            <span class="summary-item">
+              <ion-icon name="list-outline"></ion-icon>
+              {{ workout.sections.length }} section{{ workout.sections.length !== 1 ? 's' : '' }}
+            </span>
+            <span class="summary-item">
+              <ion-icon name="calendar-outline"></ion-icon>
+              {{ (workout.createdAt | date:'MMM d, y') || 'Unknown date' }}
+            </span>
+          </div>
+        </div>
+        
+        <div class="workout-actions">
+          <ion-button 
+            *ngIf="isLinkingMode" 
+            fill="solid" 
+            size="small" 
+            (click)="linkWorkoutToSession(workout)">
+            <ion-icon name="link-outline" slot="start"></ion-icon>
+            Select
+          </ion-button>
+          
+          <div *ngIf="!isLinkingMode" class="action-buttons">
+            <ion-button 
+              fill="outline" 
+              size="small" 
+              (click)="viewWorkout(workout)">
+              <ion-icon name="eye-outline" slot="start"></ion-icon>
+              View
+            </ion-button>
+            <ion-button 
+              fill="clear" 
+              size="small" 
+              color="danger"
+              (click)="deleteWorkout(workout)">
+              <ion-icon name="trash-outline" slot="start"></ion-icon>
+              Delete
+            </ion-button>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="workout.sections.length > 0" class="workout-sections">
+        <h5>Sections:</h5>
+        <div class="sections-preview">
+          <span 
+            *ngFor="let section of workout.sections.slice(0, 3)" 
+            class="section-tag">
+            {{ section.name }}
+          </span>
+          <span 
+            *ngIf="workout.sections.length > 3" 
+            class="more-sections">
+            +{{ workout.sections.length - 3 }} more
+          </span>
+        </div>
+      </div>
+
+      <div *ngIf="workout.equipment && workout.equipment.length > 0" class="workout-equipment">
+        <h5>Equipment:</h5>
+        <div class="equipment-list">
+          <span 
+            *ngFor="let equipment of workout.equipment.slice(0, 3)" 
+            class="equipment-tag">
+            {{ equipment }}
+          </span>
+          <span 
+            *ngIf="workout.equipment.length > 3" 
+            class="more-equipment">
+            +{{ workout.equipment.length - 3 }} more
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</ion-content>

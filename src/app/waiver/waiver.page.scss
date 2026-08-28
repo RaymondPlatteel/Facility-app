@@ -1,15 +1,23 @@
 ion-content {
-  --background: #0e1117;
-  --color: white;
+  --background: #01070f;
+  --color: #dceaf6;
+}
+
+ion-header {
+  ion-toolbar {
+    --background: #070b12;
+    --color: #dceaf6;
+    --border-color: #133748;
+  }
 }
 
 .waiver-container {
   padding: 20px;
   max-width: 800px;
   margin: 0 auto;
-  background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%);
+  background: #01070f;
   min-height: 100vh;
-  color: #ffffff;
+  color: #dceaf6;
 }
 
 .waiver-selection {
@@ -17,55 +25,61 @@ ion-content {
   margin-bottom: 30px;
   
   h2 {
-    color: #4a9eff;
+    color: #00d4ff;
     margin-bottom: 10px;
-    font-size: 24px;
+    font-size: 1.8rem;
+    font-weight: 600;
   }
   
   p {
-    color: #cccccc;
+    color: #88a6bf;
     margin-bottom: 30px;
+    font-size: 1rem;
   }
 }
 
 .selection-buttons {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   max-width: 500px;
   margin: 0 auto;
 }
 
 .selection-btn {
-  background: linear-gradient(135deg, #4a9eff 0%, #6bb6ff 100%);
-  color: white;
-  border: none;
+  background: #070b12;
+  color: #dceaf6;
+  border: 1px solid #133748;
   border-radius: 12px;
   padding: 20px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   text-align: left;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   
   h3 {
     margin: 0 0 8px 0;
-    font-size: 18px;
+    font-size: 1.1rem;
     font-weight: 600;
+    color: #dceaf6;
   }
   
   p {
     margin: 0;
-    font-size: 14px;
-    opacity: 0.9;
+    font-size: 0.9rem;
+    color: #88a6bf;
   }
   
   &:hover {
+    background: #0a1018;
+    border-color: #00d4ff;
     transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(74, 158, 255, 0.3);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
   }
 }
 
 .test-btn {
-  background: #ff6b6b;
+  background: #3fdcff;
   color: white;
   border: none;
   border-radius: 8px;
@@ -74,18 +88,21 @@ ion-content {
   font-size: 14px;
   
   &:hover {
-    background: #ff5252;
+    background: #00b6e6;
   }
 }
 
 h1 {
   text-align: center;
-  color: #3daee9;
+  color: #00d4ff;
+  font-weight: 600;
 }
+
 label {
   display: block;
   margin-top: 15px;
-  font-weight: bold;
+  font-weight: 500;
+  color: #dceaf6;
 }
 
 .checkbox-container {
@@ -100,71 +117,102 @@ label {
   width: auto;
   margin: 0;
   transform: scale(1.2);
+  accent-color: #00d4ff;
 }
 
 .checkbox-container label {
   margin: 0;
-  font-weight: bold;
+  font-weight: 500;
   cursor: pointer;
   flex: 1;
+  color: #dceaf6;
 }
 
 input[type="text"], input[type="tel"], input[type="email"] {
   width: 100%;
-  padding: 12px;
+  padding: 12px 16px;
   margin-bottom: 15px;
-  border: 2px solid #444;
+  border: 1px solid #133748;
   border-radius: 8px;
-  background-color: #2a2a2a;
-  color: #ffffff !important;
-  font-size: 16px;
+  background: #0a1018;
+  color: #dceaf6;
+  font-size: 1rem;
   font-family: inherit;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
   
   &::placeholder {
-    color: #888 !important;
+    color: #88a6bf;
     opacity: 1;
   }
   
   &:focus {
     outline: none;
-    border-color: #3daee9;
-    background-color: #333;
+    border-color: #00d4ff;
+    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+    background: #0a1018;
   }
   
   &:-webkit-autofill,
   &:-webkit-autofill:hover,
   &:-webkit-autofill:focus,
   &:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 30px #2a2a2a inset !important;
-    -webkit-text-fill-color: #ffffff !important;
+    -webkit-box-shadow: 0 0 0 30px #0a1018 inset !important;
+    -webkit-text-fill-color: #dceaf6 !important;
     transition: background-color 5000s ease-in-out 0s;
   }
 }
 
 input, select, textarea {
   width: 100%;
-  padding: 10px;
-  margin-top: 5px;
-  border-radius: 5px;
-  border: none;
+  padding: 12px 16px;
+  margin-top: 8px;
+  border-radius: 8px;
+  border: 1px solid #133748;
+  background: #0a1018;
+  color: #dceaf6;
+  transition: all 0.2s ease;
+  
+  &:focus {
+    outline: none;
+    border-color: #00d4ff;
+    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+    background: #0a1018;
+  }
 }
+
 button {
   margin-top: 20px;
-  background-color: #3daee9;
-  color: white;
-  padding: 10px;
+  background: #00d4ff;
+  color: #ffffff;
+  padding: 12px 24px;
   border: none;
-  border-radius: 5px;
-  font-size: 16px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
   width: 100%;
   cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: #00b6e6;
+    transform: translateY(-1px);
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
 }
+
 .section-title {
   margin-top: 40px;
-  font-size: 1.2em;
-  border-bottom: 1px solid #3daee9;
-  padding-bottom: 5px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border-bottom: 2px solid #00d4ff;
+  padding-bottom: 8px;
+  color: #dceaf6;
 }
+
 .signature-modal {
   display: none;
   position: fixed;
@@ -177,26 +225,37 @@ button {
   align-items: center;
   z-index: 9999;
 }
+
 .signature-modal.active {
   display: flex;
 }
+
 .signature-box {
-  background: #fff;
-  padding: 20px;
-  border-radius: 10px;
+  background: #070b12;
+  border: 1px solid #133748;
+  padding: 24px;
+  border-radius: 12px;
   max-width: 500px;
-  width: 100%;
+  width: 90%;
   text-align: center;
-  color: black;
+  color: #dceaf6;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  
+  h3 {
+    color: #00d4ff;
+    margin-bottom: 16px;
+  }
 }
+
 .signature-box canvas {
   width: 100%;
   height: 150px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
+  border: 1px solid #133748;
+  border-radius: 8px;
   margin-top: 10px;
-  background: #fff;
+  background: #ffffff;
 }
+
 .signature-display {
   background: #fff;
   color: black;
@@ -207,20 +266,24 @@ button {
   cursor: pointer;
   margin-top: 10px;
 }
+
 #signatureWrapper, #signatureWrapperChild {
   position: relative;
 }
+
 #savedSignature, #savedSignatureChild {
   margin-top: 10px;
   width: 100%;
   border-radius: 5px;
   background: white;
 }
+
 #signatureDateText, #signatureDateTextChild {
   position: absolute;
   bottom: 5px;
   right: 10px;
-  color: #888;
+  color: #6a8aa3;
   font-size: 12px;
 }
+
 #waiverForm, #waiverFormChild { display: none; }

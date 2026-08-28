@@ -1,0 +1,338 @@
+// Full-screen takeover. Fixed rather than absolute so it covers the app
+// regardless of which page is mounted underneath, and above Ionic's own
+// overlay stack (modals sit around 10000-20000) so an assessment toast
+// can never end up painted on top of a rank up.
+.lu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px 24px;
+  background: #000;
+  // No overflow clipping. It was here to contain the spinning rays; with
+  // those gone the only thing it can still reach is the letter's glow.
+  animation: lu-scrim-in 260ms ease-out forwards;
+}
+
+// Rank ups go to pure black and stay there. A level up sits on a softer
+// ground so the two never feel like the same event.
+.lu-scrim:not(.lu-rank) {
+  background: rgba(2, 4, 8, 0.94);
+}
+
+@keyframes lu-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ------------------------------ shared ------------------------------ */
+
+.lu-kicker,
+.lu-titles,
+.lu-lvl-line,
+.lu-from,
+.lu-tap {
+  position: relative;
+  opacity: 0;
+  transition: opacity 400ms ease-out, transform 400ms ease-out;
+  transform: translateY(8px);
+
+  &.on {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lu-kicker {
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.42em;
+  font-size: 10px;
+  color: #4a6378;
+}
+
+.lu-titles {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.lu-tap {
+  position: absolute;
+  bottom: calc(36px + env(safe-area-inset-bottom));
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  font-size: 10px;
+  color: #4a6378;
+  animation: lu-pulse 2s ease-in-out infinite;
+}
+
+@keyframes lu-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.85; }
+}
+
+/* ----------------------------- level up ----------------------------- */
+
+.lu-lvlup-word {
+  font-family: 'Bebas Neue', 'Impact', sans-serif;
+  font-size: 30px;
+  letter-spacing: 0.3em;
+  color: #88a6bf;
+}
+
+.lu-big-num {
+  position: relative;
+  font-family: 'Bebas Neue', 'Impact', sans-serif;
+  font-size: 132px;
+  line-height: 1;
+  opacity: 0;
+  transform: scale(0.85);
+  background-image: var(--lu-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+
+  &.on {
+    animation: lu-num-in 520ms cubic-bezier(0.2, 1.3, 0.4, 1) forwards;
+  }
+}
+
+@keyframes lu-num-in {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.lu-from {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  color: #4a6378;
+}
+
+/* ------------------------------ rank up ----------------------------- */
+
+// The rank being left. Shown briefly, then thrown off screen — the ascent
+// needs a FROM or the new letter is just a letter appearing.
+.lu-old {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 300ms ease-out;
+
+  &.on { opacity: 0.5; }
+
+  &.gone {
+    animation: lu-old-out 420ms ease-in forwards;
+  }
+}
+
+@keyframes lu-old-out {
+  to { opacity: 0; transform: scale(0.55) translateY(-40px); filter: blur(3px); }
+}
+
+.lu-old-letter {
+  font-family: 'Bebas Neue', 'Impact', sans-serif;
+  font-size: 96px;
+  line-height: 1;
+  color: #4a6378;
+}
+
+.lu-old-label {
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.3em;
+  font-size: 10px;
+  color: #4a6378;
+}
+
+// The new rank letter, landing hard. Deliberately enormous — this is the
+// single biggest thing the app ever draws.
+.lu-slam {
+  position: relative;
+  opacity: 0;
+
+  &.on {
+    animation: lu-slam-in 620ms cubic-bezier(0.15, 1.5, 0.3, 1) forwards;
+  }
+}
+
+.lu-slam-letter {
+  display: block;
+  font-family: 'Bebas Neue', 'Impact', sans-serif;
+  font-size: 200px;
+  line-height: 0.9;
+  background-image: var(--lu-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  // Glow behind the glyph, tinted to the rank.
+  //
+  // text-shadow, NOT filter: drop-shadow(). This element paints its colour
+  // as a background clipped to the glyph, and a filter runs against the
+  // element's box rather than that clip — so drop-shadow glowed the
+  // background RECTANGLE and the halo ended in visible straight edges.
+  // text-shadow is generated from the glyph outline itself, so it follows
+  // the letter and has nothing to be cut off by.
+  //
+  // Two stops: a tight bright core and a wide soft bloom, which reads as
+  // light coming off the letter rather than as a uniform outline.
+  text-shadow:
+    0 0 22px var(--lu-accent),
+    0 0 70px var(--lu-accent);
+}
+
+// No `filter` here, deliberately. It used to blur on entry, but `forwards`
+// leaves the final `blur(0)` applied for good, and any filter flattens the
+// element into a filter region that can clip the letter's glow back into a
+// rectangle — the exact problem text-shadow was meant to solve. The scale
+// overshoot carries the impact on its own.
+@keyframes lu-slam-in {
+  0% { opacity: 0; transform: scale(3.2); }
+  55% { opacity: 1; }
+  70% { transform: scale(0.94); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.lu-rank-word {
+  font-family: 'Bebas Neue', 'Impact', sans-serif;
+  font-size: 38px;
+  letter-spacing: 0.3em;
+  background-image: var(--lu-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.lu-rank-name {
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  font-size: 12px;
+  color: #88a6bf;
+}
+
+.lu-lvl-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.lu-lvl-label {
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  font-size: 10px;
+  color: #4a6378;
+}
+
+.lu-lvl-num {
+  font-family: 'Bebas Neue', 'Impact', sans-serif;
+  font-size: 34px;
+  color: #dceaf6;
+}
+
+// Reduced motion: every step still lands, nothing travels or spins. The
+// sequence is information, not decoration — it should survive being
+// stripped of movement.
+@media (prefers-reduced-motion: reduce) {
+  .lu-scrim,
+  .lu-slam.on,
+  .lu-big-num.on,
+  .lu-old.gone,
+  .lu-tap {
+    animation: none;
+  }
+  .lu-slam.on,
+  .lu-big-num.on { opacity: 1; transform: none; filter: none; }
+  .lu-old.gone { opacity: 0; }
+}
+
+/* -------------------------------- XP -------------------------------- */
+
+.lu-xp {
+  position: relative;
+  width: min(320px, 78vw);
+  margin-top: 6px;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 400ms ease-out, transform 400ms ease-out;
+
+  &.on {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lu-xp-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.09);
+  // A faint rank-tinted rim, so an empty bar still reads as belonging to
+  // the rank rather than as dead grey.
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.lu-xp-fill {
+  height: 100%;
+  border-radius: 999px;
+  background-image: var(--lu-grad);
+  // Leading-edge glow: the part of the bar actually moving is the part
+  // worth looking at.
+  box-shadow: 0 0 12px var(--lu-accent);
+  // No CSS transition on width. The component drives this per frame, and a
+  // transition on top would fight it and lag a frame behind on every wrap.
+  animation: lu-xp-appear 220ms ease-out;
+}
+
+@keyframes lu-xp-appear {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+
+.lu-xp-legend {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 9px;
+  color: #4a6378;
+
+  // The percentage in the middle is the number actually changing, so it
+  // gets the rank colour while the two endpoints stay quiet.
+  span:nth-child(2) {
+    color: var(--lu-accent);
+  }
+}
+
+// XP-only gains sit on a lighter ground still — three tiers of event, three
+// weights of presentation.
+.lu-scrim.lu-xp-only {
+  background: rgba(2, 4, 8, 0.88);
+  gap: 10px;
+
+  .lu-big-num { font-size: 96px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lu-xp,
+  .lu-xp-fill {
+    transition: none;
+    animation: none;
+  }
+}

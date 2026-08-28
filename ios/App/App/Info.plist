@@ -44,6 +44,12 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+	<key>UIStatusBarHidden</key>
 	<true/>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Facility App can add your training schedule to a dedicated calendar so it shows up alongside your other events.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>Facility App can add your training schedule to a dedicated calendar so it shows up alongside your other events.</string>
 </dict>
 </plist>

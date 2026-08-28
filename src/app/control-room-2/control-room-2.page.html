@@ -1,0 +1,242 @@
+<ion-content [fullscreen]="true" class="dashboard-content">
+  <div class="control-room">
+    <!-- Left Screen -->
+    <div class="screen left-screen">
+      <div class="panel cyber-panel">
+        <div class="panel-label">1</div>
+        <div class="layout-system-boot">
+          <div class="header-line">CYBER SECURITY CORE</div>
+          <div class="boot-sequence">
+            <div class="boot-step" *ngFor="let line of leftTopData; let i = index; trackBy: trackByFn">
+              <div class="step-number">{{ i + 1 }}</div>
+              <div class="step-text" [class]="line.status">{{ line.data }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel quantum-panel">
+        <div class="panel-label">2</div>
+        <div class="layout-network-analysis">
+          <div class="header-line">QUANTUM ENCRYPTION</div>
+          <div class="network-stats">
+            <div class="stat-item" *ngFor="let line of leftTopRightData; trackBy: trackByFn">
+              <div class="stat-icon">[QNT]</div>
+              <div class="stat-data" [class]="line.status">{{ line.data }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel neural-panel">
+        <div class="panel-label">3</div>
+        <div class="layout-security-audit">
+          <div class="header-line">NEURAL NETWORK AI</div>
+          <div class="security-log">
+            <div class="log-entry" *ngFor="let line of leftBottomData; trackBy: trackByFn">
+              <div class="log-level">[AI]</div>
+              <div class="log-message" [class]="line.status">{{ line.data }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel hologram-panel">
+        <div class="panel-label">4</div>
+        <div class="layout-hardware-metrics">
+          <div class="header-line">HOLOGRAM PROJECTION</div>
+          <div class="hardware-monitor">
+            <div class="monitor-item" *ngFor="let line of leftBottomRightData; trackBy: trackByFn">
+              <div class="monitor-bar">
+                <div class="monitor-fill" [style.width.%]="(line.data.length * 3) % 100"></div>
+              </div>
+              <div class="monitor-label">{{ line.data }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Middle Screen -->
+    <div class="screen middle-screen">
+      <div class="panel plasma-panel">
+        <div class="panel-label">5</div>
+        <div class="layout-system-status">
+          <div class="status-header">PLASMA CONTAINMENT</div>
+          <div class="status-grid">
+            <div class="status-cell" *ngFor="let item of statusItems; trackBy: trackByFn">
+              <div class="cell-icon">{{ item.icon }}</div>
+              <div class="cell-label">{{ item.text }}</div>
+              <div class="cell-value" [class]="item.animation">{{ item.value }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel crystal-panel">
+        <div class="panel-label">6</div>
+        <div class="layout-database-ops">
+          <div class="db-header">CRYSTAL MATRIX</div>
+          <div class="db-metrics">
+            <div class="metric-row" *ngFor="let line of middleTopMiddleData; trackBy: trackByFn">
+              <span class="metric-key">{{ line.data.split(':')[0] }}</span>
+              <span class="metric-separator">:</span>
+              <span class="metric-value">{{ line.data.split(':')[1] }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel fusion-panel">
+        <div class="panel-label">7</div>
+        <div class="layout-ai-neural">
+          <div class="matrix-header">FUSION REACTOR</div>
+          <div class="neural-flow">
+            <div class="flow-line" *ngFor="let line of middleTopRightData; trackBy: trackByFn">
+              <div class="flow-dot">●</div>
+              <div class="flow-text">{{ line.data }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel temporal-panel">
+        <div class="panel-label">8</div>
+        <div class="layout-quantum-ops">
+          <div class="quantum-header">TEMPORAL FIELD</div>
+          <div class="quantum-stack">
+            <div class="stack-item" *ngFor="let line of middleTopLeftData; trackBy: trackByFn">
+              <div class="stack-indicator">▶</div>
+              <div class="stack-content" [class]="line.status">{{ line.data }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel dimensional-panel">
+        <div class="panel-label">9</div>
+        <div class="layout-satellite-comm">
+          <div class="satellite-header">DIMENSIONAL GATE</div>
+          <div class="comm-panel">
+            <div class="comm-item" *ngFor="let line of middleCenterData; trackBy: trackByFn">
+              <div class="comm-icon">[DIM]</div>
+              <div class="comm-info" [class]="line.status">{{ line.data }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel gravity-panel">
+        <div class="panel-label">10</div>
+        <div class="layout-environmental">
+          <div class="env-header">GRAVITY CONTROL</div>
+          <div class="env-grid">
+            <div class="env-cell" *ngFor="let line of middleRightData; trackBy: trackByFn">
+              <div class="cell-header">{{ line.data.split(':')[0] }}</div>
+              <div class="cell-data">{{ line.data.split(':')[1] }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel energy-panel">
+        <div class="panel-label">11</div>
+        <div class="layout-power-grid">
+          <div class="power-header">ENERGY MATRIX</div>
+          <div class="power-list">
+            <div class="power-item" *ngFor="let line of middleBottomLeftData; trackBy: trackByFn">
+              <div class="power-bullet">[NRG]</div>
+              <div class="power-text" [class]="line.status">{{ line.data }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel stealth-panel">
+        <div class="panel-label">12</div>
+        <div class="layout-surveillance">
+          <div class="surveillance-header">STEALTH FIELD</div>
+          <div class="camera-grid">
+            <div class="camera-item" *ngFor="let line of middleBottomMiddleData; trackBy: trackByFn">
+              <div class="camera-id">[STL]</div>
+              <div class="camera-status" [class]="line.status">{{ line.data }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel teleport-panel">
+        <div class="panel-label">13</div>
+        <div class="layout-research-dev">
+          <div class="research-header">TELEPORTATION HUB</div>
+          <div class="research-progress">
+            <div class="progress-item" *ngFor="let line of middleBottomRightData; trackBy: trackByFn">
+              <div class="progress-bar">
+                <div class="progress-fill" [style.width.%]="(line.data.length * 5) % 100"></div>
+              </div>
+              <div class="progress-text" [class]="line.status">{{ line.data }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Screen -->
+    <div class="screen right-screen">
+      <div class="panel terminal-panel">
+        <div class="panel-label">14</div>
+        <div class="layout-terminal">
+          <div class="terminal-header">ADVANCED TERMINAL v2.0</div>
+          <div class="terminal-content" #terminalContent>
+            <div class="terminal-line" *ngFor="let line of terminalLines; trackBy: trackByFn">
+              <span class="terminal-text">{{ line }}</span>
+            </div>
+            <div class="terminal-line typing-line" *ngIf="isTyping">
+              <span class="terminal-text">{{ currentTypingLine }}</span>
+              <span class="terminal-cursor">█</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel reality-panel">
+        <div class="panel-label">16</div>
+        <div class="layout-system-info">
+          <div class="info-header">REALITY MATRIX</div>
+          <div class="info-item">
+            <span class="label">DATE:</span>
+            <span class="value">{{ systemInfo.date }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">TIME:</span>
+            <span class="value">{{ systemInfo.time }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">UPTIME:</span>
+            <span class="value">{{ systemInfo.uptime }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">VERSION:</span>
+            <span class="value">{{ systemInfo.version }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="panel cosmic-panel">
+        <div class="panel-label">17</div>
+        <div class="layout-weather-monitor">
+          <div class="weather-header">COSMIC WEATHER</div>
+          <div class="weather-grid">
+            <div class="weather-item">
+              <span class="label">TEMP:</span>
+              <span class="value">{{ weatherData.temperature }}°K</span>
+            </div>
+            <div class="weather-item">
+              <span class="label">CONDITION:</span>
+              <span class="value">{{ weatherData.condition }}</span>
+            </div>
+            <div class="weather-item">
+              <span class="label">HUMIDITY:</span>
+              <span class="value">{{ weatherData.humidity }}%</span>
+            </div>
+            <div class="weather-item">
+              <span class="label">WIND:</span>
+              <span class="value">{{ weatherData.windSpeed }} km/s</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</ion-content>
+
+
+
+

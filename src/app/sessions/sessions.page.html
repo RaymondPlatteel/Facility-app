@@ -1,0 +1,147 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-title>Sessions</ion-title>
+    <ion-buttons slot="start">
+      <ion-button fill="clear" (click)="goBack()">
+        <ion-icon name="arrow-back"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <ion-header collapse="condense">
+    <ion-toolbar>
+      <ion-title size="large">Sessions</ion-title>
+    </ion-toolbar>
+  </ion-header>
+
+  <!-- Custom Tab Buttons -->
+  <div class="custom-tabs">
+    <ion-button 
+      [fill]="selectedSegment === 'today' ? 'solid' : 'outline'"
+      [color]="selectedSegment === 'today' ? 'primary' : 'medium'"
+      size="default"
+      class="tab-button"
+      (click)="selectedSegment = 'today'">
+      Today
+      <span *ngIf="getSessionCount('today') > 0" class="tab-count">({{ getSessionCount('today') }})</span>
+    </ion-button>
+    
+    <ion-button 
+      [fill]="selectedSegment === 'future' ? 'solid' : 'outline'"
+      [color]="selectedSegment === 'future' ? 'primary' : 'medium'"
+      size="default"
+      class="tab-button"
+      (click)="selectedSegment = 'future'">
+      Future
+      <span *ngIf="getSessionCount('future') > 0" class="tab-count">({{ getSessionCount('future') }})</span>
+    </ion-button>
+    
+    <ion-button 
+      [fill]="selectedSegment === 'past' ? 'solid' : 'outline'"
+      [color]="selectedSegment === 'past' ? 'primary' : 'medium'"
+      size="default"
+      class="tab-button"
+      (click)="selectedSegment = 'past'">
+      Past
+      <span *ngIf="getSessionCount('past') > 0" class="tab-count">({{ getSessionCount('past') }})</span>
+    </ion-button>
+  </div>
+
+  <!-- Sessions List -->
+  <div class="sessions-container">
+    <ng-container *ngIf="getCurrentGroups().length > 0; else emptyState">
+      <ion-card *ngFor="let group of getCurrentGroups()" class="session-card" 
+                [class.clickable]="group.linkedWorkout" 
+                (click)="viewSessionWorkout(group)">
+        <ion-card-header>
+          <div class="session-header">
+            <div class="session-info">
+              <ion-card-title class="session-title">{{ group.name }}</ion-card-title>
+              <ion-card-subtitle class="session-details">
+                <div class="session-meta">
+                  <span class="session-date">{{ formatDate(group.nextDate || '') }}</span>
+                  <span class="session-time" *ngIf="group.sessions[0]">{{ formatTime(group.sessions[0].date) }}</span>
+                </div>
+                <div class="session-count-badge" *ngIf="group.isRecurring">
+                  {{ group.count }} sessions
+                </div>
+                <div class="linked-workout" *ngIf="group.linkedWorkout">
+                  <ion-icon name="fitness" class="workout-icon"></ion-icon>
+                  <span>{{ group.linkedWorkout.name }}</span>
+                </div>
+                <div class="no-workout" *ngIf="!group.linkedWorkout">
+                  <ion-icon name="alert-circle" class="no-workout-icon"></ion-icon>
+                  <span>No workout linked</span>
+                </div>
+              </ion-card-subtitle>
+            </div>
+            <div class="session-actions-button" *ngIf="group.linkedWorkout">
+              <ion-icon name="eye" class="view-icon"></ion-icon>
+            </div>
+          </div>
+        </ion-card-header>
+
+        <ion-card-content>
+          <!-- Show all sessions if it's a recurring group -->
+          <div *ngIf="group.isRecurring" class="recurring-sessions">
+            <div class="recurring-header">
+              <ion-icon name="repeat" class="recurring-icon"></ion-icon>
+              <span>Recurring Sessions:</span>
+            </div>
+            <div class="session-list">
+              <div *ngFor="let session of group.sessions" class="session-item">
+                <span class="session-date-small">{{ formatDate(session.date) }}</span>
+                <span class="session-time-small">{{ formatTime(session.date) }}</span>
+                <span class="participant-count">{{ session.participants.length }} participants</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Show participant count for single sessions -->
+          <div *ngIf="!group.isRecurring && group.sessions[0]" class="single-session-info">
+            <div class="participant-info">
+              <ion-icon name="people" class="participants-icon"></ion-icon>
+              <span>{{ group.sessions[0].participants.length }} participants</span>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="session-actions">
+            <ion-button 
+              *ngIf="!group.linkedWorkout" 
+              fill="outline" 
+              color="primary" 
+              size="small"
+              (click)="linkWorkout(group); $event.stopPropagation()">
+              <ion-icon name="link" slot="start"></ion-icon>
+              Link Workout
+            </ion-button>
+            
+            <ion-button 
+              *ngIf="group.linkedWorkout" 
+              fill="outline" 
+              color="warning" 
+              size="small"
+              (click)="unlinkWorkout(group); $event.stopPropagation()">
+              <ion-icon name="unlink" slot="start"></ion-icon>
+              Unlink Workout
+            </ion-button>
+          </div>
+        </ion-card-content>
+      </ion-card>
+    </ng-container>
+
+    <!-- Empty State -->
+    <ng-template #emptyState>
+      <div class="empty-state">
+        <ion-icon name="calendar-outline" class="empty-icon"></ion-icon>
+        <h3>{{ getEmptyMessage() }}</h3>
+        <p *ngIf="selectedSegment === 'today'">Check back later or view future sessions.</p>
+        <p *ngIf="selectedSegment === 'future'">New sessions will appear here when scheduled.</p>
+        <p *ngIf="selectedSegment === 'past'">Completed sessions will appear here.</p>
+      </div>
+    </ng-template>
+  </div>
+</ion-content>

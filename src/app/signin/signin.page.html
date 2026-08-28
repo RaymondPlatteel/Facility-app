@@ -1,108 +1,190 @@
-<ion-header [translucent]="true">
-  <ion-toolbar>
-    <ion-buttons slot="start">
-      <ion-button (click)="goBack()">
-        <ion-icon name="arrow-back"></ion-icon>
-      </ion-button>
-    </ion-buttons>
-    <ion-title>{{ selectedSession ? 'Check In' : 'Today\'s Sessions' }}</ion-title>
-  </ion-toolbar>
-</ion-header>
-
 <ion-content [fullscreen]="true">
-  <!-- Session Selection View -->
-  <div *ngIf="!selectedSession" class="sessions-container">
-    <div class="header-section">
-      <h2>Select a Session</h2>
-      <p class="subtitle">Choose which session you're attending today</p>
+  <div class="kiosk">
+
+    <!-- ============ ROSTER ============ -->
+    <div *ngIf="view === 'roster'" class="kiosk-view roster-view">
+      <div class="kiosk-header">
+        <button class="icon-btn" (click)="goHome()" aria-label="Back">
+          <ion-icon name="arrow-back"></ion-icon>
+        </button>
+        <div class="kiosk-heading">
+          <h1>Who's checking in?</h1>
+          <p>Tap your name to sign in for today's session</p>
+        </div>
+      </div>
+
+      <div class="search-wrap">
+        <ion-icon name="search-outline"></ion-icon>
+        <input
+          class="search-input"
+          type="text"
+          placeholder="Search your name…"
+          [(ngModel)]="searchQuery"
+          autocomplete="off" />
+        <button *ngIf="searchQuery" class="search-clear" (click)="searchQuery = ''">
+          <ion-icon name="close-outline"></ion-icon>
+        </button>
+      </div>
+
+      <div *ngIf="loading" class="state-msg">Loading clients…</div>
+      <div *ngIf="loadError && !loading" class="state-msg error">
+        Couldn't load the client list — check the connection.
+        <button class="ghost-btn" (click)="loadData()">Retry</button>
+      </div>
+
+      <div *ngIf="!loading && !loadError" class="client-grid">
+        <button
+          *ngFor="let client of filteredClients"
+          class="client-tile"
+          [class.checked]="isCheckedInToday(client)"
+          (click)="selectClient(client)">
+          <span class="avatar">{{ initials(client.fullName) }}</span>
+          <span class="client-name">{{ client.fullName }}</span>
+          <ion-icon *ngIf="isCheckedInToday(client)" name="checkmark-circle" class="checked-icon"></ion-icon>
+        </button>
+
+        <div *ngIf="filteredClients.length === 0 && clients.length > 0" class="state-msg">
+          No matches for “{{ searchQuery }}”
+        </div>
+        <div *ngIf="clients.length === 0" class="state-msg">
+          No clients yet — add clients from the admin Clients page.
+        </div>
+      </div>
+
+      <p class="roster-footnote">Don't see your name? Ask at the front desk.</p>
     </div>
 
-    <div *ngIf="todaySessions.length === 0" class="no-sessions">
-      <ion-icon name="time" class="no-sessions-icon"></ion-icon>
-      <h3>No Sessions Today</h3>
-      <p>There are no sessions scheduled for today.</p>
+    <!-- ============ CONFIRM ============ -->
+    <div *ngIf="view === 'confirm'" class="kiosk-view center-view">
+      <div class="confirm-card">
+        <span class="avatar avatar-lg">{{ initials(selectedClient?.fullName || '') }}</span>
+        <h1>Hi {{ firstName }}!</h1>
+        <p class="confirm-sub">Check in as <strong>{{ selectedClient?.fullName }}</strong>?</p>
+
+        <div *ngIf="selectedPackage && selectedPackageHasSessions" class="pkg-chip">
+          {{ confirmPackageLabel }}
+        </div>
+        <div *ngIf="selectedPackage && !selectedPackageHasSessions" class="pkg-chip warn">
+          <ion-icon name="alert-circle-outline"></ion-icon>
+          {{ selectedPackage.packageName }} — no sessions left
+        </div>
+        <div *ngIf="!selectedPackage" class="pkg-chip warn">
+          <ion-icon name="alert-circle-outline"></ion-icon>
+          No active package on file
+        </div>
+
+        <button class="big-btn primary" [disabled]="checkingIn" (click)="confirmCheckIn()">
+          <ion-icon name="checkmark-circle"></ion-icon>
+          {{ checkingIn ? 'Checking in…' : 'Yes, Check Me In' }}
+        </button>
+        <button class="big-btn ghost" (click)="cancelConfirm()">
+          That's not me — go back
+        </button>
+      </div>
     </div>
 
-    <ion-card 
-      *ngFor="let todaySession of todaySessions" 
-      class="session-card"
-      (click)="selectSession(todaySession)">
-      <ion-card-header>
-        <ion-card-title>{{ todaySession.session.name }}</ion-card-title>
-      </ion-card-header>
-      
-      <ion-card-content>
-        <div class="session-info">
-          <div class="session-detail">
-            <ion-icon name="time"></ion-icon>
-            <span>{{ formatSessionTime(todaySession.session.date) }}</span>
+    <!-- ============ ALREADY CHECKED IN ============ -->
+    <div *ngIf="view === 'already'" class="kiosk-view center-view">
+      <div class="confirm-card">
+        <ion-icon name="checkmark-circle" class="result-icon ok"></ion-icon>
+        <h1>You're already in!</h1>
+        <p class="confirm-sub">
+          {{ selectedClient?.fullName }} checked in today at
+          {{ existingCheckIn ? formatTime(existingCheckIn.checkInTime) : '' }}
+        </p>
+        <button class="big-btn primary" (click)="backToRoster()">OK</button>
+      </div>
+    </div>
+
+    <!-- ============ SUCCESS ============ -->
+    <div *ngIf="view === 'success'" class="kiosk-view center-view">
+      <div class="confirm-card success-card">
+        <ion-icon name="checkmark-circle" class="result-icon ok pop"></ion-icon>
+        <h1>You're in, {{ firstName }}!</h1>
+        <p class="confirm-sub">Checked in at {{ lastCheckIn ? formatTime(lastCheckIn.checkInTime) : '' }}</p>
+
+        <!-- Session counter -->
+        <div *ngIf="lastCheckIn?.decremented" class="sessions-summary">
+          <div class="sessions-count">
+            <span class="num">{{ lastCheckIn?.sessionsRemainingAfter }}</span>
+            <span class="of" *ngIf="lastCheckIn?.packageTotalSessions">/ {{ lastCheckIn?.packageTotalSessions }}</span>
           </div>
-          <div class="session-detail">
-            <ion-icon name="person"></ion-icon>
-            <span>{{ getSessionStatus(todaySession) }}</span>
+          <div class="sessions-label">sessions remaining · {{ lastCheckIn?.packageName }}</div>
+          <div class="sessions-bar" *ngIf="lastCheckIn?.packageTotalSessions">
+            <div class="sessions-bar-fill"
+              [style.width.%]="100 * (lastCheckIn?.sessionsRemainingAfter || 0) / (lastCheckIn?.packageTotalSessions || 1)">
+            </div>
+          </div>
+          <div *ngIf="(lastCheckIn?.sessionsRemainingAfter ?? 99) <= 2" class="low-warning">
+            <ion-icon name="alert-circle-outline"></ion-icon>
+            Almost out of sessions — talk to us about your next package!
           </div>
         </div>
-        
-        <div class="participants-preview">
-          <ion-badge 
-            *ngFor="let participant of todaySession.participants.slice(0, 3)"
-            [color]="todaySession.checkedInStudents.includes(participant) ? 'success' : 'medium'"
-            class="participant-badge">
-            {{ participant }}
-          </ion-badge>
-          <span *ngIf="todaySession.participants.length > 3" class="more-participants">
-            +{{ todaySession.participants.length - 3 }} more
-          </span>
-        </div>
-      </ion-card-content>
-    </ion-card>
-  </div>
 
-  <!-- Student Check-in View -->
-  <div *ngIf="selectedSession" class="checkin-container">
-    <div class="header-section">
-      <h2>{{ selectedSession.session.name }}</h2>
-      <p class="subtitle">
-        {{ formatSessionTime(selectedSession.session.date) }} • 
-        {{ getSessionStatus(selectedSession) }}
-      </p>
+        <div *ngIf="!lastCheckIn?.decremented" class="pkg-chip warn">
+          <ion-icon name="alert-circle-outline"></ion-icon>
+          No session was deducted — please see staff about your package
+        </div>
+
+        <div class="success-actions">
+          <button class="big-btn primary" (click)="backToRoster()">Done</button>
+          <button class="big-btn ghost" (click)="startWellness()">
+            <ion-icon name="heart-outline"></ion-icon>
+            Quick wellness check
+          </button>
+          <button class="text-btn" (click)="undoLastCheckIn()">
+            <ion-icon name="arrow-undo-outline"></ion-icon>
+            Oops, undo this check-in
+          </button>
+        </div>
+
+        <p class="countdown-note" *ngIf="countdown > 0">Back to start in {{ countdown }}s</p>
+      </div>
     </div>
 
-    <ion-card class="students-card">
-      <ion-card-header>
-        <ion-card-title>Students</ion-card-title>
-      </ion-card-header>
-      
-      <ion-card-content>
-        <ion-list class="students-list">
-          <ion-item 
-            *ngFor="let student of selectedSession.participants"
-            class="student-item"
-            [class.checked-in]="isStudentCheckedIn(student)"
-            (click)="checkInStudent(student)"
-            button>
-            
-            <ion-icon 
-              [name]="isStudentCheckedIn(student) ? 'checkmark-circle' : 'person'" 
-              slot="start"
-              [color]="isStudentCheckedIn(student) ? 'success' : 'medium'">
-            </ion-icon>
-            
-            <ion-label>
-              <h3>{{ student }}</h3>
-              <p *ngIf="isStudentCheckedIn(student)">✓ Checked in</p>
-              <p *ngIf="!isStudentCheckedIn(student)">Tap to check in</p>
-            </ion-label>
+    <!-- ============ WELLNESS ============ -->
+    <div *ngIf="view === 'wellness'" class="kiosk-view center-view">
+      <div class="confirm-card wellness-card">
+        <div class="wellness-progress">
+          <div class="wellness-progress-fill"
+            [style.width.%]="((wellnessIndex + 1) / wellnessQuestions.length) * 100"></div>
+        </div>
+        <p class="wellness-step">{{ wellnessIndex + 1 }} of {{ wellnessQuestions.length }}</p>
+        <h2>{{ wellnessQuestions[wellnessIndex].question }}</h2>
 
-            <ion-badge 
-              *ngIf="isStudentCheckedIn(student)"
-              color="success" 
-              slot="end">
-              Present
-            </ion-badge>
-          </ion-item>
-        </ion-list>
-      </ion-card-content>
-    </ion-card>
+        <div *ngIf="wellnessQuestions[wellnessIndex].type === 'scale'" class="scale-grid">
+          <button
+            *ngFor="let n of scaleValues"
+            class="scale-btn"
+            [class.selected]="wellnessAnswer() === n"
+            (click)="answerScale(n)">
+            {{ n }}
+          </button>
+        </div>
+
+        <div *ngIf="wellnessQuestions[wellnessIndex].type === 'yesno'" class="yesno-row">
+          <button class="big-btn primary" [class.selected]="wellnessAnswer() === true" (click)="answerYesNo(true)">Yes</button>
+          <button class="big-btn ghost" [class.selected]="wellnessAnswer() === false" (click)="answerYesNo(false)">No</button>
+        </div>
+
+        <div class="wellness-nav">
+          <button *ngIf="wellnessIndex > 0" class="text-btn" (click)="previousWellness()">
+            <ion-icon name="chevron-back-outline"></ion-icon> Back
+          </button>
+          <button class="text-btn" (click)="backToRoster()">Skip</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ WELLNESS DONE ============ -->
+    <div *ngIf="view === 'wellnessDone'" class="kiosk-view center-view">
+      <div class="confirm-card">
+        <ion-icon name="heart-outline" class="result-icon ok"></ion-icon>
+        <h1>Thanks{{ firstName ? ', ' + firstName : '' }}!</h1>
+        <p class="confirm-sub">Have a great workout 💪</p>
+        <p class="countdown-note" *ngIf="countdown > 0">Back to start in {{ countdown }}s</p>
+      </div>
+    </div>
+
   </div>
-</ion-content> 
+</ion-content>

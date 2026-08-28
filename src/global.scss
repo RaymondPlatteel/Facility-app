@@ -35,3 +35,150 @@
 /* @import "@ionic/angular/css/palettes/dark.always.css"; */
 /* @import "@ionic/angular/css/palettes/dark.class.css"; */
 @import '@ionic/angular/css/palettes/dark.system.css';
+
+/* Global dark theme styles to ensure consistency */
+ion-header {
+  ion-toolbar {
+    --background: #070b12 !important;
+    --color: #dceaf6 !important;
+    --border-color: #133748 !important;
+  }
+}
+
+ion-content {
+  --background: #01070f !important;
+  --color: #dceaf6 !important;
+}
+
+/* Consistent button styling */
+ion-button {
+  --background: #00d4ff;
+  --background-hover: #00b6e6;
+  --color: #ffffff;
+  --border-radius: 8px;
+  font-weight: 500;
+}
+
+/* Consistent modal styling */
+ion-modal {
+  ion-header {
+    ion-toolbar {
+      --background: #070b12 !important;
+      --color: #dceaf6 !important;
+      --border-color: #133748 !important;
+    }
+  }
+  
+  ion-content {
+    --background: #01070f !important;
+    --color: #dceaf6 !important;
+  }
+}
+
+// Global theme override for ion-datetime (calendar)
+ion-datetime {
+  // Main calendar container
+  --background: #0a1018;
+  --color: #dceaf6;
+  
+  // Selected date highlighting
+  --ion-color-primary: #00d4ff;
+  --ion-color-primary-rgb: 0, 212, 255;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-shade: #00b6e6;
+  --ion-color-primary-tint: #3fdcff;
+  
+  // Calendar day cells
+  --ion-color-step-50: #133748;
+  --ion-color-step-100: #0a1018;
+  --ion-color-step-150: #0a1018;
+  --ion-color-step-200: #070b12;
+  --ion-color-step-250: #070b12;
+  --ion-color-step-300: #01070f;
+  
+  // Month/year header and navigation
+  .calendar-header {
+    color: #dceaf6 !important;
+    background: #070b12 !important;
+  }
+  
+  .calendar-header-button {
+    color: #dceaf6 !important;
+    
+    &:hover {
+      background: #133748 !important;
+    }
+  }
+  
+  // Day of week headers (Mon, Tue, etc.)
+  .calendar-month .calendar-day-of-week {
+    color: #88a6bf !important;
+    background: #070b12 !important;
+  }
+  
+  // Individual day cells
+  .calendar-month .calendar-day {
+    color: #dceaf6 !important;
+    background: #0a1018 !important;
+    border: 1px solid #133748 !important;
+    
+    &:hover {
+      background: #133748 !important;
+    }
+    
+    // Selected dates
+    &.calendar-day-active {
+      background: #00d4ff !important;
+      color: #ffffff !important;
+      border-color: #00b6e6 !important;
+    }
+    
+    // Today's date
+    &.calendar-day-today {
+      border-color: #00d4ff !important;
+      font-weight: 600 !important;
+    }
+    
+    // Disabled/outside month dates
+    &.calendar-day-disabled {
+      color: #6a8aa3 !important;
+      background: #050d16 !important;
+    }
+  }
+  
+  // Calendar month container
+  .calendar-month {
+    background: #0a1018 !important;
+  }
+  
+  // Main calendar body
+  .calendar-body {
+    background: #0a1018 !important;
+  }
+}
+
+// Chromium text sweep for S-Rank — mirrors Project 000's .chroma-text.
+// Any element given this class + a var(--rbc-grad) custom property will
+// show the moving thin-film gradient masked to its own glyph shapes,
+// instead of one flat colour cycling.
+.chroma-text {
+  background-image: var(--rbc-grad, none);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+// Coach dashboard on mobile: the sidebar collapses to an off-canvas overlay
+// (see app.component.scss) opened by a hamburger button that floats over
+// the top-left corner of whatever page is showing. Every routed page's own
+// ion-content needs to know to start its content below that button instead
+// of under it — --padding-top is Ionic's own inset property for exactly
+// this, and (unlike a plain CSS padding on an ancestor) it's respected
+// regardless of ion-content's internal absolute-fill positioning.
+@media (max-width: 900px) {
+  ion-app.has-sidebar ion-content {
+    --padding-top: calc(48px + env(safe-area-inset-top));
+  }
+}

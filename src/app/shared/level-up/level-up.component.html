@@ -1,0 +1,64 @@
+@if (event) {
+  <div class="lu-scrim" [class.lu-rank]="isRankUp" [class.lu-xp-only]="isXpOnly"
+       [style.--lu-accent]="accent" [style.--lu-grad]="accentGradient" (click)="dismiss()">
+
+    @if (isRankUp) {
+      <!-- ===================== RANK UP ===================== -->
+      <span class="lu-kicker" [class.on]="step >= 1">PROJECT 000</span>
+
+      <!-- The rank you're leaving, shown then dismissed. Without this the
+           new letter has nothing to be an ascent FROM. -->
+      <div class="lu-old" [class.on]="step >= 1" [class.gone]="step >= 2">
+        <span class="lu-old-letter">{{ oldLetter }}</span>
+        <span class="lu-old-label">{{ event.fromRank }}</span>
+      </div>
+
+      <div class="lu-slam" [class.on]="step >= 2">
+        <span class="lu-slam-letter">{{ newLetter }}</span>
+      </div>
+
+      <div class="lu-titles" [class.on]="step >= 3">
+        <span class="lu-rank-word">RANK UP</span>
+        <span class="lu-rank-name">{{ event.toRank }}</span>
+      </div>
+    } @else if (isXpOnly) {
+      <!-- ====================== XP ONLY ====================== -->
+      <!-- No level crossed. Deliberately the smallest of the three: a
+           takeover this size for every few points of progress would stop
+           being a reward very quickly. -->
+      <span class="lu-kicker" [class.on]="step >= 1">EXPERIENCE GAINED</span>
+
+      <div class="lu-big-num" [class.on]="step >= 1">{{ shownLvl }}</div>
+    } @else {
+      <!-- ===================== LEVEL UP ===================== -->
+      <span class="lu-kicker" [class.on]="step >= 1">PROJECT 000</span>
+
+      <div class="lu-titles" [class.on]="step >= 1">
+        <span class="lu-lvlup-word">LEVEL UP</span>
+      </div>
+
+      <div class="lu-big-num" [class.on]="step >= 1">{{ shownLvl }}</div>
+    }
+
+    <!-- The bar, shared by all three. It's the through-line: the same
+         object fills, wraps, and refills whether one level was crossed or
+         six, so the size of the gain is legible from the motion alone. -->
+    <div class="lu-xp" [class.on]="step >= 1">
+      <div class="lu-xp-track">
+        <!-- rollFlash keys the element, so Angular swaps it on each wrap and
+             the fill animation restarts from empty instead of easing
+             backwards from 100% to 0. -->
+        @for (k of [rollFlash]; track k) {
+          <div class="lu-xp-fill" [style.width.%]="xpPct"></div>
+        }
+      </div>
+      <div class="lu-xp-legend">
+        <span>LVL {{ shownLvl }}</span>
+        <span>{{ xpPct | number:'1.0-0' }}%</span>
+        <span>LVL {{ shownLvl + 1 }}</span>
+      </div>
+    </div>
+
+    <span class="lu-tap" [class.on]="step >= (isRankUp ? 4 : (isXpOnly ? 3 : 3))">tap to continue</span>
+  </div>
+}

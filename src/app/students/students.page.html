@@ -1,247 +1,418 @@
-<ion-header [translucent]="true">
-  <ion-toolbar>
-    <ion-buttons slot="start">
-      <ion-button (click)="goBack()">
-        <ion-icon name="arrow-back"></ion-icon>
-      </ion-button>
-    </ion-buttons>
-    <ion-title>Manage Students</ion-title>
-  </ion-toolbar>
-</ion-header>
-
 <ion-content [fullscreen]="true">
-  <div class="students-container">
-    <div class="header-section">
-      <h2>All Students</h2>
-      <p class="subtitle">Students from sessions and waiver records</p>
+  <div class="clients-page">
+
+    <!-- Header -->
+    <div class="crm-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back">
+        <ion-icon name="arrow-back"></ion-icon>
+      </button>
+      <div class="crm-title">
+        <h1>Clients</h1>
+        <p>{{ rows.length }} total · {{ countByStatus('active') }} active</p>
+      </div>
+      <button class="primary-btn" (click)="newClient()">
+        <ion-icon name="add-outline"></ion-icon>
+        New Client
+      </button>
     </div>
 
-    <ion-list>
-      <ion-item 
-        *ngFor="let student of students" 
-        button 
-        (click)="openStudentDetails(student)"
-        class="student-item">
-        <ion-icon 
-          name="person" 
-          slot="start" 
-          class="student-icon">
-        </ion-icon>
-        <ion-label>
-          <h3 class="student-name">{{ student.name }}</h3>
-          <p class="student-info">
-            Sessions: {{ student.sessions.length }} | 
-            Waivers: {{ student.waivers.length }}
-            <span *ngIf="student.stats && student.stats.totalSessions > 0"> | 
-              Attendance: {{ getAttendanceRate(student) }}%
-            </span>
-          </p>
-        </ion-label>
-        <div slot="end" class="badges-container">
-          <!-- Make-up Sessions Badge (only show if student has missed sessions) -->
-          <ion-badge 
-            *ngIf="hasMissedSessions(student)"
-            [color]="getMakeUpBadgeColor(student)"
-            class="makeup-badge">
-            <ion-icon name="alert-circle" class="badge-icon"></ion-icon>
-            {{ student.stats?.makeUpSessionsRemaining || 0 }} Make-ups
-          </ion-badge>
-          
-          <!-- Attendance Badge (only show if student has attended sessions) -->
-          <ion-badge 
-            *ngIf="student.stats && student.stats.totalSessions > 0"
-            [color]="getAttendanceColor(student)"
-            class="attendance-badge">
-            {{ getAttendanceRate(student) }}%
-          </ion-badge>
-          
-          <!-- Waiver Badge -->
-          <ion-badge 
-            [color]="student.hasWaiver ? 'success' : 'warning'"
-            class="waiver-badge">
-            <ion-icon 
-              [name]="student.hasWaiver ? 'checkmark-circle' : 'close-circle'" 
-              class="badge-icon">
-            </ion-icon>
-            {{ student.hasWaiver ? 'Waiver On File' : 'No Waiver' }}
-          </ion-badge>
-        </div>
-      </ion-item>
-    </ion-list>
+    <!-- Search + filters -->
+    <div class="toolbar">
+      <div class="search-wrap">
+        <ion-icon name="search-outline"></ion-icon>
+        <input
+          class="search-input"
+          type="text"
+          placeholder="Search name, email, phone…"
+          [(ngModel)]="searchQuery" />
+        <button *ngIf="searchQuery" class="search-clear" (click)="searchQuery = ''">
+          <ion-icon name="close-outline"></ion-icon>
+        </button>
+      </div>
+      <div class="filter-chips">
+        <button class="chip" [class.on]="statusFilter === 'all'" (click)="statusFilter = 'all'">All</button>
+        <button class="chip" [class.on]="statusFilter === 'active'" (click)="statusFilter = 'active'">Active</button>
+        <button class="chip" [class.on]="statusFilter === 'prospect'" (click)="statusFilter = 'prospect'">Prospects</button>
+        <button class="chip" [class.on]="statusFilter === 'paused'" (click)="statusFilter = 'paused'">Paused</button>
+        <button class="chip" [class.on]="statusFilter === 'inactive'" (click)="statusFilter = 'inactive'">Inactive</button>
+      </div>
+    </div>
 
-    <div *ngIf="students.length === 0" class="empty-state">
-      <ion-icon name="person" class="empty-icon"></ion-icon>
-      <h3>No Students Found</h3>
-      <p>Students will appear here when you create sessions or when waivers are signed.</p>
+    <!-- Table -->
+    <div *ngIf="loading" class="state-msg">Loading clients…</div>
+
+    <div *ngIf="!loading" class="table-card">
+      <table class="crm-table">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Status</th>
+            <th>Phone</th>
+            <th>Package</th>
+            <th>Sessions Left</th>
+            <th>Last Check-in</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of filteredRows; trackBy: trackByRow" (click)="openClient(row)">
+            <td>
+              <div class="client-cell">
+                <span class="avatar">{{ initials(row.profile.fullName) }}</span>
+                <div>
+                  <div class="name">{{ row.profile.fullName }}</div>
+                  <div class="sub" *ngIf="row.profile.email">{{ row.profile.email }}</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <span class="status-pill" [attr.data-status]="row.profile.currentStatus || 'active'">
+                {{ row.profile.currentStatus || 'active' }}
+              </span>
+            </td>
+            <td class="muted">{{ row.profile.phone || '—' }}</td>
+            <td>
+              <div *ngIf="row.activePackage; else noPkg">
+                <div class="name">{{ row.activePackage.packageName }}</div>
+                <div class="sub">{{ row.activePackage.sessionType }}</div>
+              </div>
+              <ng-template #noPkg><span class="muted">No active package</span></ng-template>
+            </td>
+            <td>
+              <span *ngIf="row.sessionsRemaining !== null"
+                class="sessions-badge"
+                [class.low]="row.sessionsRemaining <= 2 && row.sessionsRemaining > 0"
+                [class.out]="row.sessionsRemaining === 0">
+                {{ row.sessionsRemaining }}<span class="of" *ngIf="row.totalSessions"> / {{ row.totalSessions }}</span>
+              </span>
+              <span *ngIf="row.sessionsRemaining === null" class="muted">—</span>
+            </td>
+            <td class="muted">{{ relativeDate(row.lastCheckIn) }}</td>
+            <td class="chev"><ion-icon name="chevron-forward-outline"></ion-icon></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div *ngIf="filteredRows.length === 0" class="state-msg">
+        <span *ngIf="rows.length === 0">No clients yet — create your first client profile.</span>
+        <span *ngIf="rows.length > 0">No clients match the current search/filter.</span>
+      </div>
     </div>
   </div>
 
-  <!-- Student Details Modal -->
-  <ion-modal [isOpen]="isModalOpen" (didDismiss)="closeModal()">
-    <ng-template>
-      <ion-header>
-        <ion-toolbar>
-          <ion-title>Student Details</ion-title>
-          <ion-buttons slot="end">
-            <ion-button (click)="closeModal()">
-              <ion-icon name="close-circle"></ion-icon>
-            </ion-button>
-          </ion-buttons>
-        </ion-toolbar>
-      </ion-header>
-
-      <ion-content *ngIf="selectedStudent">
-        <div class="modal-content">
-          <!-- Student Info Header -->
-          <ion-card class="student-header-card">
-            <ion-card-header>
-              <ion-card-title class="student-modal-name">
-                <ion-icon name="person" class="modal-person-icon"></ion-icon>
-                {{ selectedStudent.name }}
-              </ion-card-title>
-            </ion-card-header>
-            <ion-card-content>
-              <div class="status-badges">
-                <ion-badge 
-                  [color]="selectedStudent.hasWaiver ? 'success' : 'warning'"
-                  class="status-badge">
-                  <ion-icon 
-                    [name]="selectedStudent.hasWaiver ? 'checkmark-circle' : 'close-circle'">
-                  </ion-icon>
-                  {{ selectedStudent.hasWaiver ? 'Waiver On File' : 'No Waiver On File' }}
-                </ion-badge>
-                
-                <!-- Attendance Badge -->
-                <ion-badge 
-                  *ngIf="selectedStudent.stats && selectedStudent.stats.totalSessions > 0"
-                  [color]="getAttendanceColor(selectedStudent)"
-                  class="status-badge">
-                  {{ getAttendanceRate(selectedStudent) }}% Attendance
-                </ion-badge>
-                
-                <!-- Make-up Sessions Badge -->
-                <ion-badge 
-                  *ngIf="hasMissedSessions(selectedStudent)"
-                  [color]="getMakeUpBadgeColor(selectedStudent)"
-                  class="status-badge">
-                  <ion-icon name="alert-circle"></ion-icon>
-                  {{ selectedStudent.stats?.makeUpSessionsRemaining || 0 }} Make-ups Remaining
-                </ion-badge>
-              </div>
-            </ion-card-content>
-          </ion-card>
-
-          <!-- Attendance Statistics Section -->
-          <ion-card *ngIf="selectedStudent.stats && selectedStudent.stats.totalSessions > 0">
-            <ion-card-header>
-              <ion-card-title>Attendance Statistics</ion-card-title>
-            </ion-card-header>
-            <ion-card-content>
-              <div class="stats-grid">
-                <div class="stat-item">
-                  <div class="stat-number">{{ selectedStudent.stats.totalSessions }}</div>
-                  <div class="stat-label">Total Sessions</div>
-                </div>
-                <div class="stat-item">
-                  <div class="stat-number success">{{ selectedStudent.stats.attendedSessions }}</div>
-                  <div class="stat-label">Attended</div>
-                </div>
-                <div class="stat-item">
-                  <div class="stat-number danger">{{ selectedStudent.stats.missedSessions }}</div>
-                  <div class="stat-label">Missed</div>
-                </div>
-                <div class="stat-item">
-                  <div class="stat-number warning">{{ selectedStudent.stats.makeUpSessionsRemaining }}</div>
-                  <div class="stat-label">Make-ups Remaining</div>
-                </div>
-              </div>
-              
-              <div class="attendance-info" *ngIf="selectedStudent.stats.makeUpSessionsRemaining > 0">
-                <ion-icon name="alert-circle" class="info-icon"></ion-icon>
-                <p>Each missed session earns 2 make-up opportunities. Please schedule make-up sessions to maintain training progress.</p>
-              </div>
-            </ion-card-content>
-          </ion-card>
-
-          <!-- Sessions Section -->
-          <ion-card *ngIf="selectedStudent.sessions.length > 0">
-            <ion-card-header>
-              <ion-card-title>Sessions ({{ selectedStudent.sessions.length }})</ion-card-title>
-            </ion-card-header>
-            <ion-card-content>
-              <div class="sessions-list">
-                <div 
-                  *ngFor="let session of selectedStudent.sessions" 
-                  class="session-item">
-                  <ion-icon name="calendar-outline" class="session-icon"></ion-icon>
-                  {{ session }}
-                </div>
-              </div>
-            </ion-card-content>
-          </ion-card>
-
-          <!-- Waivers Section -->
-          <ion-card *ngIf="selectedStudent.waivers.length > 0">
-            <ion-card-header>
-              <ion-card-title>Waivers ({{ selectedStudent.waivers.length }})</ion-card-title>
-            </ion-card-header>
-            <ion-card-content>
-              <div class="waivers-list">
-                <div 
-                  *ngFor="let waiver of selectedStudent.waivers" 
-                  class="waiver-item">
-                  <div class="waiver-header">
-                    <ion-icon name="document" class="waiver-icon"></ion-icon>
-                    <div class="waiver-info">
-                      <h4>{{ getWaiverTypeDisplay(waiver.waiverType) }}</h4>
-                      <p class="waiver-date">Signed: {{ formatDate(waiver.signedDate) }}</p>
-                    </div>
-                  </div>
-                  
-                  <div class="waiver-details">
-                    <div *ngIf="waiver.waiverType === 'adult'" class="adult-details">
-                      <p><strong>Name:</strong> {{ waiver.fullName }}</p>
-                      <p *ngIf="waiver.phone"><strong>Phone:</strong> {{ waiver.phone }}</p>
-                      <p *ngIf="waiver.email"><strong>Email:</strong> {{ waiver.email }}</p>
-                    </div>
-                    
-                    <div *ngIf="waiver.waiverType === 'child'" class="child-details">
-                      <p><strong>Child:</strong> {{ waiver.childName }}</p>
-                      <p *ngIf="waiver.guardianName"><strong>Guardian:</strong> {{ waiver.guardianName }}</p>
-                      <p *ngIf="waiver.guardianPhone"><strong>Guardian Phone:</strong> {{ waiver.guardianPhone }}</p>
-                      <p *ngIf="waiver.guardianEmail"><strong>Guardian Email:</strong> {{ waiver.guardianEmail }}</p>
-                    </div>
-
-                    <!-- Signature Display -->
-                    <div class="signature-section">
-                      <h4 class="signature-title">Signature:</h4>
-                      <div class="signature-container">
-                        <img 
-                          [src]="waiver.signatureDataUrl" 
-                          alt="Signature" 
-                          class="signature-image"
-                          (error)="onSignatureError($event)">
-                        <div class="signature-info">
-                          <p class="signature-date">Signed on: {{ formatDate(waiver.signedDate) }}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </ion-card-content>
-          </ion-card>
-
-          <!-- No Waiver Message -->
-          <ion-card *ngIf="selectedStudent.waivers.length === 0">
-            <ion-card-content class="no-waiver-message">
-              <ion-icon name="close-circle" class="no-waiver-icon"></ion-icon>
-              <h3>No Waiver On File</h3>
-              <p>This student has not signed a waiver yet. They should complete a waiver before participating in sessions.</p>
-            </ion-card-content>
-          </ion-card>
+  <!-- ============ Detail panel ============ -->
+  <div class="panel-backdrop" *ngIf="panelOpen" (click)="closePanel()"></div>
+  <aside class="detail-panel" [class.open]="panelOpen">
+    <ng-container *ngIf="panelOpen">
+      <div class="panel-header">
+        <div class="panel-headline">
+          <span class="avatar avatar-lg">{{ initials(form.fullName || '') }}</span>
+          <div>
+            <h2
+              [class.name-clickable]="!panelNew"
+              [title]="!panelNew ? 'View signed waiver' : ''"
+              (click)="onClientNameClick()"
+            >{{ panelNew ? 'New Client' : form.fullName }}</h2>
+            <p *ngIf="!panelNew && selected?.profile?.clientId" class="sub">{{ selected?.profile?.clientId }}</p>
+            <p *ngIf="!panelNew && clientWaivers.length" class="sub waiver-hint">
+              <ion-icon name="document-text-outline"></ion-icon>
+              {{ clientWaivers.length }} waiver{{ clientWaivers.length > 1 ? 's' : '' }} on file — tap name to view
+            </p>
+          </div>
         </div>
-      </ion-content>
-    </ng-template>
-  </ion-modal>
-</ion-content> 
+        <button class="icon-btn" (click)="closePanel()" aria-label="Close">
+          <ion-icon name="close-outline"></ion-icon>
+        </button>
+      </div>
+
+      <div class="panel-body">
+        <!-- Profile -->
+        <section class="panel-section">
+          <h3><ion-icon name="person-outline"></ion-icon> Profile</h3>
+          <div class="field-grid">
+            <label class="field">
+              <span>Full name</span>
+              <input type="text" [(ngModel)]="form.fullName" placeholder="Full name" />
+            </label>
+            <label class="field">
+              <span>Status</span>
+              <select [(ngModel)]="form.currentStatus">
+                <option *ngFor="let s of statusOptions" [ngValue]="s">{{ s }}</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Email</span>
+              <input type="email" [(ngModel)]="form.email" placeholder="email@example.com" />
+            </label>
+            <label class="field">
+              <span>Phone</span>
+              <input type="tel" [(ngModel)]="form.phone" placeholder="(555) 555-5555" />
+            </label>
+            <label class="field">
+              <span>Birthdate</span>
+              <input type="date" [(ngModel)]="form.birthdate" />
+            </label>
+            <label class="field">
+              <span>Onboarded</span>
+              <input type="date" [(ngModel)]="form.onboardDate" />
+            </label>
+            <label class="field span-2">
+              <span>Referral source</span>
+              <select [(ngModel)]="form.referralSource">
+                <option value="">—</option>
+                <option value="walk-in">Walk-in</option>
+                <option value="friend">Friend</option>
+                <option value="online">Online</option>
+                <option value="social">Social Media</option>
+                <option value="event">Event</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Sex</span>
+              <select [(ngModel)]="groupSex">
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Cell</span>
+              <input type="number" inputmode="numeric" min="0" [(ngModel)]="groupCell" placeholder="0" />
+            </label>
+            <label class="field">
+              <span>Generation</span>
+              <input type="number" inputmode="numeric" min="0" [(ngModel)]="groupGeneration" placeholder="0" />
+            </label>
+            <label class="field">
+              <span>Cohort</span>
+              <input type="number" inputmode="numeric" min="0" [(ngModel)]="groupCohort" placeholder="0" />
+            </label>
+            <label class="field span-2">
+              <span>Job Hours Earned</span>
+              <input type="number" inputmode="decimal" min="0" step="0.5" [(ngModel)]="form.totalHours" placeholder="0" />
+            </label>
+          </div>
+          <button class="primary-btn full" [disabled]="panelSaving" (click)="saveProfile()">
+            <ion-icon name="save-outline"></ion-icon>
+            {{ panelSaving ? 'Saving…' : (panelNew ? 'Create Client' : 'Save Changes') }}
+          </button>
+        </section>
+
+        <!-- Packages -->
+        <section class="panel-section" *ngIf="!panelNew">
+          <h3><ion-icon name="cube-outline"></ion-icon> Packages</h3>
+          <div *ngIf="clientPackages.length === 0" class="empty-note">
+            No packages linked — link one on the Packages page.
+          </div>
+          <div class="pkg-row" *ngFor="let pkg of clientPackages">
+            <div class="pkg-info">
+              <div class="name">{{ pkg.packageName }}</div>
+              <div class="sub">
+                {{ pkg.sessionType }} · {{ pkg.status }}
+                <span *ngIf="pkg.expirationDate"> · ends {{ pkg.expirationDate | date: 'MMM d' }}</span>
+              </div>
+            </div>
+            <div class="pkg-sessions" *ngIf="pkg.status === 'active'">
+              <button class="step-btn" (click)="adjustSessions(pkg, -1)" aria-label="Remove one session">
+                <ion-icon name="remove-outline"></ion-icon>
+              </button>
+              <div class="count">
+                <strong>{{ pkg.sessionsRemaining ?? pkg.totalSessions ?? 0 }}</strong>
+                <span class="of">/ {{ pkg.totalSessions }}</span>
+              </div>
+              <button class="step-btn" (click)="adjustSessions(pkg, 1)" aria-label="Add one session">
+                <ion-icon name="add-outline"></ion-icon>
+              </button>
+            </div>
+            <div class="pkg-sessions muted" *ngIf="pkg.status !== 'active'">
+              {{ pkg.sessionsRemaining ?? 0 }} / {{ pkg.totalSessions }}
+            </div>
+          </div>
+        </section>
+
+        <!-- Omni Method level -->
+        <section class="panel-section" *ngIf="!panelNew">
+          <h3><ion-icon name="trending-up-outline"></ion-icon> Omni Level</h3>
+          <div class="omni-level-row" *ngIf="clientLatestAssessment; else noOmni">
+            <div class="omni-level-num" [style.--rbc-grad]="levelGrad(clientLatestAssessment.lvl, groupSex)">
+              <strong [style.color]="levelColor(clientLatestAssessment.lvl, groupSex)" [class.chroma-text]="isChroma(clientLatestAssessment.lvl, groupSex)">{{ clientLatestAssessment.lvl }}</strong>
+              <span class="omni-rank" [style.color]="levelColor(clientLatestAssessment.lvl, groupSex)">
+                <span class="rank-letter" [class.chroma-text]="isChroma(clientLatestAssessment.lvl, groupSex)">{{ rankLetter(clientLatestAssessment.rank) }}</span>
+                <span class="rank-caption">{{ rankLabel(clientLatestAssessment.rank) }}</span>
+              </span>
+            </div>
+            <div class="omni-level-meta">
+              <span class="when">Assessed {{ clientLatestAssessment.dateLabel }}</span>
+              <button class="ghost-btn" (click)="openAssessment()">
+                <ion-icon name="trending-up-outline"></ion-icon> View / Update
+              </button>
+            </div>
+          </div>
+          <ng-template #noOmni>
+            <div class="empty-note">No assessment yet.</div>
+            <button class="ghost-btn full" (click)="openAssessment()">
+              <ion-icon name="trending-up-outline"></ion-icon> Record Assessment
+            </button>
+          </ng-template>
+        </section>
+
+        <!-- Check-in history -->
+        <section class="panel-section" *ngIf="!panelNew">
+          <h3><ion-icon name="log-in-outline"></ion-icon> Recent Check-ins</h3>
+          <div *ngIf="paymentsLoading" class="empty-note">Loading…</div>
+          <div *ngIf="!paymentsLoading && clientCheckIns.length === 0" class="empty-note">
+            No check-ins yet.
+          </div>
+          <div class="history-row" *ngFor="let c of clientCheckIns">
+            <span class="dot" [class.warn]="!c.decremented"></span>
+            <span class="when">{{ formatDateTime(c.checkInTime) }}</span>
+            <span class="what" *ngIf="c.decremented">
+              −1 session<span *ngIf="c.sessionsRemainingAfter !== null"> · {{ c.sessionsRemainingAfter }} left</span>
+            </span>
+            <span class="what warn" *ngIf="!c.decremented">no session deducted</span>
+          </div>
+        </section>
+
+        <!-- Workout history -->
+        <section class="panel-section" *ngIf="!panelNew">
+          <h3>
+            <ion-icon name="barbell-outline"></ion-icon> Workout History
+            <span class="total" *ngIf="clientWorkouts.length">{{ clientWorkouts.length }} logged</span>
+          </h3>
+          <div *ngIf="paymentsLoading" class="empty-note">Loading…</div>
+          <div *ngIf="!paymentsLoading && clientWorkouts.length === 0" class="empty-note">
+            No workouts logged yet.
+          </div>
+          <button class="workout-row" *ngFor="let w of clientWorkouts" (click)="openWorkoutLog(w)">
+            <span class="dot"></span>
+            <span class="w-main">
+              <span class="w-title">{{ workoutTitle(w) }}</span>
+              <span class="w-sub">{{ workoutDate(w) }} · {{ workoutSummary(w) }}</span>
+            </span>
+            <ion-icon name="chevron-forward" class="w-chevron"></ion-icon>
+          </button>
+        </section>
+
+        <!-- Payments -->
+        <section class="panel-section" *ngIf="!panelNew">
+          <h3>
+            <ion-icon name="card-outline"></ion-icon> Payments
+            <span class="total" *ngIf="clientPayments.length">{{ formatCurrency(paymentsTotal) }} paid</span>
+          </h3>
+          <div *ngIf="!paymentsLoading && clientPayments.length === 0" class="empty-note">
+            No payments recorded.
+          </div>
+          <div class="history-row" *ngFor="let p of clientPayments">
+            <span class="dot" [class.warn]="p.paymentStatus !== 'paid'"></span>
+            <span class="when">{{ p.date | date: 'MMM d, y' }}</span>
+            <span class="what">{{ formatCurrency(p.amount) }} · {{ p.paymentMethod }}
+              <em *ngIf="p.paymentStatus !== 'paid'">({{ p.paymentStatus }})</em>
+            </span>
+          </div>
+
+          <button *ngIf="!showPaymentForm" class="ghost-btn full" (click)="showPaymentForm = true">
+            <ion-icon name="add-outline"></ion-icon> Record Payment
+          </button>
+
+          <div *ngIf="showPaymentForm" class="payment-form">
+            <div class="field-grid">
+              <label class="field">
+                <span>Amount</span>
+                <input type="number" inputmode="decimal" min="0" [(ngModel)]="paymentForm.amount" placeholder="0.00" />
+              </label>
+              <label class="field">
+                <span>Date</span>
+                <input type="date" [(ngModel)]="paymentForm.date" />
+              </label>
+              <label class="field">
+                <span>Method</span>
+                <select [(ngModel)]="paymentForm.paymentMethod">
+                  <option value="cash">Cash</option>
+                  <option value="venmo">Venmo</option>
+                  <option value="zelle">Zelle</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Status</span>
+                <select [(ngModel)]="paymentForm.paymentStatus">
+                  <option value="paid">Paid</option>
+                  <option value="planning">Planned</option>
+                </select>
+              </label>
+              <label class="field span-2">
+                <span>Notes</span>
+                <input type="text" [(ngModel)]="paymentForm.notes" placeholder="Optional note" />
+              </label>
+            </div>
+            <div class="form-actions">
+              <button class="primary-btn" (click)="savePayment()">Save Payment</button>
+              <button class="ghost-btn" (click)="showPaymentForm = false">Cancel</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Danger zone -->
+        <section class="panel-section danger" *ngIf="!panelNew && selected?.profile?.id">
+          <button class="danger-btn" (click)="deleteClient()">
+            <ion-icon name="trash-outline"></ion-icon> Delete Client
+          </button>
+        </section>
+      </div>
+    </ng-container>
+  </aside>
+</ion-content>
+
+<!-- Waiver list — reachable from tapping the client's name in the panel header -->
+<div class="waiver-list-modal" [class.open]="waiverListOpen">
+  <div class="pdf-backdrop" (click)="closeWaiverList()"></div>
+  <div class="waiver-list-shell">
+    <div class="pdf-toolbar">
+      <span class="pdf-toolbar-label">Signed Waivers</span>
+      <button class="pdf-close" (click)="closeWaiverList()">
+        <ion-icon name="close-outline"></ion-icon>
+        Close
+      </button>
+    </div>
+    <div class="waiver-list-body">
+      <button
+        class="waiver-row"
+        *ngFor="let w of clientWaivers"
+        (click)="openWaiverPdf(w)"
+      >
+        <div class="waiver-row-info">
+          <div class="name">{{ waiverDisplayName(w) }}</div>
+          <div class="sub">{{ waiverTypeLabel(w) }} · Signed {{ w.signedDate | date: 'MMM d, y' }}</div>
+        </div>
+        <ion-icon name="document-text-outline"></ion-icon>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Waiver PDF preview — kept outside ion-content so position:fixed isn't
+     trapped by Ionic's scroll container (and the scale-to-fit math gets real
+     dimensions). Mirrors the assessment report PDF pattern. -->
+<div class="pdf-modal" [class.open]="pdfOpen">
+  <div class="pdf-backdrop" (click)="closeWaiverPdf()"></div>
+  <div class="pdf-shell">
+    <div class="pdf-toolbar">
+      <span class="pdf-toolbar-label">Waiver Preview — A4</span>
+      <div class="pdf-actions">
+        <button class="pdf-download" (click)="downloadWaiverPdf()">
+          <ion-icon name="download-outline"></ion-icon>
+          Download
+        </button>
+        <button class="pdf-close" (click)="closeWaiverPdf()">
+          <ion-icon name="close-outline"></ion-icon>
+          Close
+        </button>
+      </div>
+    </div>
+    <div class="pdf-scroll" #waiverPdfScroll>
+      <div class="pdf-scale-wrap" #waiverPdfScaleWrap>
+        <div class="pdf-page" #waiverPdfPage></div>
+      </div>
+    </div>
+  </div>
+</div>

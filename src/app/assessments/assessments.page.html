@@ -1,0 +1,479 @@
+<ion-content [fullscreen]="true">
+  <div class="omni-page" [class.compare]="compare">
+
+    <!-- Header -->
+    <div class="omni-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back">
+        <ion-icon name="arrow-back"></ion-icon>
+      </button>
+      <div class="omni-titles">
+        <h1>Assessments</h1>
+      </div>
+
+      <div class="mode-wrap">
+        <span class="mode-label">Compare</span>
+        <div class="mode-toggle">
+          <button [class.on]="panelCount === 1" (click)="setCount(1)">1</button>
+          <button [class.on]="panelCount === 2" (click)="setCount(2)">2</button>
+          <button [class.on]="panelCount === 3" (click)="setCount(3)">3</button>
+          <button [class.on]="panelCount === 4" (click)="setCount(4)">4</button>
+        </div>
+      </div>
+
+      <!-- Group lookup: type the 3-digit cell/generation/cohort code and
+           hit Enter to switch straight into an N-person compare view, one
+           editor per member in that group, lowest level first. Sits in the
+           header to the right of Compare now instead of its own row below. -->
+      <div class="group-lookup-input-wrap">
+        <label class="field-label" for="group-code-input">Group Code</label>
+        <input
+          id="group-code-input"
+          class="text-input group-code-input"
+          type="text"
+          inputmode="numeric"
+          maxlength="3"
+          placeholder="000"
+          [ngModel]="groupCode"
+          (ngModelChange)="onGroupCodeInput($event)"
+          (keydown.enter)="searchGroupAndPopulate()" />
+      </div>
+    </div>
+
+    <div class="group-lookup-status-wrap" *ngIf="groupSearching || groupSearched">
+      <span *ngIf="groupSearching" class="group-lookup-status">Searching…</span>
+      <span *ngIf="!groupSearching && groupSearched && !groupResults.length" class="group-lookup-status">
+        No members in group {{ groupCode }}
+      </span>
+      <!-- Big cell/generation/cohort banner, tinted to the group's average
+           rank (see groupAverageRank's comment for how a mixed-sex group is
+           averaged fairly). Each digit gets its own small caption underneath
+           it instead of one flat run of equally-weighted text, so the
+           numbers read as the headline and CELL/GENERATION/COHORT read as
+           labels under them — the hierarchy a title needs. -->
+      <div class="group-banner" *ngIf="!groupSearching && groupResults.length" [style.color]="groupAverageColor" [style.--rbc-grad]="groupAverageGrad">
+        <div class="group-banner-item">
+          <span class="group-banner-value" [class.chroma-text]="groupIsChroma">{{ groupCell }}</span>
+          <span class="group-banner-label">Cell</span>
+        </div>
+        <span class="group-banner-sep">·</span>
+        <div class="group-banner-item">
+          <span class="group-banner-value" [class.chroma-text]="groupIsChroma">{{ groupGeneration }}</span>
+          <span class="group-banner-label">Generation</span>
+        </div>
+        <span class="group-banner-sep">·</span>
+        <div class="group-banner-item">
+          <span class="group-banner-value" [class.chroma-text]="groupIsChroma">{{ groupCohort }}</span>
+          <span class="group-banner-label">Cohort</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- One workspace per panel: entry form (left) + results (right) -->
+    <div class="editors" [class.compare]="compare"
+      [class.cols-3]="panelCount === 3" [class.cols-4]="panelCount === 4">
+      <div class="editor" *ngFor="let panel of panels; let pi = index; trackBy: trackPanel" [style.--rbc]="panel.rankColor" [style.--rbc-bg]="panel.rankBgColor" [style.--rbc-grad]="panel.rankGrad" [style.--rbc-glare]="panel.rankGlare">
+
+        <!-- ============ Entry form ============ -->
+        <div class="form-pane">
+
+          <!-- Current/Goals, mirroring Project 000's toggle exactly: same
+               form and results below, switched by what they read from and
+               save to. -->
+          <div class="view-toggle" *ngIf="panel.athleteName.trim()">
+            <button type="button" [class.active]="panel.view === 'current'" (click)="setView(panel, 'current')">Current</button>
+            <button type="button" [class.active]="panel.view === 'goals'" (click)="setView(panel, 'goals')">Goals</button>
+          </div>
+
+          <div class="field">
+            <label class="field-label">Athlete</label>
+            <div class="combo" [class.open]="panel.nameOpen">
+              <input
+                class="text-input combo-input"
+                type="text"
+                placeholder="Select or type a client"
+                autocomplete="off"
+                [(ngModel)]="panel.athleteName"
+                (focus)="openNames(panel)"
+                (input)="filterNames(panel)"
+                (change)="commitAthleteName(panel)" />
+              <button class="combo-toggle" type="button" (click)="toggleNames(panel)" aria-label="Show clients">
+                <ion-icon name="chevron-down-outline"></ion-icon>
+              </button>
+              <div class="combo-list" *ngIf="panel.nameOpen">
+                <button
+                  type="button"
+                  class="combo-item"
+                  *ngFor="let name of panel.filteredNames; trackBy: trackName"
+                  [class.selected]="name === panel.athleteName"
+                  (mousedown)="selectClient(panel, name, $event)">
+                  {{ name }}
+                </button>
+                <div class="combo-empty" *ngIf="!panel.filteredNames.length">No matching clients</div>
+              </div>
+            </div>
+          </div>
+
+          <p class="history-loading" *ngIf="panel.loadingHistory">Loading previous assessments…</p>
+
+          <div class="field" *ngIf="!panel.loadingHistory && panel.history.length">
+            <label class="field-label">Previous Assessments</label>
+            <div class="history-controls">
+              <select class="text-input" [(ngModel)]="panel.selectedHistoryTs" (change)="loadSelectedHistory(panel)">
+                <option value="">— View past assessments —</option>
+                <option *ngFor="let h of historyOptions(panel)" [value]="h.timestamp">{{ h.dateLabel }} — Lvl {{ dispLvl(h.lvl) }}</option>
+              </select>
+              <button class="delete-btn" [disabled]="!panel.selectedHistoryTs" (click)="deleteSelectedHistory(panel)" aria-label="Delete assessment">
+                <ion-icon name="trash-outline"></ion-icon>
+              </button>
+            </div>
+          </div>
+
+          <!-- Anthropometrics -->
+          <div class="form-section">
+            <div class="fs-title">Anthropometrics</div>
+            <div class="form-row">
+              <label class="fr-label">Body Weight</label>
+              <div class="fr-input-wrap">
+                <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.bodyWeight" />
+                <span class="fr-suffix">lbs</span>
+              </div>
+            </div>
+            <div class="form-row">
+              <label class="fr-label">Height</label>
+              <div class="fr-input-wrap">
+                <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.height" />
+                <span class="fr-suffix">in</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Strength -->
+          <div class="form-section">
+            <div class="fs-title">Strength</div>
+            <div class="form-row" *ngFor="let lift of strengthLifts">
+              <label class="fr-label">
+                {{ lift.label }}
+                <span class="fr-hint">{{ oneRmLabel(panel, lift) }}</span>
+              </label>
+              <div class="fr-inputs">
+                <div class="fr-input-wrap">
+                  <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form[lift.weightField]" />
+                  <span class="fr-suffix">{{ lift.key === 'pullup1rm' ? '+lbs' : 'lbs' }}</span>
+                </div>
+                <div class="fr-input-wrap fr-input-wrap--reps">
+                  <input class="fr-input" type="number" placeholder="1" min="1" max="36" [(ngModel)]="panel.form[lift.repsField]" />
+                  <span class="fr-suffix">reps</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Power -->
+          <div class="form-section">
+            <div class="fs-title">Power</div>
+            <div class="form-row">
+              <label class="fr-label">Long Jump</label>
+              <div class="fr-input-wrap">
+                <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.longjump" />
+                <span class="fr-suffix">in</span>
+              </div>
+            </div>
+            <div class="form-row">
+              <label class="fr-label">100m Sprint</label>
+              <div class="fr-input-wrap">
+                <input class="fr-input" type="number" step="0.01" placeholder="0.00" [(ngModel)]="panel.form.sprint" />
+                <span class="fr-suffix">sec</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Muscular Endurance -->
+          <div class="form-section">
+            <div class="fs-title">Muscular Endurance</div>
+            <div class="form-row">
+              <label class="fr-label">Pushups</label>
+              <div class="fr-input-wrap">
+                <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.pushups" />
+                <span class="fr-suffix">reps</span>
+              </div>
+            </div>
+            <div class="form-row">
+              <label class="fr-label">Pull-ups</label>
+              <div class="fr-input-wrap">
+                <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.pullups" />
+                <span class="fr-suffix">reps</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cardio -->
+          <div class="form-section">
+            <div class="fs-title">Cardio</div>
+            <div class="form-row">
+              <label class="fr-label">30 Min Run</label>
+              <div class="fr-input-wrap">
+                <input class="fr-input" type="number" step="0.01" placeholder="0.00"
+                       [ngModel]="panel.form.run30Display" (ngModelChange)="onSpeedDisplayChanged(panel, 'run30', $event)" />
+                <select class="fr-unit-select" [ngModel]="panel.form.run30Unit" (ngModelChange)="onSpeedUnitChanged(panel, 'run30', $event)">
+                  <option value="mph">mph</option>
+                  <option value="km">km</option>
+                  <option value="minkm">min/km</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <label class="fr-label">2 Min Speed</label>
+              <div class="fr-input-wrap">
+                <input class="fr-input" type="number" step="0.001" placeholder="0.000"
+                       [ngModel]="panel.form.speed2Display" (ngModelChange)="onSpeedDisplayChanged(panel, 'speed2', $event)" />
+                <select class="fr-unit-select" [ngModel]="panel.form.speed2Unit" (ngModelChange)="onSpeedUnitChanged(panel, 'speed2', $event)">
+                  <option value="mph">mph</option>
+                  <option value="km">km</option>
+                  <option value="minkm">min/km</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Flexibility -->
+          <div class="form-section">
+            <div class="fs-title">Flexibility</div>
+            <div class="form-row">
+              <label class="fr-label">Pike</label>
+              <div class="fr-input-wrap">
+                <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.pike" />
+                <span class="fr-suffix">0–10</span>
+              </div>
+            </div>
+            <div class="form-row">
+              <label class="fr-label">Backbend</label>
+              <div class="fr-input-wrap">
+                <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.backbend" />
+                <span class="fr-suffix">0–10</span>
+              </div>
+            </div>
+            <div class="form-row">
+              <label class="fr-label">Straddle</label>
+              <div class="fr-input-wrap">
+                <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.straddle" />
+                <span class="fr-suffix">deg</span>
+              </div>
+            </div>
+          </div>
+
+          <p class="error-msg" *ngIf="panel.errorMsg">Please fill in all fields before calculating.</p>
+
+          <button class="calc-btn" *ngIf="panel.view === 'current'" (click)="calculate(panel)" [disabled]="panel.saving">
+            {{ panel.saving ? 'SAVING…' : (panel.backdateOpen && panel.backdate ? 'SAVE FOR ' + backdateLabel(panel) : 'CALCULATE OMNI SCORE') }}
+          </button>
+          <button class="calc-btn goal-calc-btn" *ngIf="panel.view === 'goals'" (click)="calculateGoal(panel)" [disabled]="panel.saving">
+            {{ panel.saving ? 'SAVING…' : (panel.goal ? 'UPDATE GOAL' : 'SET GOAL') }}
+          </button>
+
+          <p class="save-note" *ngIf="panel.view === 'current' && !panel.backdateOpen">
+            Saves as today's snapshot — one per day. Recalculating today updates it.
+            <button type="button" class="backdate-link" (click)="toggleBackdate(panel, true)">Log a past date</button>
+          </p>
+          <!-- Goals have no date — a target isn't a thing that happened on a
+               day, it's what today's inputs are aimed at. -->
+          <p class="save-note" *ngIf="panel.view === 'goals'">
+            <ng-container *ngIf="panel.goal">
+              Saves as this athlete's single target — the same goal Project 000 shows them.
+              Last set by {{ panel.goal.updatedBy }}, {{ panel.goal.updatedAt | date:'MMM d, y' }}.
+            </ng-container>
+            <ng-container *ngIf="!panel.goal">
+              No goal set yet — the form is prefilled with their current numbers.
+              Adjust whatever you're targeting and save.
+            </ng-container>
+          </p>
+
+          <div class="backdate-row" *ngIf="panel.view === 'current' && panel.backdateOpen">
+            <div class="backdate-controls">
+              <input class="text-input" type="date" [max]="todayStr" [(ngModel)]="panel.backdate" />
+              <button type="button" class="backdate-cancel" (click)="toggleBackdate(panel, false)" aria-label="Back to today">
+                <ion-icon name="close-outline"></ion-icon>
+                Today
+              </button>
+            </div>
+            <p class="save-note" *ngIf="!panel.backdate">Pick the date this assessment was actually done.</p>
+            <p class="save-note save-note--warn" *ngIf="panel.backdate && hasEntryOn(panel, panel.backdate)">
+              {{ backdateLabel(panel) }} already has a snapshot — saving will update it.
+            </p>
+            <p class="save-note" *ngIf="panel.backdate && !hasEntryOn(panel, panel.backdate)">
+              Will save as {{ backdateLabel(panel) }}.
+            </p>
+          </div>
+        </div>
+
+        <!-- ============ Results ============ -->
+        <div class="result-pane">
+
+          <div class="result-empty" *ngIf="!(panel.showResult && panel.result)">
+            <ion-icon name="trending-up-outline"></ion-icon>
+            <h3>No Result Yet</h3>
+            <p>Pick a client to see their latest assessment,<br />or enter scores and calculate.</p>
+          </div>
+
+          <div class="result-panel" *ngIf="panel.showResult && panel.result" [style.--rbc]="panel.rankColor" [style.--rbc-bg]="panel.rankBgColor" [style.--rbc-grad]="panel.rankGrad" [style.--rbc-glare]="panel.rankGlare">
+            <div class="result-hero">
+              <div class="result-hero-top">
+                <div class="result-name">{{ panel.resultName || '—' }}</div>
+                <div class="rank-badge" [style.color]="panel.rankColor">
+                  <span class="rank-letter" [class.chroma-text]="panel.isChroma">{{ rankLetter(panel.rank) }}</span>
+                  <span class="rank-caption">{{ rankLabel(panel.rank) }}</span>
+                </div>
+              </div>
+              <div class="omni-score-row">
+                <div class="omni-score-label">Level</div>
+                <div class="omni-score-value" [style.color]="panel.rankColor" [class.chroma-text]="panel.isChroma">{{ dispLvl(panel.result.lvl) }}</div>
+                <div class="level-delta" *ngIf="panel.levelDelta" [style.color]="panel.levelDelta.color">
+                  {{ panel.levelDelta.text }}
+                </div>
+              </div>
+              <div class="score-bar-wrap">
+                <div class="score-bar-bg">
+                  <div class="score-bar-fill" [class.no-anim]="panel.barSnap"
+                    [style.width.%]="panel.barWidth" [style.background]="panel.rankColor"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="sub-scores">
+              <div class="sub-card" *ngFor="let s of panel.subCards">
+                <div class="sub-card-top">
+                  <div class="sub-card-label">{{ subCardLabel(s.label) }}</div>
+                  <div class="sub-card-delta" [style.color]="s.deltaColor">{{ s.deltaText }}</div>
+                </div>
+                <div class="sub-card-value" [style.color]="panel.rankColor">{{ s.value | number:'1.1-1' }}</div>
+                <div class="sub-bar-bg">
+                  <div class="sub-bar-fill" [style.width.%]="s.pct" [style.background]="panel.rankColor"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Mini level-progression sparkline (needs 2+ assessments) -->
+            <div class="insight-block" *ngIf="panel.chart">
+              <div class="insight-title">Level Progression</div>
+              <svg class="mini-chart" viewBox="0 0 600 100" preserveAspectRatio="xMidYMid meet">
+                <text *ngFor="let xl of panel.chart.xLabels" [attr.x]="xl.x" [attr.y]="96" class="chart-date">{{ xl.label }}</text>
+                <path [attr.d]="panel.chart.path" fill="none" [attr.stroke]="panel.rankColor" stroke-width="2.5"
+                  stroke-linejoin="round" stroke-linecap="round"></path>
+                <g *ngFor="let p of panel.chart.points; trackBy: trackPoint">
+                  <circle [attr.cx]="p.x" [attr.cy]="p.y" [attr.r]="p.radius"
+                    [attr.fill]="p.current ? panel.rankColor : '#04070c'"
+                    [attr.stroke]="panel.rankColor" stroke-width="2"></circle>
+                  <text *ngIf="p.showValue" [attr.x]="p.x" [attr.y]="p.y - 9" class="chart-lvl" [attr.fill]="panel.rankColor">{{ dispLvl(p.value) }}</text>
+                </g>
+              </svg>
+            </div>
+
+            <!-- Category balance radar + highest level impact, side by side -->
+            <div class="insight-row">
+              <div class="insight-block" *ngIf="panel.radar">
+                <div class="insight-title insight-title--split">
+                  <span>Category Balance</span>
+                  <div class="scale-toggles">
+                    <div class="scale-toggle">
+                      <button type="button" [class.on]="!panel.radarNormalized" (click)="setRadarScale(panel, false)">Raw</button>
+                      <button type="button" [class.on]="panel.radarNormalized" (click)="setRadarScale(panel, true)">Adjusted</button>
+                    </div>
+                    <div class="scale-toggle">
+                      <button type="button" [class.on]="!panel.radarFit" (click)="setRadarFit(panel, false)">1:1</button>
+                      <button type="button" [class.on]="panel.radarFit" (click)="setRadarFit(panel, true)">Fit</button>
+                    </div>
+                  </div>
+                </div>
+                <svg class="radar-chart" viewBox="0 0 320 232" preserveAspectRatio="xMidYMid meet">
+                  <polygon *ngFor="let ring of panel.radar.rings" [attr.points]="ring" class="radar-ring"></polygon>
+                  <line *ngFor="let a of panel.radar.axes" x1="160" y1="120" [attr.x2]="a.x2" [attr.y2]="a.y2" class="radar-axis"></line>
+                  <polygon *ngIf="panel.radar.prevPts" [attr.points]="panel.radar.prevPts" class="radar-prev"></polygon>
+                  <polygon [attr.points]="panel.radar.currentPts" class="radar-current"
+                    [attr.fill]="panel.rankColor" [attr.stroke]="panel.rankColor"></polygon>
+                  <circle *ngFor="let d of panel.radar.currentDots" [attr.cx]="d.x" [attr.cy]="d.y" r="3"
+                    [attr.fill]="panel.rankColor"></circle>
+                  <text *ngFor="let l of panel.radar.labels" [attr.x]="l.x" [attr.y]="l.y"
+                    [attr.text-anchor]="l.anchor" class="radar-label">{{ l.text }}</text>
+                </svg>
+                <div class="chart-legend">
+                  <span class="legend-item legend-level">
+                    <span class="legend-swatch" [style.background]="panel.rankColor"></span>Current
+                  </span>
+                  <span class="legend-item legend-compare" *ngIf="panel.compareOptions.length">
+                    <span class="legend-swatch legend-swatch--dashed"></span>
+                    <span class="compare-vs">vs</span>
+                    <select class="compare-select" [ngModel]="panel.compareTs"
+                      (ngModelChange)="setComparison(panel, $event)">
+                      <option *ngFor="let o of panel.compareOptions; trackBy: trackCompare" [value]="o.timestamp">
+                        {{ o.dateLabel }} — Lvl {{ dispLvl(o.lvl) }}
+                      </option>
+                    </select>
+                  </span>
+                  <span class="legend-item legend-zoom" *ngIf="panel.radar.zoom > 1">
+                    ×{{ panel.radar.zoom | number:'1.1-1' }} zoom
+                  </span>
+                </div>
+                <div class="radar-note" *ngIf="panel.radarNormalized">
+                  Axes rescaled for typical score spread: Power 30–100, Flexibility 30–100, Endurance 0–70.
+                </div>
+              </div>
+
+              <div class="insight-block" *ngIf="panel.opportunities.length">
+                <div class="insight-title">
+                  <ion-icon name="trending-up-outline"></ion-icon>
+                  Estimated 1-Month Progression
+                </div>
+                <div class="impact-row" *ngFor="let o of panel.opportunities; let oi = index; trackBy: trackOpp">
+                  <div class="impact-num">{{ oi + 1 }}</div>
+                  <div class="impact-body">
+                    <div class="impact-label">{{ o.label }}</div>
+                    <div class="impact-detail">{{ o.detail }}</div>
+                  </div>
+                  <div class="impact-gain">
+                    <div class="impact-gain-val" [style.color]="panel.rankColor">{{ o.gain }}</div>
+                    <div class="impact-gain-sub">to lvl {{ o.projectedLvl }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button class="print-btn" (click)="openPdf(panel)">
+              <ion-icon name="document-text-outline"></ion-icon>
+              Preview PDF Report
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</ion-content>
+
+<!-- PDF preview modal — kept outside ion-content so position:fixed isn't trapped
+     by Ionic's scroll container (and the scale-to-fit math gets real dimensions). -->
+<div class="pdf-modal" [class.open]="pdfOpen">
+  <div class="pdf-backdrop" (click)="closePdf()"></div>
+  <div class="pdf-shell">
+    <div class="pdf-toolbar">
+      <span class="pdf-toolbar-label">PDF Preview — A4</span>
+      <div class="pdf-actions">
+        <button class="pdf-download" (click)="downloadPdf()">
+          <ion-icon name="download-outline"></ion-icon>
+          Download
+        </button>
+        <button class="pdf-close" (click)="closePdf()">
+          <ion-icon name="close-outline"></ion-icon>
+          Close
+        </button>
+      </div>
+    </div>
+    <div class="pdf-scroll" #pdfScroll>
+      <div class="pdf-scale-wrap" #pdfScaleWrap>
+        <div class="pdf-page" #pdfPage></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Full-screen rank-up takeover, ported from Project 000. Outside
+     ion-content so it covers the page rather than scrolling with it. -->
+<app-level-up></app-level-up>

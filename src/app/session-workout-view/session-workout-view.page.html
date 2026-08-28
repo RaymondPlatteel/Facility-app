@@ -1,0 +1,78 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/schedule"></ion-back-button>
+    </ion-buttons>
+    <ion-title>{{ workout?.name || 'Workout' }}</ion-title>
+    <ion-buttons slot="end">
+      <ion-button fill="clear" (click)="editWorkout()">
+        <ion-icon name="create-outline"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true" class="workout-timer-display">
+  <div *ngIf="!loading && !error && session && workout" class="workout-container">
+    <!-- Section Header -->
+    <div class="section-header-card">
+      <div class="section-title-row">
+        <h2 class="section-title">{{ currentSection?.name | titlecase }}</h2>
+        <div class="section-meta">
+          <span class="section-date">{{ formatDate(session.date) }}</span>
+          <span class="section-time">{{ formatTime(session.date) }}</span>
+        </div>
+      </div>
+      <div class="timer-row">
+        <ion-icon name="time-outline"></ion-icon>
+        <span class="timer-text">{{ formatTimerTime(workoutElapsedTime) }}</span>
+      </div>
+      <!-- Progress Bar -->
+      <div class="progress-bar-container">
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" [style.width.%]="getSectionProgress()"></div>
+        </div>
+        <div class="progress-bar-label">{{ getSectionProgress() | number:'1.0-0' }}%</div>
+      </div>
+      <div class="participants-row">
+        <div *ngFor="let participant of session?.participants" class="participant-chip">
+          {{ participant }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Exercise List -->
+    <div class="exercise-list">
+      <div *ngFor="let exercise of currentSection?.exercises; let i = index" class="exercise-card">
+        <div class="exercise-header">
+          <div class="exercise-number">{{ i + 1 }}</div>
+          <div class="exercise-name">{{ exercise.name }}</div>
+        </div>
+        <div class="exercise-details" *ngIf="getCompactExerciseDetails(exercise)">{{ getCompactExerciseDetails(exercise) }}</div>
+        <div class="exercise-notes" *ngIf="exercise.notes">{{ exercise.notes }}</div>
+        <div class="weights-row" *ngIf="session?.participants?.length">
+          <div *ngFor="let participant of session.participants" class="weight-chip">
+            <ng-container *ngIf="isResistanceExercise(exercise); else dash">{{ getParticipantWeight(participant, exercise) }}</ng-container>
+            <ng-template #dash>—</ng-template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Buttons -->
+    <div class="control-buttons">
+      <ion-button expand="block" fill="outline" (click)="previousSection()" [disabled]="currentSectionIndex === 0">
+        Previous Section
+      </ion-button>
+      <ion-button expand="block" fill="solid" color="primary" (click)="nextSection()">
+        {{ currentSectionIndex === ((workout.sections?.length || 0) - 1) ? 'Finish Workout' : 'Next Section' }}
+      </ion-button>
+    </div>
+  </div>
+  <div *ngIf="loading" class="loading-container">
+    <ion-spinner name="crescent"></ion-spinner>
+  </div>
+  <div *ngIf="error" class="error-container">
+    <ion-text color="danger">{{ error }}</ion-text>
+  </div>
+</ion-content>

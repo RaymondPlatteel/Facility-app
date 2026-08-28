@@ -1,0 +1,284 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-button (click)="goBack()">
+        <ion-icon name="arrow-back"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-title>Packages</ion-title>
+  </ion-toolbar>
+  </ion-header>
+
+<ion-content [fullscreen]="true">
+  <div class="packages-container">
+    <div class="crm-header">
+      <div class="crm-title">
+        <h2>All Packages</h2>
+        <p class="subtitle">Create and manage client packages</p>
+      </div>
+      <div class="crm-actions">
+        <ion-input class="crm-search" placeholder="Search by package name or ID" [(ngModel)]="searchQuery" clear-input="true" *ngIf="viewMode === 'table'"></ion-input>
+        <div class="view-toggle">
+          <button [class.active]="viewMode === 'table'" (click)="setViewMode('table')">Table</button>
+          <button [class.active]="viewMode === 'calendar'" (click)="setViewMode('calendar')">Calendar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-actions" *ngIf="viewMode === 'table'">
+      <div class="status-filter">
+        <button [class.active]="tableStatusFilter === 'all'" (click)="setTableStatusFilter('all')">All</button>
+        <button [class.active]="tableStatusFilter === 'active'" (click)="setTableStatusFilter('active')">Active</button>
+        <button [class.active]="tableStatusFilter === 'completed'" (click)="setTableStatusFilter('completed')">Completed</button>
+        <button [class.active]="tableStatusFilter === 'prospect'" (click)="setTableStatusFilter('prospect')">Prospect</button>
+      </div>
+      <ion-button size="small" fill="outline" class="grey-btn" (click)="addNewRow()" aria-label="Add package">Create New Package</ion-button>
+    </div>
+
+    <!-- ============ Visual calendar ============ -->
+    <div class="cal-view" *ngIf="viewMode === 'calendar'">
+      <div class="cal-toolbar">
+        <div class="cal-months-toggle">
+          <button [class.active]="calendarMonthCount === 1" (click)="setCalendarMonths(1)">1 mo</button>
+          <button [class.active]="calendarMonthCount === 2" (click)="setCalendarMonths(2)">2 mo</button>
+          <button [class.active]="calendarMonthCount === 3" (click)="setCalendarMonths(3)">3 mo</button>
+          <button [class.active]="calendarMonthCount === 4" (click)="setCalendarMonths(4)">4 mo</button>
+        </div>
+        <div class="cal-nav">
+          <button class="icon-btn" (click)="calendarPrev()" aria-label="Previous">
+            <ion-icon name="chevron-back-outline"></ion-icon>
+          </button>
+          <button class="today-btn" (click)="calendarToday()">Today</button>
+          <button class="icon-btn" (click)="calendarNext()" aria-label="Next">
+            <ion-icon name="chevron-forward-outline"></ion-icon>
+          </button>
+        </div>
+      </div>
+
+      <div class="cal-legend-dropdown" *ngIf="legendPackages.length">
+        <button class="legend-toggle-btn" (click)="toggleLegendOpen()">
+          <ion-icon name="pricetag-outline"></ion-icon>
+          <span>Packages ({{ visiblePackageCount }}/{{ legendPackages.length }})</span>
+          <ion-icon name="chevron-down-outline" class="legend-chevron" [class.rotated]="legendOpen"></ion-icon>
+        </button>
+        <div class="legend-panel" *ngIf="legendOpen">
+          <label class="legend-check-row" *ngFor="let p of legendPackages; trackBy: trackByLegend">
+            <input type="checkbox" [checked]="p.visible" (change)="togglePackageVisibility(p)" />
+            <span class="legend-dot" [style.background]="p.color"></span>
+            <span>{{ p.name }}</span>
+          </label>
+        </div>
+      </div>
+      <div class="cal-legend-empty" *ngIf="!legendPackages.length">
+        No active packages yet — create one to see it here.
+      </div>
+
+      <div class="cal-months" [style.--month-count]="calendarMonthCount">
+        <div class="cal-month" *ngFor="let month of calendarMonths; trackBy: trackByMonth">
+          <div class="cal-month-label">{{ month.label }}</div>
+          <div class="cal-weekdays">
+            <span *ngFor="let wd of calendarWeekdayHeaders">{{ wd }}</span>
+          </div>
+          <div class="cal-week" *ngFor="let week of month.weeks">
+            <div
+              class="cal-day"
+              *ngFor="let day of week; trackBy: trackByDay"
+              [class.dim]="!day.inMonth"
+              [class.today]="day.isToday">
+              <div class="cal-day-num">{{ day.dayNum }}</div>
+              <div class="cal-dots">
+                <span
+                  class="cal-dot"
+                  *ngFor="let dot of day.dots"
+                  [style.background]="dot.color"
+                  [title]="dot.name"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-container" *ngIf="viewMode === 'table'">
+      <table class="crm-table" style="table-layout: fixed; width: 100%">
+        <thead>
+          <tr>
+            <th [style.width.px]="columnWidths.packageId">Package ID<div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('packageId', $event)"></div></th>
+            <th [style.width.px]="columnWidths.packageName">Package Name<div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('packageName', $event)"></div></th>
+            <th [style.width.px]="columnWidths.linkedClients"><span class="th-wrap">Linked<br>Clients</span><div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('linkedClients', $event)"></div></th>
+            <th [style.width.px]="columnWidths.trainer">Trainer<div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('trainer', $event)"></div></th>
+            <th [style.width.px]="columnWidths.duration"><span class="th-wrap">Duration<br>(months)</span><div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('duration', $event)"></div></th>
+            <th [style.width.px]="columnWidths.totalSessions"><span class="th-wrap">Total<br>Sessions</span><div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('totalSessions', $event)"></div></th>
+            <th [style.width.px]="columnWidths.daysOfWeek"><span class="th-wrap">Days of<br>Week</span><div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('daysOfWeek', $event)"></div></th>
+            <th [style.width.px]="columnWidths.timeOfDay"><span class="th-wrap">Time of<br>Day</span><div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('timeOfDay', $event)"></div></th>
+            <th [style.width.px]="columnWidths.sessionsRemaining"><span class="th-wrap">Sessions<br>Remaining</span><div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('sessionsRemaining', $event)"></div></th>
+            <th [style.width.px]="columnWidths.purchaseDate"><span class="th-wrap">Purchase<br>Date</span><div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('purchaseDate', $event)"></div></th>
+            <th [style.width.px]="columnWidths.finalSession"><span class="th-wrap">Final<br>Session</span><div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('finalSession', $event)"></div></th>
+            <th [style.width.px]="columnWidths.status">Status<div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('status', $event)"></div></th>
+            <th [style.width.px]="columnWidths.cost">Cost<div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('cost', $event)"></div></th>
+            <th [style.width.px]="columnWidths.actions"><div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('actions', $event)"></div></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let pkg of filteredPackages; let i = index; trackBy: trackByPkg">
+            <td [style.width.px]="columnWidths.packageId">{{ pkg.packageId || '—' }}</td>
+            <td [style.width.px]="columnWidths.packageName">
+              <ion-input class="table-input" [(ngModel)]="pkg.packageName" (ionBlur)="saveRow(pkg)" placeholder="Standard Training"></ion-input>
+            </td>
+            <td [style.width.px]="columnWidths.linkedClients">
+              <ion-select class="table-input" [(ngModel)]="pkg.linkedClientIds" multiple="true" interface="popover" placeholder="Select clients" (ionChange)="saveRow(pkg)">
+                <ion-select-option *ngFor="let c of clients" [value]="c.id">{{ c.fullName }}</ion-select-option>
+              </ion-select>
+            </td>
+            <td [style.width.px]="columnWidths.trainer">
+              <ion-select class="table-input" [(ngModel)]="pkg.trainerId" interface="popover" placeholder="Unassigned" (ionChange)="saveRow(pkg)">
+                <ion-select-option value="">Unassigned</ion-select-option>
+                <ion-select-option *ngFor="let t of trainers" [value]="t.id">{{ t.name }}</ion-select-option>
+              </ion-select>
+            </td>
+            <td [style.width.px]="columnWidths.duration">
+              <ion-input class="table-input" type="number" min="1" inputmode="numeric"
+                         [(ngModel)]="pkg.packageDuration" (ionChange)="saveRow(pkg)" placeholder="Months"></ion-input>
+            </td>
+            <td [style.width.px]="columnWidths.totalSessions">
+              <ion-input class="table-input" [readonly]="!pkg.perSessionPack" type="number" min="0" inputmode="numeric"
+                         [(ngModel)]="pkg.totalSessions" (ionChange)="onTotalSessionsChange(pkg)"></ion-input>
+            </td>
+            <td [style.width.px]="columnWidths.daysOfWeek">
+              <ion-select class="table-input" [ngModel]="daysSelectValue(pkg)" (ngModelChange)="onDaysOfWeekChange(pkg, $event)" multiple="true" interface="popover" placeholder="Days">
+                <ion-select-option [value]="PER_SESSION_VALUE">Per-Session (no fixed days)</ion-select-option>
+                <ion-select-option *ngFor="let d of daysOfWeekOptions" [value]="d">{{ d }}</ion-select-option>
+              </ion-select>
+              <div class="per-session-badge" *ngIf="pkg.perSessionPack">Pack of {{ pkg.totalSessions }} sessions</div>
+            </td>
+            <td [style.width.px]="columnWidths.timeOfDay">
+              <div class="time-summary" id="times-{{pkg.id || i}}">{{ formatDayTimes(pkg) }}</div>
+              <ion-popover class="times-pop-wrap" trigger="times-{{pkg.id || i}}" [dismissOnSelect]="false" (didPresent)="seedDefaultTimes(pkg, i)" #timesPopover>
+                <ng-template>
+                  <div class="times-pop">
+                    <div class="times-pop-header">Session Times</div>
+                    <div class="times-pop-body">
+                      <div class="time-row" *ngFor="let d of pkg.daysOfWeek">
+                        <span class="day-label">{{ d }}</span>
+                        <input class="time-field" type="time"
+                               [value]="pkg.dayTimes && pkg.dayTimes[d] ? pkg.dayTimes[d] : ''"
+                               (input)="setDayTime(pkg, d, $any($event.target).value, i)"
+                               (change)="setDayTime(pkg, d, $any($event.target).value, i)"
+                               (keydown.enter)="$event.preventDefault(); timesPopover.dismiss(); saveRow(pkg)" />
+                      </div>
+                      <div class="times-pop-empty" *ngIf="!pkg.daysOfWeek || pkg.daysOfWeek.length === 0">
+                        Select days of week first.
+                      </div>
+                    </div>
+                    <button class="times-pop-done" (click)="saveRow(pkg); timesPopover.dismiss()">Done</button>
+                  </div>
+                </ng-template>
+              </ion-popover>
+            </td>
+            <td [style.width.px]="columnWidths.sessionsRemaining">
+              {{ pkg.sessionsRemaining ?? 0 }}
+            </td>
+            <td [style.width.px]="columnWidths.purchaseDate">
+              <ion-input class="table-input" type="date" [(ngModel)]="pkg.purchaseDate" (ionChange)="saveRow(pkg)"></ion-input>
+            </td>
+            <td [style.width.px]="columnWidths.finalSession">
+              <ion-input class="table-input" type="date" [(ngModel)]="pkg.expirationDate" readonly="true"></ion-input>
+            </td>
+            <td [style.width.px]="columnWidths.status">
+              <ion-select class="table-input" [(ngModel)]="pkg.status" (ionChange)="saveRow(pkg)">
+                <ion-select-option value="active">Active</ion-select-option>
+                <ion-select-option value="completed">Completed</ion-select-option>
+                <ion-select-option value="prospect">Prospect</ion-select-option>
+              </ion-select>
+            </td>
+            <td [style.width.px]="columnWidths.cost">
+              <div class="time-summary" id="cost-{{pkg.id || i}}">
+                $ {{ totalCost(pkg) }}
+                <ion-icon
+                  *ngIf="hasUnpaid(pkg)"
+                  name="alert-circle"
+                  class="unpaid-flag"
+                  [title]="unpaidCount(pkg) + ' of ' + pkg.linkedClientIds.length + ' not paid in full'"></ion-icon>
+              </div>
+              <ion-popover class="cost-pop-wrap" trigger="cost-{{pkg.id || i}}" [dismissOnSelect]="false" #costPopover>
+                <ng-template>
+                  <div class="times-pop">
+                    <div class="times-pop-header">Payment</div>
+                    <div class="times-pop-body">
+                      <div class="pay-block" *ngFor="let cid of pkg.linkedClientIds">
+                        <div class="pay-block-top">
+                          <span class="day-label">{{ clientName(cid) }}</span>
+                          <input class="paid-checkbox" type="checkbox" [checked]="isPaid(pkg, cid)" (change)="togglePaid(pkg, cid)" />
+                        </div>
+                        <div class="pay-block-fields">
+                          <label class="pay-field">
+                            <span>Price</span>
+                            <input type="number" min="0" [value]="paymentAmount(pkg, cid)"
+                                   (change)="setPaymentAmount(pkg, cid, $any($event.target).value)" />
+                          </label>
+                          <label class="pay-field" *ngIf="!isPaid(pkg, cid)">
+                            <span>Paid so far</span>
+                            <input type="number" min="0" [value]="amountPaidSoFar(pkg, cid)"
+                                   (change)="setAmountPaidSoFar(pkg, cid, $any($event.target).value)" />
+                          </label>
+                        </div>
+                      </div>
+                      <div class="times-pop-empty" *ngIf="!pkg.linkedClientIds || pkg.linkedClientIds.length === 0">
+                        Link clients first.
+                      </div>
+                    </div>
+                    <button class="times-pop-done" (click)="costPopover.dismiss()">Done</button>
+                  </div>
+                </ng-template>
+              </ion-popover>
+            </td>
+            <td [style.width.px]="columnWidths.actions" class="actions-cell">
+              <ion-icon id="pkg-actions-{{pkg.id || i}}" class="ellipsis" name="ellipsis-vertical"></ion-icon>
+              <ion-popover trigger="pkg-actions-{{pkg.id || i}}" [dismissOnSelect]="true">
+                <ng-template>
+                  <ion-list>
+                    <ion-item button *ngFor="let cid of pkg.linkedClientIds" (click)="openReceipt(pkg, cid)">
+                      {{ isPaid(pkg, cid) ? 'Receipt' : 'Invoice' }} — {{ clientName(cid) }}
+                    </ion-item>
+                    <ion-item button (click)="duplicatePackage(pkg)" [disabled]="!pkg.id">Duplicate</ion-item>
+                    <ion-item button (click)="renewPackage(pkg)" [disabled]="!pkg.id">Renew</ion-item>
+                    <ion-item button (click)="onDeletePackage(pkg)">Delete</ion-item>
+                  </ion-list>
+                </ng-template>
+              </ion-popover>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</ion-content>
+
+<!-- Receipt / invoice PDF preview — kept outside ion-content so position:fixed
+     isn't trapped by Ionic's scroll container (and the scale-to-fit math gets
+     real dimensions). Mirrors the waiver/assessment report PDF pattern. -->
+<div class="pdf-modal" [class.open]="pdfOpen">
+  <div class="pdf-backdrop" (click)="closeReceipt()"></div>
+  <div class="pdf-shell">
+    <div class="pdf-toolbar">
+      <span class="pdf-toolbar-label">Receipt / Invoice Preview — A4</span>
+      <div class="pdf-actions">
+        <button class="pdf-download" (click)="downloadReceipt()">
+          <ion-icon name="download-outline"></ion-icon>
+          Download
+        </button>
+        <button class="pdf-close" (click)="closeReceipt()">
+          <ion-icon name="close-outline"></ion-icon>
+          Close
+        </button>
+      </div>
+    </div>
+    <div class="pdf-scroll" #receiptPdfScroll>
+      <div class="pdf-scale-wrap" #receiptPdfScaleWrap>
+        <div class="pdf-page" #receiptPdfPage></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+

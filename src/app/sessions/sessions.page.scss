@@ -1,0 +1,232 @@
+ion-content {
+  --background: #01070f;
+  color: #ffffff;
+}
+
+ion-header {
+  ion-toolbar {
+    --background: #01070f;
+    --color: #ffffff;
+    --border-color: #0a1018;
+  }
+}
+
+// Custom tab buttons (replacing ion-segment)
+.custom-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 16px;
+  padding: 8px;
+  background: #0a1018;
+  border-radius: 12px;
+  
+  .tab-button {
+    flex: 1;
+    height: 48px;
+    margin: 0;
+    --border-radius: 8px;
+    
+    .tab-count {
+      margin-left: 4px;
+      font-size: 0.9em;
+      opacity: 0.9;
+    }
+  }
+}
+
+// Tablet specific adjustments for custom tabs
+@media (min-width: 768px) {
+  .custom-tabs {
+    margin: 20px auto;
+    max-width: 600px;
+    
+    .tab-button {
+      height: 52px;
+      font-size: 1.1rem;
+    }
+  }
+}
+
+// Sessions container
+.sessions-container {
+  padding: 0 16px 16px;
+}
+
+// Session card styling
+.session-card {
+  --background: #0a1018;
+  --color: #ffffff;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid #0e2233;
+  transition: all 0.3s ease;
+
+  &.clickable {
+    cursor: pointer;
+    
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 15px -3px rgba(0, 212, 255, 0.3), 0 4px 6px -2px rgba(0, 212, 255, 0.1);
+      border-color: #00d4ff;
+    }
+    
+    &:active {
+      transform: translateY(0);
+    }
+  }
+
+  .session-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    width: 100%;
+    
+    .session-info {
+      flex: 1;
+    }
+    
+    .session-actions-button {
+      margin-left: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 48px;
+      background: rgba(0, 212, 255, 0.2);
+      border-radius: 50%;
+      border: 2px solid #00d4ff;
+      
+      .view-icon {
+        font-size: 1.5rem;
+        color: #00d4ff;
+      }
+    }
+  }
+
+  .session-title {
+    color: #ffffff;
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .session-details {
+    .session-meta {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 8px;
+      
+      .session-date, .session-time {
+        font-size: 0.9rem;
+        color: #88a6bf;
+        padding: 4px 8px;
+        background: rgba(75, 85, 99, 0.5);
+        border-radius: 6px;
+      }
+    }
+
+    .session-count-badge {
+      display: inline-block;
+      background: #00d4ff;
+      color: #01070f;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .linked-workout {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #00d4ff;
+      font-size: 0.9rem;
+      font-weight: 500;
+      
+      .workout-icon {
+        font-size: 1rem;
+      }
+    }
+    
+    .no-workout {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #00d4ff;
+      font-size: 0.9rem;
+      font-weight: 500;
+      
+      .no-workout-icon {
+        font-size: 1rem;
+      }
+    }
+  }
+}
+
+// Empty state styling
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  
+  .empty-icon {
+    font-size: 4em;
+    color: #0e2233;
+    margin-bottom: 20px;
+  }
+  
+  h3 {
+    color: #88a6bf;
+    font-size: 1.4em;
+    font-weight: 500;
+    margin-bottom: 12px;
+  }
+  
+  p {
+    color: #6a8aa3;
+    font-size: 1em;
+    line-height: 1.5;
+    max-width: 300px;
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .session-card {
+    ion-card-header {
+      .session-title {
+        font-size: 1.2em;
+      }
+    }
+    
+    ion-card-content {
+      .recurring-sessions {
+        .session-list {
+          .session-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+            
+            .session-time-small,
+            .participant-count {
+              text-align: left;
+            }
+          }
+        }
+      }
+      
+      .session-actions {
+        flex-direction: column;
+        
+        ion-button {
+          width: 100%;
+        }
+      }
+    }
+  }
+}

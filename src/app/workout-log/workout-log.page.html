@@ -1,0 +1,144 @@
+<ion-content [fullscreen]="true">
+  <div class="log-page">
+
+    <!-- Header -->
+    <div class="log-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back to programs">
+        <ion-icon name="arrow-back"></ion-icon>
+      </button>
+      <div class="log-title">
+        <h1>Workout Log</h1>
+        <p>{{ editingLogId ? 'Editing a saved session' : 'Record what actually happened in the session' }}</p>
+      </div>
+      <div class="log-actions">
+        <button class="ghost-btn" *ngIf="editingLogId" (click)="startFresh()">New Log</button>
+        <button class="ghost-btn danger" *ngIf="editingLogId" (click)="deleteCurrentLog()">
+          <ion-icon name="trash-outline"></ion-icon> Delete
+        </button>
+        <button class="primary-btn" (click)="save()" [disabled]="!canSave || saving">
+          <ion-icon name="save-outline"></ion-icon> {{ saving ? 'Saving…' : (editingLogId ? 'Update Log' : 'Save Log') }}
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="loading" class="state-msg">Loading…</div>
+
+    <ng-container *ngIf="!loading">
+      <!-- Selection bar -->
+      <div class="select-bar">
+        <label class="fld">
+          <span>Program</span>
+          <select class="fld-input" [(ngModel)]="selectedProgramId" (ngModelChange)="onProgramChange()">
+            <option value="">— No program (freeform) —</option>
+            <option *ngFor="let p of programs" [value]="p.id">{{ p.name }}</option>
+          </select>
+        </label>
+        <label class="fld" *ngIf="selectedProgramId">
+          <span>Day</span>
+          <select class="fld-input" [(ngModel)]="selectedDayIndex" (ngModelChange)="onDayChange()">
+            <option *ngFor="let d of dayOptions" [ngValue]="d.index">{{ d.label }}</option>
+          </select>
+        </label>
+        <label class="fld">
+          <span>Client</span>
+          <select class="fld-input" [(ngModel)]="selectedClientId" (ngModelChange)="onClientChange()">
+            <option value="">— Select client —</option>
+            <option *ngFor="let c of clientOptions" [value]="c.id">
+              {{ c.fullName }}{{ isAssigned(c) ? ' ★' : '' }}
+            </option>
+          </select>
+        </label>
+        <label class="fld">
+          <span>Date</span>
+          <input class="fld-input" type="date" [(ngModel)]="date" />
+        </label>
+      </div>
+
+      <!-- Program progression status -->
+      <div class="progress-bar" *ngIf="selectedProgramId && selectedClientId && dayTotal > 0"
+           [class.complete]="programComplete">
+        <ion-icon [name]="programComplete ? 'checkmark-circle' : 'barbell-outline'"></ion-icon>
+        <span class="progress-main" *ngIf="!programComplete">
+          Day {{ dayPosition }} of {{ dayTotal }}
+        </span>
+        <span class="progress-main" *ngIf="programComplete">
+          Program complete — pick a day to repeat any session
+        </span>
+        <span class="progress-last" *ngIf="lastDoneLabel">· last done {{ lastDoneLabel }}</span>
+      </div>
+
+      <!-- No entries -->
+      <div class="empty-state" *ngIf="entries.length === 0">
+        <ion-icon name="clipboard-outline"></ion-icon>
+        <p *ngIf="!selectedProgramId">Pick a program and day to load its exercises, or open a recent session below.</p>
+        <p *ngIf="selectedProgramId && dayOptions.length === 0">This program has no training days with exercises yet.</p>
+      </div>
+
+      <!-- Exercise log sheets -->
+      <div class="log-sheets" *ngIf="entries.length > 0">
+        <div class="sheet" *ngFor="let entry of entries; let entryIdx = index">
+          <div class="sheet-head">
+            <div class="sheet-name">{{ entry.exerciseName }}</div>
+            <div class="sheet-prescription">{{ entry.prescription }}</div>
+            <div class="sheet-last" *ngIf="lastTime[entryIdx]">
+              <ion-icon name="reader-outline"></ion-icon> Last {{ lastTime[entryIdx] }}
+            </div>
+          </div>
+
+          <table class="set-table">
+            <thead>
+              <tr>
+                <th class="col-set">Set</th>
+                <th *ngFor="let col of entry.attrColumns">{{ col }}</th>
+                <th class="col-done">Done</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let set of entry.sets; let setIdx = index" [class.done]="set.done">
+                <td class="col-set">{{ setIdx + 1 }}</td>
+                <td *ngFor="let col of entry.attrColumns">
+                  <input
+                    class="set-input"
+                    [(ngModel)]="set.values[col]"
+                    [placeholder]="placeholderFor(entryIdx, col)" />
+                </td>
+                <td class="col-done">
+                  <button class="done-btn" [class.checked]="set.done" (click)="toggleDone(set)">
+                    <ion-icon name="checkmark-circle"></ion-icon>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="sheet-foot">
+            <button class="mini-action" (click)="addSet(entry)">
+              <ion-icon name="add"></ion-icon> Add set
+            </button>
+            <button class="mini-action" (click)="removeSet(entry)" [disabled]="entry.sets.length <= 1">
+              <ion-icon name="remove-outline"></ion-icon> Remove set
+            </button>
+            <input class="exercise-notes" [(ngModel)]="entry.notes" placeholder="Notes for this exercise…" />
+          </div>
+        </div>
+
+        <textarea class="session-notes" rows="2" [(ngModel)]="sessionNotes"
+                  placeholder="Session notes — how did it go overall?"></textarea>
+      </div>
+
+      <!-- History -->
+      <div class="history" *ngIf="history.length > 0">
+        <h2><ion-icon name="reader-outline"></ion-icon> {{ selectedClient ? selectedClient.fullName + "'s" : 'Recent' }} Sessions</h2>
+        <div class="history-row" *ngFor="let log of history"
+             [class.active]="log.id === editingLogId"
+             (click)="applyLog(log)">
+          <span class="h-date">{{ historyDate(log) }}</span>
+          <span class="h-client">{{ log.clientName || '—' }}</span>
+          <span class="h-day">{{ log.dayName || 'Session' }}</span>
+          <span class="h-program">{{ log.programName }}</span>
+          <span class="h-count">{{ log.exercises.length }} ex</span>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+</ion-content>

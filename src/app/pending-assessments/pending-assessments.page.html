@@ -1,0 +1,90 @@
+<ion-content [fullscreen]="true">
+  <div class="pending-page">
+
+    <div class="crm-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back">
+        <ion-icon name="arrow-back"></ion-icon>
+      </button>
+      <div class="crm-title">
+        <h1>Pending Review</h1>
+        <p>{{ pending.length }} assessment{{ pending.length === 1 ? '' : 's' }} · {{ linkRequests.length }} link request{{ linkRequests.length === 1 ? '' : 's' }} waiting</p>
+      </div>
+    </div>
+
+    <div class="pending-section" *ngIf="linkRequestsLoading || linkRequests.length">
+      <h2 class="section-title">Link Requests</h2>
+      <div *ngIf="linkRequestsLoading" class="empty-state small">Loading…</div>
+      <div class="pending-list" *ngIf="!linkRequestsLoading">
+        <div class="pending-item" *ngFor="let req of linkRequests">
+          <div class="pending-row">
+            <div class="pending-info">
+              <div class="pending-name">{{ req.requestedName }}</div>
+              <div class="pending-meta">requested {{ req.createdAt | date:'short' }}</div>
+            </div>
+            <div class="pending-actions">
+              <button class="action-btn reject" (click)="rejectLink(req)">
+                <ion-icon name="close-circle-outline"></ion-icon>
+                Reject
+              </button>
+              <button class="action-btn approve" (click)="approveLink(req)">
+                <ion-icon name="checkmark-circle-outline"></ion-icon>
+                Approve
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title" *ngIf="linkRequests.length">Assessment Submissions</h2>
+
+    <div *ngIf="loading" class="empty-state">Loading…</div>
+
+    <div *ngIf="!loading && !pending.length" class="empty-state">
+      Nothing pending — every submitted assessment has been reviewed.
+    </div>
+
+    <div class="pending-list" *ngIf="!loading && pending.length">
+      <div class="pending-item" *ngFor="let p of pending">
+        <div class="pending-row">
+          <div class="pending-info">
+            <div class="pending-name">{{ p.clientName }}</div>
+            <div class="pending-lift">LVL {{ p.lvl < 1 ? 1 : (p.lvl | number:'1.0-0') }} · {{ p.rank }}</div>
+            <div class="pending-meta">{{ p.dateLabel }}<span *ngIf="p.videoUrl"> · video attached</span></div>
+          </div>
+          <div class="pending-actions">
+            <button class="action-btn reject" (click)="reject(p)">
+              <ion-icon name="close-circle-outline"></ion-icon>
+              Reject
+            </button>
+            <button class="action-btn review" [class.open]="expandedId === p.id" (click)="toggleReview(p)">
+              <ion-icon name="chevron-down-outline"></ion-icon>
+              Review
+            </button>
+          </div>
+        </div>
+
+        <div class="review-panel" *ngIf="expandedId === p.id">
+          <video *ngIf="p.videoUrl" class="review-video" [src]="p.videoUrl" controls playsinline></video>
+
+          <div *ngIf="loadingDiff" class="empty-state small">Loading comparison…</div>
+
+          <div class="diff-list" *ngIf="!loadingDiff">
+            <div class="diff-row" *ngFor="let row of diffRows" [class.changed]="row.changed">
+              <span class="diff-label">{{ row.label }}</span>
+              <span class="diff-old">{{ row.oldVal.toFixed(row.decimals) }}{{ row.unit ? ' ' + row.unit : '' }}</span>
+              <span class="diff-arrow">→</span>
+              <span class="diff-new">{{ row.newVal.toFixed(row.decimals) }}{{ row.unit ? ' ' + row.unit : '' }}</span>
+            </div>
+          </div>
+
+          <button class="approve-btn" [disabled]="loadingDiff" (click)="approve(p)">
+            <ion-icon name="checkmark-circle-outline"></ion-icon>
+            Approve Submission
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</ion-content>
