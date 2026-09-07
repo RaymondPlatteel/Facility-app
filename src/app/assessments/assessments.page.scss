@@ -118,12 +118,26 @@ ion-content {
   text-align: center;
 }
 
+// Big banner card — same padding-box/border-box gradient-border trick as
+// the form/result cards below (see .form-pane's comment): a dark
+// rank-tinted ground clipped to the padding box, the chromium sweep
+// painted onto the border box, S-Rank's glare wash layered over the
+// ground. Darker/quieter than a flat bright fill, matching the rest of the
+// page's cards instead of the calculate button's loud solid color.
 .group-banner {
   display: flex;
   align-items: baseline;
   justify-content: center;
   gap: 14px;
-  transition: color 0.3s ease;
+  width: 100%;
+  padding: 22px clamp(20px, 5vw, 48px);
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background:
+    var(--rbc-glare, none) padding-box,
+    linear-gradient(var(--rbc-bg, #131313), var(--rbc-bg, #131313)) padding-box,
+    var(--rbc-grad, linear-gradient(var(--accent), var(--accent))) border-box;
+  transition: background 0.3s ease;
 }
 
 .group-banner-item {

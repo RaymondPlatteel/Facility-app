@@ -1,7 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { IonApp, IonRouterOutlet, IonIcon, IonModal } from '@ionic/angular/standalone';
-import { RouterModule, Router, NavigationEnd } from '@angular/router';
-import { filter } from 'rxjs/operators';
+import { RouterModule, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService, Trainer } from './services/auth.service';
 import { FirebaseService } from './services/firebase.service';
@@ -39,12 +38,6 @@ import {
 export class AppComponent implements OnInit, OnDestroy {
   isAuthenticated = false;
   currentTrainer: Trainer | null = null;
-
-  // Off-canvas sidebar toggle, mobile only (see app.component.scss's
-  // max-width breakpoint) — the sidebar is a fixed overlay under that
-  // width instead of a permanent column, so it needs an explicit open/close
-  // instead of always being on screen.
-  mobileMenuOpen = false;
 
   // Admin PIN keypad (hosted here so it can open from anywhere)
   keypadOpen = false;
@@ -104,14 +97,6 @@ export class AppComponent implements OnInit, OnDestroy {
     this.pendingReviewInterval = setInterval(() => {
       if (this.isAuthenticated) this.refreshPendingReviewCount();
     }, 60000);
-    // Every route change closes the mobile menu — otherwise tapping a link
-    // leaves the overlay sitting open on top of the page it just navigated to.
-    this.router.events.pipe(filter(e => e instanceof NavigationEnd))
-      .subscribe(() => { this.mobileMenuOpen = false; });
-  }
-
-  toggleMobileMenu() {
-    this.mobileMenuOpen = !this.mobileMenuOpen;
   }
 
   ngOnDestroy() {

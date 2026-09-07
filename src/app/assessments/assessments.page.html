@@ -44,13 +44,15 @@
       <span *ngIf="!groupSearching && groupSearched && !groupResults.length" class="group-lookup-status">
         No members in group {{ groupCode }}
       </span>
-      <!-- Big cell/generation/cohort banner, tinted to the group's average
-           rank (see groupAverageRank's comment for how a mixed-sex group is
-           averaged fairly). Each digit gets its own small caption underneath
-           it instead of one flat run of equally-weighted text, so the
-           numbers read as the headline and CELL/GENERATION/COHORT read as
-           labels under them — the hierarchy a title needs. -->
-      <div class="group-banner" *ngIf="!groupSearching && groupResults.length" [style.color]="groupAverageColor" [style.--rbc-grad]="groupAverageGrad">
+      <!-- Big cell/generation/cohort banner — same card treatment as the
+           form/result cards below: a dark rank-tinted ground (--rbc-bg)
+           with the moving chromium sweep painted onto the border, not a
+           bright fill. See groupAverageRank's comment for how a mixed-sex
+           group's rank is averaged fairly. Each digit gets its own small
+           caption underneath, so the numbers read as the headline. -->
+      <div class="group-banner" *ngIf="!groupSearching && groupResults.length"
+           [style.color]="groupAverageColor" [style.--rbc-grad]="groupAverageGrad"
+           [style.--rbc-bg]="groupAverageBg" [style.--rbc-glare]="groupAverageGlare">
         <div class="group-banner-item">
           <span class="group-banner-value" [class.chroma-text]="groupIsChroma">{{ groupCell }}</span>
           <span class="group-banner-label">Cell</span>

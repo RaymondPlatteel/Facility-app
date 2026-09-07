@@ -24,7 +24,7 @@ import {
   addOutline,
   trashOutline
 } from 'ionicons/icons';
-import { FirebaseService, PackageRecord, CheckIn, AttendanceStatus, SessionOverride, SingleSession, ClientProfile, localDateString } from '../services/firebase.service';
+import { FirebaseService, PackageRecord, CheckIn, AttendanceStatus, SessionOverride, SingleSession, ClientProfile, localDateString, SwapRequest } from '../services/firebase.service';
 import { CalendarSyncService } from '../services/calendar-sync.service';
 import { AuthService, TRAINERS, trainerName } from '../services/auth.service';
 import {
@@ -109,6 +109,11 @@ export class SchedulePage implements OnInit, ViewWillEnter {
   // '' = show every trainer's sessions; otherwise only that trainer's.
   trainerFilter = '';
 
+  // Pending athlete-submitted swap requests, shown as a panel above the
+  // calendar — see SwapRequest's comment for how approving one applies.
+  swapRequests: SwapRequest[] = [];
+  swapRequestBusy = new Set<string>();
+
   constructor(
     private firebase: FirebaseService,
     private router: Router,
@@ -169,11 +174,14 @@ export class SchedulePage implements OnInit, ViewWillEnter {
   private async loadSchedule(showLoading: boolean) {
     if (showLoading) this.loading = true;
     try {
-      [this.packages, this.overrides, this.singleSessions] = await Promise.all([
+      let swaps: SwapRequest[];
+      [this.packages, this.overrides, this.singleSessions, swaps] = await Promise.all([
         this.firebase.listPackages(),
         this.firebase.listSessionOverrides(),
-        this.firebase.listSingleSessions()
+        this.firebase.listSingleSessions(),
+        this.firebase.listSwapRequests()
       ]);
+      this.swapRequests = swaps.filter(r => r.status === 'pending');
       await this.autoMarkNoShows();
     } catch (err) {
       console.error('Schedule: failed to load schedule data', err);
@@ -436,6 +444,38 @@ export class SchedulePage implements OnInit, ViewWillEnter {
       this.reschedTime = this.selectedEntry.time || this.selectedEntry.originalTime || '';
     }
     this.reschedOpen = !this.reschedOpen;
+  }
+
+  // Formats a swap request's from/to as one readable line, e.g.
+  // "Wed, Sep 10 at 5:00 PM -> Fri, Sep 12 at 6:00 PM".
+  swapRequestLabel(req: SwapRequest): { from: string; to: string } {
+    const fmt = (dateKey: string, time: string) => {
+      const d = new Date(dateKey + 'T00:00:00');
+      const dateStr = isNaN(d.getTime())
+        ? dateKey
+        : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+      return time ? `${dateStr} at ${formatTime12h(time)}` : dateStr;
+    };
+    return {
+      from: fmt(req.originalDateKey, req.originalTime),
+      to: fmt(req.requestedDateKey, req.requestedTime)
+    };
+  }
+
+  async respondToSwap(req: SwapRequest, approve: boolean) {
+    if (!req.id || this.swapRequestBusy.has(req.id)) return;
+    this.swapRequestBusy.add(req.id);
+    try {
+      await this.firebase.respondToSwapRequest(req, approve);
+      this.swapRequests = this.swapRequests.filter(r => r.id !== req.id);
+      await this.loadSchedule(false);
+      await this.presentToast(approve ? 'Swap approved' : 'Swap denied');
+    } catch (err) {
+      console.error('Schedule: failed to respond to swap request', err);
+      await this.presentToast('Could not update the request', 'danger');
+    } finally {
+      this.swapRequestBusy.delete(req.id);
+    }
   }
 
   async saveReschedule() {

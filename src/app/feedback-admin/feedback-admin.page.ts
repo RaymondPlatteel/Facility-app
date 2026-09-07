@@ -52,7 +52,9 @@ export class FeedbackAdminPage implements OnInit {
     addIcons({ arrowBack, chatbubblesOutline, star, starOutline, trashOutline });
   }
 
-  ngOnInit() {}
+  async ngOnInit() {
+    await this.loadFeedback();
+  }
 
   async ionViewWillEnter() {
     await this.loadFeedback();

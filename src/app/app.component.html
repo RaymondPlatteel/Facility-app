@@ -29,15 +29,11 @@
     </div>
   </nav>
 
-  <!-- Admin mode: signed-in coach — standard dashboard sidebar, collapsed
-       to an off-canvas overlay under the mobile breakpoint (see the
-       max-width rule in app.component.scss). -->
-  <button class="mobile-menu-btn" *ngIf="isAuthenticated" (click)="toggleMobileMenu()" aria-label="Menu">
-    <ion-icon name="menu-outline"></ion-icon>
-  </button>
-  <div class="sidebar-backdrop" *ngIf="isAuthenticated && mobileMenuOpen" (click)="toggleMobileMenu()"></div>
-
-  <aside class="app-sidebar" *ngIf="isAuthenticated" [class.open]="mobileMenuOpen">
+  <!-- Admin mode: signed-in coach — standard dashboard sidebar. Always
+       on screen, no hover/tap-to-open overlay — back to how it was
+       before that was tried; it caused more broken navigation than it
+       solved. -->
+  <aside class="app-sidebar" *ngIf="isAuthenticated">
     <a routerLink="/home" class="sidebar-brand">
       <span class="brand-name">Project [000]</span>
     </a>

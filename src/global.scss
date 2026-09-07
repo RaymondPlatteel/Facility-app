@@ -170,15 +170,6 @@ ion-datetime {
   color: transparent;
 }
 
-// Coach dashboard on mobile: the sidebar collapses to an off-canvas overlay
-// (see app.component.scss) opened by a hamburger button that floats over
-// the top-left corner of whatever page is showing. Every routed page's own
-// ion-content needs to know to start its content below that button instead
-// of under it — --padding-top is Ionic's own inset property for exactly
-// this, and (unlike a plain CSS padding on an ancestor) it's respected
-// regardless of ion-content's internal absolute-fill positioning.
-@media (max-width: 900px) {
-  ion-app.has-sidebar ion-content {
-    --padding-top: calc(48px + env(safe-area-inset-top));
-  }
-}
+// Coach dashboard: the sidebar is a permanent on-screen column (see
+// app.component.scss), not a floating button over page content — so
+// nothing here needs to reserve top clearance for it.

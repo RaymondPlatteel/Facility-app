@@ -97,6 +97,31 @@ export interface SingleSession {
   updatedAt?: string;
 }
 
+// An athlete's self-service request to move one of their own sessions to a
+// different day/time — the mobile app (Project 000) creates these directly
+// against this same collection; a coach approves or denies from Schedule.
+// Approving applies the exact same mechanism a coach's own manual
+// reschedule uses (a SessionOverride, or a direct SingleSession edit) so
+// an approved swap is indistinguishable from one the coach made themselves.
+export interface SwapRequest {
+  id?: string;
+  clientId: string;         // best-effort; clientName is the reliable key
+  clientName: string;
+  packageId: string;        // '' when isSingle
+  isSingle: boolean;
+  singleSessionId?: string; // set when isSingle
+  originalDateKey: string;  // YYYY-MM-DD of the occurrence being moved
+  originalTime: string;
+  requestedDateKey: string;
+  requestedTime: string;
+  sessionType: string;
+  durationMinutes: number;
+  status: 'pending' | 'approved' | 'denied';
+  note?: string;
+  createdAt: string;
+  respondedAt?: string;
+}
+
 export interface FeedbackData {
   id?: string;
   studentName: string;
@@ -1107,6 +1132,66 @@ export class FirebaseService {
 
   async deleteSingleSession(id: string): Promise<void> {
     await deleteDoc(doc(this.db, 'singleSessions', id));
+    this.emitScheduleDataChanged();
+  }
+
+  // ---------- Swap requests (athlete self-service reschedule) ----------
+  private swapRequestsCollection() { return collection(this.db, 'swapRequests'); }
+
+  private mapSwapRequest(id: string, data: any): SwapRequest {
+    return {
+      id,
+      clientId: data['clientId'] ?? '',
+      clientName: data['clientName'] ?? '',
+      packageId: data['packageId'] ?? '',
+      isSingle: !!data['isSingle'],
+      singleSessionId: data['singleSessionId'] ?? undefined,
+      originalDateKey: data['originalDateKey'] ?? '',
+      originalTime: data['originalTime'] ?? '',
+      requestedDateKey: data['requestedDateKey'] ?? '',
+      requestedTime: data['requestedTime'] ?? '',
+      sessionType: data['sessionType'] ?? '',
+      durationMinutes: data['durationMinutes'] ?? 60,
+      status: data['status'] ?? 'pending',
+      note: data['note'] ?? '',
+      createdAt: data['createdAt'],
+      respondedAt: data['respondedAt'] ?? undefined
+    };
+  }
+
+  // Facility-scale (a handful of live requests at once) — caller filters by status.
+  async listSwapRequests(): Promise<SwapRequest[]> {
+    const snap = await getDocs(this.swapRequestsCollection());
+    return snap.docs.map(d => this.mapSwapRequest(d.id, d.data()))
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  }
+
+  // Approve a swap: apply it exactly the way a coach's own manual
+  // reschedule would (setSessionOverride for a package occurrence, or a
+  // direct SingleSession date/time edit), then mark the request approved.
+  // Deny just marks it denied — nothing about the session changes.
+  async respondToSwapRequest(req: SwapRequest, approve: boolean): Promise<void> {
+    if (!req.id) return;
+    if (approve) {
+      if (req.isSingle && req.singleSessionId) {
+        await updateDoc(doc(this.db, 'singleSessions', req.singleSessionId), {
+          date: req.requestedDateKey,
+          time: req.requestedTime || '',
+          updatedAt: new Date().toISOString()
+        } as any);
+      } else if (req.packageId) {
+        await this.setSessionOverride({
+          packageId: req.packageId,
+          originalDate: req.originalDateKey,
+          newDate: req.requestedDateKey,
+          newTime: req.requestedTime || ''
+        });
+      }
+    }
+    await updateDoc(doc(this.db, 'swapRequests', req.id), {
+      status: approve ? 'approved' : 'denied',
+      respondedAt: new Date().toISOString()
+    } as any);
     this.emitScheduleDataChanged();
   }
 

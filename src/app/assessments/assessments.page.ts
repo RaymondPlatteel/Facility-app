@@ -368,6 +368,17 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     return `linear-gradient(${c}, ${c})`;
   }
 
+  // Dark card ground for the banner — RANK_BG_ANCHORS is in the same
+  // low-to-high order as RANK_ORDER, so the ordinal doubles as the index.
+  get groupAverageBg(): string {
+    const ordinal = RANK_ORDINAL[this.groupAverageRank];
+    return RANK_BG_ANCHORS[ordinal]?.bg ?? RANK_BG_ANCHORS[0].bg;
+  }
+
+  get groupAverageGlare(): string {
+    return this.groupIsChroma ? this.chroma.glare : 'none';
+  }
+
   strengthLifts: StrengthLift[] = [
     { key: 'deadlift', label: 'Deadlift', weightField: 'deadliftWeight', repsField: 'deadliftReps', weightUnit: 'LBS', oneRmId: 'deadlift' },
     { key: 'squat', label: 'Squat', weightField: 'squatWeight', repsField: 'squatReps', weightUnit: 'LBS', oneRmId: 'squat' },

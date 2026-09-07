@@ -560,6 +560,119 @@ ion-modal.session-modal {
   line-height: 1.3;
 }
 
+/* ---------- Swap requests panel ---------- */
+.swap-requests {
+  border: 1px solid rgba(245, 185, 66, 0.35);
+  background: rgba(245, 185, 66, 0.06);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.swap-requests-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 13px;
+  color: #f5b942;
+  margin-bottom: 8px;
+
+  ion-icon { font-size: 16px; }
+}
+
+.swap-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #f5b942;
+  color: #1a1200;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.swap-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(245, 185, 66, 0.15);
+
+  &:first-of-type { border-top: none; }
+}
+
+.swap-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.swap-name {
+  font-weight: 600;
+  color: #dceaf6;
+  font-size: 14px;
+}
+
+.swap-move {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  color: #88a6bf;
+
+  ion-icon { font-size: 12px; color: #f5b942; }
+}
+
+.swap-note {
+  font-size: 12px;
+  color: #6b7d8c;
+  font-style: italic;
+}
+
+.swap-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.swap-approve, .swap-deny {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+
+  ion-icon { font-size: 14px; }
+  &:disabled { opacity: 0.5; cursor: default; }
+}
+
+.swap-approve {
+  background: rgba(45, 211, 111, 0.12);
+  color: #2dd36f;
+  border-color: rgba(45, 211, 111, 0.4);
+  &:hover:not(:disabled) { background: rgba(45, 211, 111, 0.2); }
+}
+
+.swap-deny {
+  background: rgba(255, 90, 106, 0.1);
+  color: #ff5a6a;
+  border-color: rgba(255, 90, 106, 0.35);
+  &:hover:not(:disabled) { background: rgba(255, 90, 106, 0.18); }
+}
+
 /* ---------- Empty / notes ---------- */
 .state-msg {
   text-align: center;

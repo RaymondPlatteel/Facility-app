@@ -178,40 +178,12 @@
   box-sizing: border-box;
 }
 
-// Hamburger toggle for the off-canvas sidebar. Hidden here; the mobile
-// breakpoint below is the only place that turns it on, so it never shows
-// up on the desktop dashboard layout.
-.mobile-menu-btn {
-  display: none;
-  position: fixed;
-  top: calc(10px + env(safe-area-inset-top));
-  left: calc(10px + env(safe-area-inset-left));
-  z-index: 10001;
-  width: 38px;
-  height: 38px;
-  align-items: center;
-  justify-content: center;
-  background: rgba(8, 8, 16, 0.92);
-  border: 1px solid rgba(0, 212, 255, 0.25);
-  border-radius: 9px;
-  color: #dceaf6;
-  font-size: 19px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-.sidebar-backdrop {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 9998;
-  background: rgba(0, 0, 0, 0.55);
-}
-
 /* Signed-in layout: left sidebar instead of the kiosk's top bar — content
    shifts right instead of down, and gets the full remaining width instead
    of a centered column, which is what makes a "standard dashboard" read as
-   one instead of a phone-app screen stretched onto a bigger display. */
+   one instead of a phone-app screen stretched onto a bigger display.
+   Always on screen — the hover/tap-to-open overlay version broke
+   navigation more than it helped, so this reverts straight back. */
 ion-app.has-sidebar {
   .app-content {
     margin-top: 0;
@@ -235,9 +207,6 @@ ion-app.has-sidebar {
   padding: calc(18px + env(safe-area-inset-top)) 0 calc(14px + env(safe-area-inset-bottom));
   box-sizing: border-box;
   overflow-y: auto;
-  // Desktop: always on screen, no slide — only the mobile breakpoint below
-  // turns this into an off-canvas overlay.
-  transition: transform 0.25s ease;
 }
 
 .sidebar-brand {
@@ -332,59 +301,41 @@ ion-app.has-sidebar {
   }
 }
 
-// Below this width the persistent icon-rail sidebar stopped being "shrunk
-// down" and started being "in the way" — on an actual phone it permanently
-// ate 76px of a ~375-390px screen for icons alone, on every single page.
-// It's an off-canvas overlay here instead: full width, hidden by default,
-// slid in over the content by the hamburger button, and dismissed by the
-// backdrop, an outside tap, or (see app.component.ts) any navigation.
+// Below this width the full labels get tight — collapse to an icon-only
+// rail instead of wrapping/overflowing.
 @media (max-width: 900px) {
-  .mobile-menu-btn,
-  .sidebar-backdrop {
-    display: flex;
-  }
-
   .app-sidebar {
-    width: min(280px, 84vw);
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
-    transform: translateX(-100%);
+    width: 76px;
 
-    &.open { transform: translateX(0); }
-
-    // Full labels again — this is a temporary overlay now, not a
-    // permanent rail, so there's no reason to abbreviate it.
     .sidebar-link span,
     .sidebar-group-title,
     .nav-trainer span,
     .nav-btn span {
-      display: inline;
+      display: none;
     }
 
-    .sidebar-link { justify-content: flex-start; }
+    .sidebar-link {
+      justify-content: center;
+    }
 
     .sidebar-brand {
-      justify-content: flex-start;
-      padding: 0 20px;
+      justify-content: center;
+      padding: 0;
 
       .brand-name {
-        font-size: 15px;
+        font-size: 0;
 
-        &::first-letter { font-size: inherit; }
+        &::first-letter {
+          font-size: 15px;
+        }
       }
     }
   }
 
-  // Content takes the full width now that the sidebar floats over it
-  // instead of permanently reserving a column.
   ion-app.has-sidebar .app-content {
-    margin-left: 0;
-    width: 100%;
+    margin-left: 76px;
+    width: calc(100% - 76px);
   }
-
-  // Top clearance for the floating hamburger button lives in global.scss,
-  // not here — ion-content belongs to each ROUTED page's own component, so
-  // an Angular-scoped selector in this file (app.component's own template)
-  // can never reach it; only an unscoped global rule can.
 }
 
 /* Global admin PIN keypad */

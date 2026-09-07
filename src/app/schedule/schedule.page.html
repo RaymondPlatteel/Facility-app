@@ -42,6 +42,34 @@
       </button>
     </div>
 
+    <!-- Athlete-submitted swap requests, awaiting a yes/no. Approving
+         applies the move to the real calendar immediately (same as a
+         manual reschedule) and updates the athlete's calendar too. -->
+    <div class="swap-requests" *ngIf="swapRequests.length">
+      <div class="swap-requests-title">
+        <ion-icon name="swap-horizontal-outline"></ion-icon>
+        Swap Requests
+        <span class="swap-count">{{ swapRequests.length }}</span>
+      </div>
+      <div class="swap-row" *ngFor="let req of swapRequests">
+        <div class="swap-info">
+          <span class="swap-name">{{ req.clientName }}</span>
+          <span class="swap-move">
+            {{ swapRequestLabel(req).from }} <ion-icon name="chevron-forward-outline"></ion-icon> {{ swapRequestLabel(req).to }}
+          </span>
+          <span class="swap-note" *ngIf="req.note">"{{ req.note }}"</span>
+        </div>
+        <div class="swap-actions">
+          <button class="swap-approve" [disabled]="(req.id && swapRequestBusy.has(req.id))" (click)="respondToSwap(req, true)">
+            <ion-icon name="checkmark-circle"></ion-icon> Approve
+          </button>
+          <button class="swap-deny" [disabled]="(req.id && swapRequestBusy.has(req.id))" (click)="respondToSwap(req, false)">
+            <ion-icon name="close-circle"></ion-icon> Deny
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div *ngIf="loading" class="state-msg">Loading schedule…</div>
 
     <!-- Week grid -->
