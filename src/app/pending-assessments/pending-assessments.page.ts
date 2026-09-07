@@ -3,8 +3,8 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { IonContent, IonIcon, AlertController, ToastController } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { arrowBack, checkmarkCircleOutline, closeCircleOutline, chevronDownOutline } from 'ionicons/icons';
-import { FirebaseService, PendingAssessment, AssessmentInputs, LinkRequest } from '../services/firebase.service';
+import { arrowBack, checkmarkCircleOutline, closeCircleOutline, chevronDownOutline, swapHorizontalOutline, chevronForwardOutline } from 'ionicons/icons';
+import { FirebaseService, PendingAssessment, AssessmentInputs, LinkRequest, SwapRequest } from '../services/firebase.service';
 import { ASSESSMENT_META } from '../services/omni.util';
 
 interface DiffRow {
@@ -47,6 +47,13 @@ export class PendingAssessmentsPage implements OnInit {
   linkRequests: LinkRequest[] = [];
   linkRequestsLoading = true;
 
+  // Athlete-submitted "request a different time" swap requests — a third
+  // "things waiting on me" queue, same idea as link requests: its own
+  // collection, no diff view, shown here rather than a whole extra route.
+  swapRequests: SwapRequest[] = [];
+  swapRequestsLoading = true;
+  swapRequestBusy = new Set<string>();
+
   expandedId: string | null = null;
   diffRows: DiffRow[] = [];
   loadingDiff = false;
@@ -57,7 +64,7 @@ export class PendingAssessmentsPage implements OnInit {
     private alertController: AlertController,
     private toastController: ToastController
   ) {
-    addIcons({ arrowBack, checkmarkCircleOutline, closeCircleOutline, chevronDownOutline });
+    addIcons({ arrowBack, checkmarkCircleOutline, closeCircleOutline, chevronDownOutline, swapHorizontalOutline, chevronForwardOutline });
   }
 
   async ngOnInit() {
@@ -71,6 +78,7 @@ export class PendingAssessmentsPage implements OnInit {
   private async refresh() {
     this.loading = true;
     this.linkRequestsLoading = true;
+    this.swapRequestsLoading = true;
     try {
       this.pending = (await this.firebase.listPendingAssessments())
         .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
@@ -86,6 +94,60 @@ export class PendingAssessmentsPage implements OnInit {
       console.error('Pending assessments: link request load failed', err);
     } finally {
       this.linkRequestsLoading = false;
+    }
+    try {
+      this.swapRequests = (await this.firebase.listSwapRequests())
+        .filter(r => r.status === 'pending')
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    } catch (err) {
+      console.error('Pending assessments: swap request load failed', err);
+    } finally {
+      this.swapRequestsLoading = false;
+    }
+  }
+
+  // Formats a swap request's from/to as one readable line, e.g.
+  // "Wed, Sep 10 at 5:00 PM -> Fri, Sep 12 at 6:00 PM".
+  swapRequestLabel(req: SwapRequest): { from: string; to: string } {
+    const fmt = (dateKey: string, time: string) => {
+      const d = new Date(dateKey + 'T00:00:00');
+      const dateStr = isNaN(d.getTime())
+        ? dateKey
+        : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+      const formatTime12h = (t: string) => {
+        if (!t || !/^\d{2}:\d{2}$/.test(t)) return '';
+        const [hh, mm] = t.split(':').map(n => parseInt(n, 10));
+        const period = hh >= 12 ? 'PM' : 'AM';
+        const hour = hh % 12 === 0 ? 12 : hh % 12;
+        return `${hour}:${String(mm).padStart(2, '0')} ${period}`;
+      };
+      return time ? `${dateStr} at ${formatTime12h(time)}` : dateStr;
+    };
+    return {
+      from: fmt(req.originalDateKey, req.originalTime),
+      to: fmt(req.requestedDateKey, req.requestedTime)
+    };
+  }
+
+  async respondToSwap(req: SwapRequest, approve: boolean) {
+    if (!req.id || this.swapRequestBusy.has(req.id)) return;
+    this.swapRequestBusy.add(req.id);
+    try {
+      await this.firebase.respondToSwapRequest(req, approve);
+      this.swapRequests = this.swapRequests.filter(r => r.id !== req.id);
+      const t = await this.toastController.create({
+        message: approve ? 'Swap approved' : 'Swap denied',
+        duration: 1600, position: 'bottom', color: 'success'
+      });
+      await t.present();
+    } catch (err) {
+      console.error('Pending: failed to respond to swap request', err);
+      const t = await this.toastController.create({
+        message: 'Could not update the request', duration: 2000, position: 'bottom', color: 'danger'
+      });
+      await t.present();
+    } finally {
+      this.swapRequestBusy.delete(req.id);
     }
   }
 

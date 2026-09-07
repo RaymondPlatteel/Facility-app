@@ -103,9 +103,18 @@ export class AppComponent implements OnInit, OnDestroy {
     if (this.pendingReviewInterval) clearInterval(this.pendingReviewInterval);
   }
 
+  // Counts everything the Pending page shows — assessment submissions,
+  // link requests, and swap requests — so the sidebar badge matches what's
+  // actually waiting instead of just one of the three queues.
   private async refreshPendingReviewCount() {
     try {
-      this.pendingReviewCount = (await this.firebase.listPendingAssessments()).length;
+      const [assessments, links, swaps] = await Promise.all([
+        this.firebase.listPendingAssessments(),
+        this.firebase.listPendingLinkRequests(),
+        this.firebase.listSwapRequests()
+      ]);
+      this.pendingReviewCount =
+        assessments.length + links.length + swaps.filter(r => r.status === 'pending').length;
     } catch (err) {
       console.error('Nav: pending review count failed', err);
     }

@@ -7,7 +7,37 @@
       </button>
       <div class="crm-title">
         <h1>Pending Review</h1>
-        <p>{{ pending.length }} assessment{{ pending.length === 1 ? '' : 's' }} · {{ linkRequests.length }} link request{{ linkRequests.length === 1 ? '' : 's' }} waiting</p>
+        <p>{{ pending.length }} assessment{{ pending.length === 1 ? '' : 's' }} · {{ linkRequests.length }} link request{{ linkRequests.length === 1 ? '' : 's' }} · {{ swapRequests.length }} swap request{{ swapRequests.length === 1 ? '' : 's' }} waiting</p>
+      </div>
+    </div>
+
+    <div class="pending-section" *ngIf="swapRequestsLoading || swapRequests.length">
+      <h2 class="section-title">Swap Requests</h2>
+      <div *ngIf="swapRequestsLoading" class="empty-state small">Loading…</div>
+      <div class="pending-list" *ngIf="!swapRequestsLoading">
+        <div class="pending-item" *ngFor="let req of swapRequests">
+          <div class="pending-row">
+            <div class="pending-info">
+              <div class="pending-name">{{ req.clientName }}</div>
+              <div class="pending-lift">
+                {{ swapRequestLabel(req).from }}
+                <ion-icon name="chevron-forward-outline"></ion-icon>
+                {{ swapRequestLabel(req).to }}
+              </div>
+              <div class="pending-meta" *ngIf="req.note">"{{ req.note }}"</div>
+            </div>
+            <div class="pending-actions">
+              <button class="action-btn reject" [disabled]="(req.id && swapRequestBusy.has(req.id))" (click)="respondToSwap(req, false)">
+                <ion-icon name="close-circle-outline"></ion-icon>
+                Deny
+              </button>
+              <button class="action-btn approve" [disabled]="(req.id && swapRequestBusy.has(req.id))" (click)="respondToSwap(req, true)">
+                <ion-icon name="checkmark-circle-outline"></ion-icon>
+                Approve
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -36,7 +66,7 @@
       </div>
     </div>
 
-    <h2 class="section-title" *ngIf="linkRequests.length">Assessment Submissions</h2>
+    <h2 class="section-title" *ngIf="linkRequests.length || swapRequests.length">Assessment Submissions</h2>
 
     <div *ngIf="loading" class="empty-state">Loading…</div>
 
