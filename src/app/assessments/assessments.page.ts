@@ -145,6 +145,12 @@ interface Panel {
   sex: Sex;
   // The athlete's single goal record — the same assessmentGoals/{nameKey}
   // document the mobile app reads, not a coach-side copy.
+  // All of this athlete's saved goals, oldest target date first (see
+  // AssessmentGoal.id's comment — one athlete can have several now).
+  goals: AssessmentGoal[];
+  // Which one is loaded into the form right now — '' means "unsaved new
+  // goal, not yet in the list."
+  selectedGoalId: string;
   goal: AssessmentGoal | null;
   goalSaving: boolean;
   // Goals-tab only: when they're aiming to hit it (YYYY-MM-DD), editable
@@ -494,7 +500,11 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       // Read before the history renders — every rank and colour below is
       // computed against this athlete's threshold table.
       panel.sex = (await this.firebase.getMember(key).catch(() => null))?.sex ?? 'male';
-      panel.goal = await this.firebase.getGoal(key).catch(() => null);
+      panel.goals = await this.firebase.listGoalsForClient(key).catch(() => []);
+      panel.goal = panel.goals.length
+        ? panel.goals.reduce((a, b) => (a.updatedAt || '') >= (b.updatedAt || '') ? a : b)
+        : null;
+      panel.selectedGoalId = panel.goal?.id || '';
       // Picking a new athlete always lands on Current — switching people
       // shouldn't leave a stale Goals tab open on the wrong person's target.
       panel.view = 'current';
@@ -569,7 +579,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
 
   private blankPanel(): Panel {
     return {
-      athleteName: '', sex: 'male', goal: null, goalSaving: false, goalTargetDate: '', view: 'current', assessmentDate: this.nowLocal(), form: this.blankForm(),
+      athleteName: '', sex: 'male', goals: [], selectedGoalId: '', goal: null, goalSaving: false, goalTargetDate: '', view: 'current', assessmentDate: this.nowLocal(), form: this.blankForm(),
       history: [], selectedHistoryTs: '', showResult: false, result: null,
       resultName: '', rank: 'UNRANKED', rankColor: RANK_COLORS['UNRANKED'], rankBgColor: RANK_BG_ANCHORS[0].bg,
       isChroma: false, rankGrad: 'linear-gradient(#737373, #737373)', rankGlare: 'none',
@@ -854,6 +864,15 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     return panel.history.slice().reverse();
   }
 
+  // Label for one entry in the Goals dropdown — the target date if they set
+  // one, otherwise "No date" so a dateless goal doesn't render blank.
+  goalOptionLabel(goal: AssessmentGoal): string {
+    const dateLabel = goal.targetDate
+      ? new Date(goal.targetDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+      : 'No date';
+    return `${dateLabel} — Lvl ${this.dispLvl(goal.lvl)}`;
+  }
+
   // Load a past assessment into the form AND show its result immediately
   // (display only — nothing is saved until Calculate is pressed).
   loadSelectedHistory(panel: Panel) {
@@ -1014,16 +1033,14 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     }
   }
 
-  // Goals equivalent of showLatest(panel): renders the saved goal if one
-  // exists, or a blank starting card if not — same "nothing entered yet"
-  // treatment resetToFreshAthlete already gives a brand-new athlete.
+  // Goals equivalent of showLatest(panel): renders the most-recently-touched
+  // saved goal if any exist, or a blank starting card if not — same
+  // "nothing entered yet" treatment resetToFreshAthlete already gives a
+  // brand-new athlete. Picking a SPECIFIC one of several goals is
+  // selectGoal(), below.
   private showGoal(panel: Panel) {
     if (panel.goal) {
-      const inputs = panel.goal.inputs;
-      panel.goalTargetDate = panel.goal.targetDate || '';
-      this.applyInputsToForm(panel, inputs);
-      const totals = this.computeOmni(inputs);
-      this.renderResult(panel, panel.athleteName.trim() || 'Athlete', inputs, totals);
+      this.loadGoalIntoForm(panel, panel.goal);
       return;
     }
 
@@ -1046,6 +1063,45 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     this.resetToFreshAthlete(panel);
   }
 
+  private loadGoalIntoForm(panel: Panel, goal: AssessmentGoal) {
+    panel.goalTargetDate = goal.targetDate || '';
+    this.applyInputsToForm(panel, goal.inputs);
+    const totals = this.computeOmni(goal.inputs);
+    this.renderResult(panel, panel.athleteName.trim() || 'Athlete', goal.inputs, totals);
+  }
+
+  // Bound to the Goals dropdown (mirrors loadSelectedHistory) — switches
+  // which of the athlete's several goals is loaded into the form.
+  selectGoal(panel: Panel) {
+    const id = panel.selectedGoalId;
+    if (!id) { this.startNewGoal(panel); return; }
+    const goal = panel.goals.find(g => g.id === id);
+    if (!goal) return;
+    panel.goal = goal;
+    this.loadGoalIntoForm(panel, goal);
+  }
+
+  // Deletes whichever goal is currently selected in the dropdown (mirrors
+  // deleteSelectedHistory).
+  async deleteSelectedGoal(panel: Panel) {
+    const id = panel.selectedGoalId;
+    if (!id) return;
+    try {
+      await this.firebase.clearGoal(id);
+      panel.goals = panel.goals.filter(g => g.id !== id);
+      panel.selectedGoalId = '';
+      panel.goal = panel.goals.length
+        ? panel.goals.reduce((a, b) => (a.updatedAt || '') >= (b.updatedAt || '') ? a : b)
+        : null;
+      panel.selectedGoalId = panel.goal?.id || '';
+      this.showGoal(panel);
+      this.toast('Goal deleted');
+    } catch (err) {
+      console.error('Assessments: failed to delete goal', err);
+      this.toast('Could not delete goal', 'danger');
+    }
+  }
+
   // Overwrite whatever's currently typed in the Goals tab with the
   // athlete's most recent real assessment — re-baselining a stale target
   // without deleting it and starting over.
@@ -1058,29 +1114,32 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     this.applyInputsToForm(panel, latest.inputs);
     const totals = this.computeOmni(latest.inputs);
     this.renderResult(panel, panel.athleteName.trim() || 'Athlete', latest.inputs, totals);
-    this.toast('Reset to current stats — Calculate to save it');
+    this.toast('Reset to current stats — set a target date and Save Goal');
   }
 
-  // Deletes the saved goal entirely and starts fresh from the athlete's
-  // current stats — a real "start over," distinct from just adjusting numbers.
-  async startNewGoal(panel: Panel) {
-    const nameInput = panel.athleteName.trim();
-    if (!nameInput) return;
-    try {
-      await this.firebase.clearGoal(nameInput.toLowerCase());
-    } catch (err) {
-      console.error('Assessments: failed to clear goal', err);
-    }
+  // Clears the form to a fresh, unsaved goal starting from current stats —
+  // for adding ANOTHER goal (a different target date) without touching any
+  // goal already saved. Calculate Goal afterward creates it as a new entry
+  // rather than overwriting whichever one was loaded.
+  startNewGoal(panel: Panel) {
+    panel.selectedGoalId = '';
     panel.goal = null;
     panel.goalTargetDate = '';
-    this.showGoal(panel);
-    this.toast('Started a new goal from current stats');
+    const latest = panel.history[panel.history.length - 1];
+    if (latest) {
+      this.applyInputsToForm(panel, latest.inputs);
+      const totals = this.computeOmni(latest.inputs);
+      this.renderResult(panel, panel.athleteName.trim() || 'Athlete', latest.inputs, totals);
+    } else {
+      this.resetToFreshAthlete(panel);
+    }
+    this.toast('Set a target date to start a new goal');
   }
 
-  // The Goals-tab Calculate button. Writes assessmentGoals/{nameKey} instead
-  // of a dated assessment row: no history entry, no backdate, no rank-up
-  // takeover — a goal is a target the athlete chose, not a thing that just
-  // happened to them.
+  // The Goals-tab Calculate button. Writes to assessmentGoals — one doc per
+  // (athlete, target date) — instead of a dated assessment row: no history
+  // entry, no backdate, no rank-up takeover, a goal is a target someone
+  // chose, not a thing that just happened.
   async calculateGoal(panel: Panel) {
     const nameInput = panel.athleteName.trim();
     if (!nameInput) {
@@ -1093,8 +1152,11 @@ export class AssessmentsPage implements OnInit, OnDestroy {
 
     panel.saving = true;
     try {
-      await this.firebase.setGoal(nameInput.toLowerCase(), nameInput, inputs, 'coach', panel.goalTargetDate || undefined);
-      panel.goal = await this.firebase.getGoal(nameInput.toLowerCase());
+      const key = nameInput.toLowerCase();
+      const id = await this.firebase.setGoal(key, nameInput, inputs, 'coach', panel.goalTargetDate || undefined);
+      panel.goals = await this.firebase.listGoalsForClient(key);
+      panel.goal = panel.goals.find(g => g.id === id) || null;
+      panel.selectedGoalId = id;
       this.toast('Goal saved');
     } catch (err) {
       console.error('Assessments: goal save failed', err);

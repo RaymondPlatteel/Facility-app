@@ -223,6 +223,10 @@ export interface JobAcceptance {
 // which is what enforces "you only have one set of goals": a second save
 // overwrites by construction rather than by convention.
 export interface AssessmentGoal {
+  // Doc id: `${nameKey}::${targetDate || '_notarget'}` — one athlete can
+  // have several goals now, one per distinct target date (or one dateless
+  // "someday" goal), instead of a single target that saving again replaced.
+  id?: string;
   nameKey: string;
   clientName: string;
   inputs: AssessmentInputs;
@@ -232,7 +236,8 @@ export interface AssessmentGoal {
   // 'athlete', 'coach', or a Story Mode character's name, so the athlete
   // can tell where a target came from.
   updatedBy: string;
-  // When they're aiming to hit it — optional, YYYY-MM-DD.
+  // When they're aiming to hit it — optional, YYYY-MM-DD. Also what
+  // distinguishes one of an athlete's goals from another — see id.
   targetDate?: string;
 }
 
@@ -2287,16 +2292,35 @@ export class FirebaseService {
   // members row until something touches it, and a coach shouldn't have to
   // make one first just to record a sex.
   // ---------- goals ----------
+  // An athlete can have several goals at once, one per target date (plus at
+  // most one dateless "someday" goal) — see AssessmentGoal.id's comment for
+  // the doc-id scheme. Pre-existing single-goal docs (id === nameKey, from
+  // before this) still show up in listGoalsForClient: the query filters on
+  // the nameKey FIELD, not the doc id, so nothing needed migrating.
 
-  async getGoal(nameKey: string): Promise<AssessmentGoal | null> {
-    const snap = await getDoc(doc(this.db, 'assessmentGoals', nameKey));
-    return snap.exists() ? (snap.data() as AssessmentGoal) : null;
+  private goalDocId(nameKey: string, targetDate?: string): string {
+    return `${nameKey}::${targetDate || '_notarget'}`;
   }
 
-  async setGoal(nameKey: string, clientName: string, inputs: AssessmentInputs, updatedBy: string, targetDate?: string): Promise<void> {
+  // "The" goal, for callers that only ever showed one — the most recently
+  // touched of however many the athlete now has.
+  async getGoal(nameKey: string): Promise<AssessmentGoal | null> {
+    const goals = await this.listGoalsForClient(nameKey);
+    if (!goals.length) return null;
+    return goals.reduce((a, b) => (a.updatedAt || '') >= (b.updatedAt || '') ? a : b);
+  }
+
+  async listGoalsForClient(nameKey: string): Promise<AssessmentGoal[]> {
+    const snap = await getDocs(query(collection(this.db, 'assessmentGoals'), where('nameKey', '==', nameKey)));
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as AssessmentGoal) }))
+      .sort((a, b) => (a.targetDate || '9999-99-99').localeCompare(b.targetDate || '9999-99-99'));
+  }
+
+  async setGoal(nameKey: string, clientName: string, inputs: AssessmentInputs, updatedBy: string, targetDate?: string): Promise<string> {
     const totals = computeOmni(inputs);
     const sex = (await this.getMember(nameKey))?.sex ?? 'male';
-    await setDoc(doc(this.db, 'assessmentGoals', nameKey), {
+    const id = this.goalDocId(nameKey, targetDate);
+    await setDoc(doc(this.db, 'assessmentGoals', id), {
       nameKey,
       clientName,
       inputs,
@@ -2306,10 +2330,11 @@ export class FirebaseService {
       updatedBy,
       targetDate: targetDate || ''
     } as AssessmentGoal);
+    return id;
   }
 
-  async clearGoal(nameKey: string): Promise<void> {
-    await deleteDoc(doc(this.db, 'assessmentGoals', nameKey));
+  async clearGoal(id: string): Promise<void> {
+    await deleteDoc(doc(this.db, 'assessmentGoals', id));
   }
 
   async setMemberSex(nameKey: string, clientName: string, sex: Sex): Promise<void> {

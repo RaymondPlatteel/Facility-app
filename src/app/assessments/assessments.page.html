@@ -117,7 +117,10 @@
 
           <p class="history-loading" *ngIf="panel.loadingHistory">Loading previous assessments…</p>
 
-          <div class="field" *ngIf="!panel.loadingHistory && panel.history.length">
+          <!-- Current tab: browse past dated assessments. Goals tab: browse
+               this athlete's several saved goals instead — a goal isn't a
+               dated assessment, so it never belonged in the same list. -->
+          <div class="field" *ngIf="panel.view === 'current' && !panel.loadingHistory && panel.history.length">
             <label class="field-label">Previous Assessments</label>
             <div class="history-controls">
               <select class="text-input" [(ngModel)]="panel.selectedHistoryTs" (change)="loadSelectedHistory(panel)">
@@ -125,6 +128,19 @@
                 <option *ngFor="let h of historyOptions(panel)" [value]="h.timestamp">{{ h.dateLabel }} — Lvl {{ dispLvl(h.lvl) }}</option>
               </select>
               <button class="delete-btn" [disabled]="!panel.selectedHistoryTs" (click)="deleteSelectedHistory(panel)" aria-label="Delete assessment">
+                <ion-icon name="trash-outline"></ion-icon>
+              </button>
+            </div>
+          </div>
+
+          <div class="field" *ngIf="panel.view === 'goals' && panel.goals.length">
+            <label class="field-label">Goals</label>
+            <div class="history-controls">
+              <select class="text-input" [(ngModel)]="panel.selectedGoalId" (change)="selectGoal(panel)">
+                <option value="">— New goal —</option>
+                <option *ngFor="let g of panel.goals" [value]="g.id">{{ goalOptionLabel(g) }}</option>
+              </select>
+              <button class="delete-btn" [disabled]="!panel.selectedGoalId" (click)="deleteSelectedGoal(panel)" aria-label="Delete goal">
                 <ion-icon name="trash-outline"></ion-icon>
               </button>
             </div>
