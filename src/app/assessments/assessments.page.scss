@@ -1344,3 +1344,48 @@ $rank-tint-cards: true;
 .goal-calc-btn {
   border-color: var(--rbc, #00d4ff);
 }
+
+.goal-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.goal-date-field {
+  flex: 1;
+  min-width: 140px;
+  display: block;
+
+  input {
+    margin-top: 5px;
+  }
+}
+
+.goal-tool-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.goal-tool-btn {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid #2a2a2a;
+  background: #131313;
+  color: #88a6bf;
+  cursor: pointer;
+
+  &:active { background: #1a1a1a; }
+
+  &.new-goal {
+    border-color: #ff5a6a;
+    color: #ff5a6a;
+  }
+}

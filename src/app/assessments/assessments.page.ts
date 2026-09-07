@@ -147,6 +147,9 @@ interface Panel {
   // document the mobile app reads, not a coach-side copy.
   goal: AssessmentGoal | null;
   goalSaving: boolean;
+  // Goals-tab only: when they're aiming to hit it (YYYY-MM-DD), editable
+  // alongside the same thirteen-field form.
+  goalTargetDate: string;
   // Current/Goals tab, mirroring Project 000's toggle exactly: same form,
   // same result display, switched by what it's reading from and saving to.
   view: 'current' | 'goals';
@@ -566,7 +569,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
 
   private blankPanel(): Panel {
     return {
-      athleteName: '', sex: 'male', goal: null, goalSaving: false, view: 'current', assessmentDate: this.nowLocal(), form: this.blankForm(),
+      athleteName: '', sex: 'male', goal: null, goalSaving: false, goalTargetDate: '', view: 'current', assessmentDate: this.nowLocal(), form: this.blankForm(),
       history: [], selectedHistoryTs: '', showResult: false, result: null,
       resultName: '', rank: 'UNRANKED', rankColor: RANK_COLORS['UNRANKED'], rankBgColor: RANK_BG_ANCHORS[0].bg,
       isChroma: false, rankGrad: 'linear-gradient(#737373, #737373)', rankGlare: 'none',
@@ -1017,11 +1020,14 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   private showGoal(panel: Panel) {
     if (panel.goal) {
       const inputs = panel.goal.inputs;
+      panel.goalTargetDate = panel.goal.targetDate || '';
       this.applyInputsToForm(panel, inputs);
       const totals = this.computeOmni(inputs);
       this.renderResult(panel, panel.athleteName.trim() || 'Athlete', inputs, totals);
       return;
     }
+
+    panel.goalTargetDate = '';
 
     // No goal yet: start from where they actually ARE, not a blank form.
     // A coach setting someone's first goal usually wants to nudge a couple
@@ -1040,6 +1046,37 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     this.resetToFreshAthlete(panel);
   }
 
+  // Overwrite whatever's currently typed in the Goals tab with the
+  // athlete's most recent real assessment — re-baselining a stale target
+  // without deleting it and starting over.
+  resetGoalToCurrent(panel: Panel) {
+    const latest = panel.history[panel.history.length - 1];
+    if (!latest) {
+      this.toast('No assessment on record yet', 'warning');
+      return;
+    }
+    this.applyInputsToForm(panel, latest.inputs);
+    const totals = this.computeOmni(latest.inputs);
+    this.renderResult(panel, panel.athleteName.trim() || 'Athlete', latest.inputs, totals);
+    this.toast('Reset to current stats — Calculate to save it');
+  }
+
+  // Deletes the saved goal entirely and starts fresh from the athlete's
+  // current stats — a real "start over," distinct from just adjusting numbers.
+  async startNewGoal(panel: Panel) {
+    const nameInput = panel.athleteName.trim();
+    if (!nameInput) return;
+    try {
+      await this.firebase.clearGoal(nameInput.toLowerCase());
+    } catch (err) {
+      console.error('Assessments: failed to clear goal', err);
+    }
+    panel.goal = null;
+    panel.goalTargetDate = '';
+    this.showGoal(panel);
+    this.toast('Started a new goal from current stats');
+  }
+
   // The Goals-tab Calculate button. Writes assessmentGoals/{nameKey} instead
   // of a dated assessment row: no history entry, no backdate, no rank-up
   // takeover — a goal is a target the athlete chose, not a thing that just
@@ -1056,7 +1093,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
 
     panel.saving = true;
     try {
-      await this.firebase.setGoal(nameInput.toLowerCase(), nameInput, inputs, 'coach');
+      await this.firebase.setGoal(nameInput.toLowerCase(), nameInput, inputs, 'coach', panel.goalTargetDate || undefined);
       panel.goal = await this.firebase.getGoal(nameInput.toLowerCase());
       this.toast('Goal saved');
     } catch (err) {

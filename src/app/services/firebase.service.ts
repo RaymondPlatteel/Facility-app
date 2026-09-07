@@ -232,6 +232,8 @@ export interface AssessmentGoal {
   // 'athlete', 'coach', or a Story Mode character's name, so the athlete
   // can tell where a target came from.
   updatedBy: string;
+  // When they're aiming to hit it — optional, YYYY-MM-DD.
+  targetDate?: string;
 }
 
 export interface Member {
@@ -2291,7 +2293,7 @@ export class FirebaseService {
     return snap.exists() ? (snap.data() as AssessmentGoal) : null;
   }
 
-  async setGoal(nameKey: string, clientName: string, inputs: AssessmentInputs, updatedBy: string): Promise<void> {
+  async setGoal(nameKey: string, clientName: string, inputs: AssessmentInputs, updatedBy: string, targetDate?: string): Promise<void> {
     const totals = computeOmni(inputs);
     const sex = (await this.getMember(nameKey))?.sex ?? 'male';
     await setDoc(doc(this.db, 'assessmentGoals', nameKey), {
@@ -2301,7 +2303,8 @@ export class FirebaseService {
       lvl: totals.lvl,
       rank: getOmniRank(totals.lvl, sex),
       updatedAt: new Date().toISOString(),
-      updatedBy
+      updatedBy,
+      targetDate: targetDate || ''
     } as AssessmentGoal);
   }
 

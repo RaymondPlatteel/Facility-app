@@ -265,6 +265,19 @@
 
           <p class="error-msg" *ngIf="panel.errorMsg">Please fill in all fields before calculating.</p>
 
+          <!-- Goals-only: when they're aiming to hit it, and a couple of
+               ways to reset instead of hand-editing every field back. -->
+          <div class="goal-tools" *ngIf="panel.view === 'goals'">
+            <label class="fr-label goal-date-field">
+              Target Date
+              <input class="text-input" type="date" [(ngModel)]="panel.goalTargetDate" />
+            </label>
+            <div class="goal-tool-btns">
+              <button type="button" class="goal-tool-btn" (click)="resetGoalToCurrent(panel)">Reset to Current</button>
+              <button type="button" class="goal-tool-btn new-goal" (click)="startNewGoal(panel)">New Goal</button>
+            </div>
+          </div>
+
           <button class="calc-btn" *ngIf="panel.view === 'current'" (click)="calculate(panel)" [disabled]="panel.saving">
             {{ panel.saving ? 'SAVING…' : (panel.backdateOpen && panel.backdate ? 'SAVE FOR ' + backdateLabel(panel) : 'CALCULATE OMNI SCORE') }}
           </button>
@@ -276,8 +289,6 @@
             Saves as today's snapshot — one per day. Recalculating today updates it.
             <button type="button" class="backdate-link" (click)="toggleBackdate(panel, true)">Log a past date</button>
           </p>
-          <!-- Goals have no date — a target isn't a thing that happened on a
-               day, it's what today's inputs are aimed at. -->
           <p class="save-note" *ngIf="panel.view === 'goals'">
             <ng-container *ngIf="panel.goal">
               Saves as this athlete's single target — the same goal Project 000 shows them.
