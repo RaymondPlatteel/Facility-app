@@ -18,8 +18,14 @@
         <div class="pending-item" *ngFor="let req of swapRequests">
           <div class="pending-row">
             <div class="pending-info">
-              <div class="pending-name">{{ req.clientName }}</div>
-              <div class="pending-lift">
+              <div class="pending-name">
+                {{ req.clientName }}
+                <span class="pending-kind-tag" *ngIf="req.kind === 'openGym'">Open Gym</span>
+              </div>
+              <div class="pending-lift" *ngIf="req.kind === 'openGym'">
+                {{ swapRequestLabel(req).to }}
+              </div>
+              <div class="pending-lift" *ngIf="req.kind !== 'openGym'">
                 {{ swapRequestLabel(req).from }}
                 <ion-icon name="chevron-forward-outline"></ion-icon>
                 {{ swapRequestLabel(req).to }}

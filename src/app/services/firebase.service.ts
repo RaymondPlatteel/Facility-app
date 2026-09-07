@@ -105,12 +105,18 @@ export interface SingleSession {
 // an approved swap is indistinguishable from one the coach made themselves.
 export interface SwapRequest {
   id?: string;
+  // 'swap' (default, for older records with no kind stored): move one of
+  // the athlete's own existing sessions. 'openGym': not tied to any
+  // existing session — a fresh self-directed slot request. originalDateKey/
+  // originalTime/packageId/isSingle/singleSessionId are all meaningless for
+  // an openGym request and stay blank/false.
+  kind?: 'swap' | 'openGym';
   clientId: string;         // best-effort; clientName is the reliable key
   clientName: string;
-  packageId: string;        // '' when isSingle
+  packageId: string;        // '' when isSingle or kind === 'openGym'
   isSingle: boolean;
   singleSessionId?: string; // set when isSingle
-  originalDateKey: string;  // YYYY-MM-DD of the occurrence being moved
+  originalDateKey: string;  // YYYY-MM-DD of the occurrence being moved; '' for openGym
   originalTime: string;
   requestedDateKey: string;
   requestedTime: string;
@@ -1141,6 +1147,7 @@ export class FirebaseService {
   private mapSwapRequest(id: string, data: any): SwapRequest {
     return {
       id,
+      kind: data['kind'] === 'openGym' ? 'openGym' : 'swap',
       clientId: data['clientId'] ?? '',
       clientName: data['clientName'] ?? '',
       packageId: data['packageId'] ?? '',
@@ -1173,7 +1180,20 @@ export class FirebaseService {
   async respondToSwapRequest(req: SwapRequest, approve: boolean): Promise<void> {
     if (!req.id) return;
     if (approve) {
-      if (req.isSingle && req.singleSessionId) {
+      if (req.kind === 'openGym') {
+        // Not moving anything — this creates a brand new one-off session,
+        // same as a coach adding a single session by hand, just initiated
+        // by the athlete.
+        await this.saveSingleSession({
+          date: req.requestedDateKey,
+          time: req.requestedTime || '',
+          durationMinutes: req.durationMinutes || 60,
+          sessionType: 'Private',
+          title: 'Open Gym',
+          clientIds: req.clientId ? [req.clientId] : [],
+          clientNames: [req.clientName]
+        });
+      } else if (req.isSingle && req.singleSessionId) {
         await updateDoc(doc(this.db, 'singleSessions', req.singleSessionId), {
           date: req.requestedDateKey,
           time: req.requestedTime || '',
