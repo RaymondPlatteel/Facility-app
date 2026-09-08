@@ -448,16 +448,58 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   private async refreshClients() {
     try {
       this.clients = await this.firebase.listClientProfiles();
-      this.clientNames = this.clients.map(c => c.fullName);
+      this.clientNames = this.orderByRecent(this.clients.map(c => c.fullName));
       this.panels.forEach(p => p.filteredNames = this.clientNames);
     } catch (err) {
       console.error('Assessments: failed to load clients', err);
     }
   }
 
+  // ---------- recently-viewed ordering ----------
+  // Most-recently-looked-at athletes float to the top of the dropdown.
+  // Persisted per-browser in localStorage (not per-coach account, but this
+  // app has no per-user auth split for coaches, so that's fine).
+  private static readonly RECENT_KEY = 'facility_recent_clients';
+  private static readonly RECENT_MAX = 50;
+
+  private loadRecentNames(): string[] {
+    try {
+      const raw = localStorage.getItem(AssessmentsPage.RECENT_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private markRecent(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      const recent = this.loadRecentNames().filter(n => n.toLowerCase() !== trimmed.toLowerCase());
+      recent.unshift(trimmed);
+      localStorage.setItem(AssessmentsPage.RECENT_KEY, JSON.stringify(recent.slice(0, AssessmentsPage.RECENT_MAX)));
+    } catch {
+      // ignore (private browsing / storage disabled)
+    }
+    this.clientNames = this.orderByRecent(this.clientNames);
+    this.panels.forEach(p => { if (!p.nameOpen) p.filteredNames = this.clientNames; });
+  }
+
+  // Recently-viewed names first (most recent first), then everyone else in
+  // their existing order.
+  private orderByRecent(names: string[]): string[] {
+    const recent = this.loadRecentNames();
+    const rank = new Map(recent.map((n, i) => [n.toLowerCase(), i]));
+    return [...names].sort((a, b) => {
+      const ra = rank.has(a.toLowerCase()) ? rank.get(a.toLowerCase())! : Infinity;
+      const rb = rank.has(b.toLowerCase()) ? rank.get(b.toLowerCase())! : Infinity;
+      return ra - rb;
+    });
+  }
+
   // ---------- client dropdown (combobox) ----------
   openNames(panel: Panel) {
-    panel.filteredNames = this.clientNames;
+    panel.filteredNames = this.orderByRecent(this.clientNames);
     panel.nameOpen = true;
   }
 
@@ -496,6 +538,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     if (key === panel.loadedNameKey && panel.history.length) return;
     panel.loadedNameKey = key;
     panel.loadingHistory = true;
+    this.markRecent(panel.athleteName);
     try {
       // Read before the history renders — every rank and colour below is
       // computed against this athlete's threshold table.
