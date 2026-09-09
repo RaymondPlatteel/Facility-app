@@ -1,5 +1,18 @@
 import { PackageRecord, SessionOverride, SingleSession } from './firebase.service';
 
+// A package with NO clientPayments at all isn't being tracked through
+// online payment — that's a coach scheduling someone by hand and
+// collecting payment their own way, same as always, unaffected by this.
+// A package that DOES have a payment record but shows `paid: false` for
+// someone is one the payment system is actively tracking as incomplete —
+// that one shouldn't show as scheduled until it's actually paid, even
+// though status may already say 'active' with days/times assigned.
+function hasUnpaidOnlineBalance(pkg: PackageRecord): boolean {
+  const payments = pkg.clientPayments;
+  if (!payments) return false;
+  return Object.values(payments).some(p => !p.paid);
+}
+
 // One recurring training slot derived from an active package, OR a one-off
 // SingleSession folded into the same shape (packageId `single:<id>`,
 // isSingle true) so the whole Schedule page — cards, the session modal,
@@ -88,7 +101,7 @@ export function generateScheduleForRange(
   };
 
   const pkgById = new Map<string, PackageRecord>();
-  const active = packages.filter(p => statuses.includes(p.status) && (p.daysOfWeek?.length ?? 0) > 0);
+  const active = packages.filter(p => statuses.includes(p.status) && (p.daysOfWeek?.length ?? 0) > 0 && !hasUnpaidOnlineBalance(p));
   for (const p of active) pkgById.set(p.id || p.packageId, p);
 
   const overrideByKey = new Map<string, SessionOverride>();
