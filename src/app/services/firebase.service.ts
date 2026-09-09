@@ -303,6 +303,13 @@ export interface PackageRecord {
   purchaseDate?: string; // ISO
   expirationDate?: string; // ISO (auto-calculated)
   status: 'active' | 'completed' | 'prospect';
+  // Set by the payments Worker when an athlete starts an auto-renewing
+  // monthly membership; cleared (and subscriptionCanceledAt stamped) when
+  // it's cancelled. Read-only from this app — billing state belongs to
+  // Stripe, and the Worker is what reconciles it.
+  stripeSubscriptionId?: string;
+  stripeCustomerId?: string;
+  subscriptionCanceledAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -748,6 +755,25 @@ export class FirebaseService {
       if (typeof pkg.packageDuration !== 'number') {
         const match = /^(\d+)/.exec(String(pkg.packageDuration || ''));
         pkg.packageDuration = match ? parseInt(match[1], 10) : 1;
+      }
+      // These are typed non-optional but come straight off a raw Firestore
+      // cast above, so a doc written before the field existed (or by the
+      // payments Worker, which only sets what it knows) yields undefined
+      // and makes the type a lie. Anything downstream doing arithmetic on
+      // them then produces NaN — which renders as a blank or "NaN" in the
+      // table rather than failing loudly. Normalize once, here, so the
+      // declared types are actually true everywhere else.
+      if (typeof pkg.totalSessions !== 'number' || !isFinite(pkg.totalSessions)) {
+        pkg.totalSessions = 0;
+      }
+      if (typeof pkg.sessionsPerWeek !== 'number' || !isFinite(pkg.sessionsPerWeek)) {
+        pkg.sessionsPerWeek = Array.isArray(pkg.daysOfWeek) ? pkg.daysOfWeek.length : 0;
+      }
+      if (typeof pkg.cost !== 'number' || !isFinite(pkg.cost)) {
+        pkg.cost = 0;
+      }
+      if (typeof pkg.sessionDurationMinutes !== 'number' || !isFinite(pkg.sessionDurationMinutes)) {
+        pkg.sessionDurationMinutes = 60;
       }
       // Packages with training days are schedulable — treat legacy prospect rows as active.
       if (pkg.status === 'prospect' && pkg.daysOfWeek.length > 0) {
@@ -1252,6 +1278,38 @@ export class FirebaseService {
     const counts = new Map<string, number>();
     datesByPackage.forEach((dates, packageId) => counts.set(packageId, dates.size));
     return counts;
+  }
+
+  // An excused occurrence doesn't deduct a session, but it did occupy a
+  // calendar slot — the package's final-session projection needs to know
+  // how many of these have happened so it can extend the recurring pattern
+  // by that many extra occurrences (otherwise the last real session gets
+  // cut off the calendar even though sessionsRemaining says it's owed).
+  // Same distinct-date-per-package shape as getDecrementedCountsByPackage.
+  async getExcusedCountsByPackage(): Promise<Map<string, number>> {
+    const snap = await getDocs(query(this.checkInsCollection(), where('status', '==', 'excused')));
+    const datesByPackage = new Map<string, Set<string>>();
+    snap.forEach(d => {
+      const packageId = d.data()['packageId'] as string | undefined;
+      if (!packageId) return;
+      const date = d.data()['date'] as string;
+      if (!datesByPackage.has(packageId)) datesByPackage.set(packageId, new Set());
+      datesByPackage.get(packageId)!.add(date);
+    });
+    const counts = new Map<string, number>();
+    datesByPackage.forEach((dates, packageId) => counts.set(packageId, dates.size));
+    return counts;
+  }
+
+  async getExcusedSessionCount(packageId: string): Promise<number> {
+    const snap = await getDocs(query(
+      this.checkInsCollection(),
+      where('packageId', '==', packageId),
+      where('status', '==', 'excused')
+    ));
+    const dates = new Set<string>();
+    snap.forEach(d => dates.add(d.data()['date']));
+    return dates.size;
   }
 
   // Newest first. Sorted client-side per query field to avoid composite indexes.
@@ -1931,7 +1989,12 @@ export class FirebaseService {
           id: doc.id,
           name: data['name'],
           description: data['description'],
-          sections: data['sections'],
+          // Typed non-optional, so several callers index straight into it
+          // (session-workout-view does `workout?.sections[i]`, which throws
+          // if sections is undefined rather than just returning undefined).
+          // A workout doc saved without sections would crash the live
+          // session view — default here so the declared type is true.
+          sections: data['sections'] ?? [],
           totalDuration: data['totalDuration'],
           equipment: data['equipment'],
           tags: data['tags'],

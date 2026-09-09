@@ -48,8 +48,8 @@
 	<key>UIStatusBarHidden</key>
 	<true/>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Facility App can add your training schedule to a dedicated calendar so it shows up alongside your other events.</string>
-	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
-	<string>Facility App can add your training schedule to a dedicated calendar so it shows up alongside your other events.</string>
+	<string>Facility App keeps a dedicated calendar in sync with your training schedule, reusing the same one instead of creating duplicates.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Facility App keeps a dedicated calendar in sync with your training schedule, reusing the same one instead of creating duplicates.</string>
 </dict>
 </plist>

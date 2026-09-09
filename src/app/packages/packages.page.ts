@@ -17,7 +17,7 @@ import {
   IonPopover,
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline } from 'ionicons/icons';
+import { arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline, refreshOutline } from 'ionicons/icons';
 import { Router } from '@angular/router';
 import { FirebaseService, ClientProfile, PackageRecord, ClientPayment, SessionOverride, localDateString } from '../services/firebase.service';
 import { ToastController } from '@ionic/angular/standalone';
@@ -108,7 +108,7 @@ export class PackagesPage implements OnInit {
   searchQuery = '';
   clients: ClientProfile[] = [];
   packages: PackageRecord[] = [];
-  tableStatusFilter: 'all' | PackageStatus = 'all';
+  tableStatusFilter: 'all' | PackageStatus = 'active';
 
   get filteredPackages(): PackageRecord[] {
     if (this.tableStatusFilter === 'all') return this.packages;
@@ -163,7 +163,7 @@ export class PackagesPage implements OnInit {
     private firebase: FirebaseService,
     private toastController: ToastController
   ) {
-    addIcons({ arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline });
+    addIcons({ arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline, refreshOutline });
   }
 
   ngOnInit(): void {
@@ -262,9 +262,10 @@ export class PackagesPage implements OnInit {
 
   async loadData() {
     this.clients = await this.firebase.listClientProfiles();
-    const [packages, usedByPackage, overrides] = await Promise.all([
+    const [packages, usedByPackage, excusedByPackage, overrides] = await Promise.all([
       this.firebase.listPackages(),
       this.firebase.getDecrementedCountsByPackage(),
+      this.firebase.getExcusedCountsByPackage(),
       this.firebase.listSessionOverrides()
     ]);
     this.packages = packages;
@@ -273,15 +274,18 @@ export class PackagesPage implements OnInit {
       if (!p.daysOfWeek) p.daysOfWeek = [] as any;
       if (!p.dayTimes) p.dayTimes = {} as any;
       const used = p.id ? (usedByPackage.get(p.id) ?? 0) : 0;
+      const excused = p.id ? (excusedByPackage.get(p.id) ?? 0) : 0;
       const beforeRemaining = p.sessionsRemaining;
-      this.recalcRow(p, used);
-      if (p.id && beforeRemaining !== p.sessionsRemaining) {
+      const beforeExpiration = p.expirationDate;
+      this.recalcRow(p, used, excused);
+      if (p.id && (beforeRemaining !== p.sessionsRemaining || beforeExpiration !== p.expirationDate)) {
         await this.firebase.upsertPackage({
           id: p.id,
           packageName: p.packageName,
           totalSessions: p.totalSessions,
           sessionsPerWeek: p.sessionsPerWeek,
-          sessionsRemaining: p.sessionsRemaining
+          sessionsRemaining: p.sessionsRemaining,
+          expirationDate: p.expirationDate
         });
       }
     }
@@ -344,8 +348,10 @@ export class PackagesPage implements OnInit {
   // Every active package gets a dot color, shown/hidden via the checklist. Colors
   // are assigned once per package (stable across toggles/rebuilds), alphabetically.
   private buildLegend() {
+    // Completed stays alongside active here — a package finishing shouldn't
+    // instantly erase its sessions from the calendar overview.
     const active = this.packages
-      .filter(p => p.status === 'active' && (p.id || p.packageId))
+      .filter(p => (p.status === 'active' || p.status === 'completed') && (p.id || p.packageId))
       .slice()
       .sort((a, b) => (a.packageName || '').localeCompare(b.packageName || ''));
 
@@ -375,7 +381,7 @@ export class PackagesPage implements OnInit {
   private buildMonthBlock(monthDate: Date): CalendarMonth {
     const gridStart = startOfWeek(monthDate);
     const gridEnd = addDays(gridStart, 41);
-    const entries = generateScheduleForRange(this.packages, gridStart, gridEnd, this.overrides);
+    const entries = generateScheduleForRange(this.packages, gridStart, gridEnd, this.overrides, [], ['active', 'completed']);
     const todayKey = localDateString();
 
     const allDays: CalendarDay[] = [];
@@ -523,10 +529,13 @@ export class PackagesPage implements OnInit {
   }
 
   async saveRow(pkg: PackageRecord, toastMessage = 'Package saved') {
-    const sessionsUsed = pkg.id
-      ? await this.firebase.getDecrementedSessionCount(pkg.id)
-      : 0;
-    this.recalcRow(pkg, sessionsUsed);
+    const [sessionsUsed, excusedCount] = pkg.id
+      ? await Promise.all([
+          this.firebase.getDecrementedSessionCount(pkg.id),
+          this.firebase.getExcusedSessionCount(pkg.id)
+        ])
+      : [0, 0];
+    this.recalcRow(pkg, sessionsUsed, excusedCount);
     if ((pkg.daysOfWeek?.length ?? 0) > 0 && pkg.status === 'prospect') {
       pkg.status = 'active';
     }
@@ -638,7 +647,7 @@ export class PackagesPage implements OnInit {
     this.packages = this.packages.filter(p => p.id !== pkg.id);
   }
 
-  recalcRow(pkg: PackageRecord, sessionsUsed?: number) {
+  recalcRow(pkg: PackageRecord, sessionsUsed?: number, excusedCount = 0) {
     const duration = Number(pkg.packageDuration) || 1;
 
     // Per-session pack: no recurring weekly slot, so there's nothing to
@@ -673,9 +682,14 @@ export class PackagesPage implements OnInit {
       pkg.sessionsRemaining = total;
     }
     if (pkg.purchaseDate) {
+      // An excused occurrence still happens on the calendar — it just
+      // doesn't deduct — so it doesn't get the client any closer to their
+      // last real session. Push the projection out by however many of
+      // those have happened, or the "Final Session" date cuts the calendar
+      // off before sessionsRemaining actually reaches zero.
       const final = this.computeFinalSessionDate(
         new Date(pkg.purchaseDate),
-        total,
+        total + excusedCount,
         pkg.daysOfWeek,
         duration
       );
@@ -690,9 +704,16 @@ export class PackagesPage implements OnInit {
   // that wins and any real days get cleared, since a package can't be both
   // "every Monday" and "no fixed schedule" at once.
   readonly PER_SESSION_VALUE = 'PER_SESSION';
+  // Stable reference for the per-session case — returning a fresh array
+  // literal here every call (as this used to) gives ion-select a new
+  // identity on every change-detection tick, which it reads as "the value
+  // changed," triggering an update that triggers another CD cycle that
+  // calls this again... an infinite Angular<->Ionic feedback loop that
+  // freezes the tab with no console error. Reuse one array instead.
+  private readonly PER_SESSION_SELECTED: string[] = [this.PER_SESSION_VALUE];
 
   daysSelectValue(pkg: PackageRecord): string[] {
-    return pkg.perSessionPack ? [this.PER_SESSION_VALUE] : (pkg.daysOfWeek || []);
+    return pkg.perSessionPack ? this.PER_SESSION_SELECTED : (pkg.daysOfWeek || []);
   }
 
   onDaysOfWeekChange(pkg: PackageRecord, selected: string[]) {

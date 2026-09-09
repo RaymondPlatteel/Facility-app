@@ -117,11 +117,6 @@ export const routes: Routes = [
     loadComponent: () => import('./live-session/live-session.page').then( m => m.LiveSessionPage)
   },
   {
-    path: 'live-monitor',
-    canActivate: [authGuard],
-    loadComponent: () => import('./live-monitor/live-monitor.page').then( m => m.LiveMonitorPage)
-  },
-  {
     path: 'workout-log',
     canActivate: [authGuard],
     loadComponent: () => import('./workout-log/workout-log.page').then( m => m.WorkoutLogPage)

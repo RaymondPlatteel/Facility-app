@@ -217,7 +217,7 @@
                 <ion-icon name="remove-outline"></ion-icon>
               </button>
               <div class="count">
-                <strong>{{ pkg.sessionsRemaining ?? pkg.totalSessions ?? 0 }}</strong>
+                <strong>{{ pkg.sessionsRemaining ?? pkg.totalSessions }}</strong>
                 <span class="of">/ {{ pkg.totalSessions }}</span>
               </div>
               <button class="step-btn" (click)="adjustSessions(pkg, 1)" aria-label="Add one session">
@@ -270,6 +270,10 @@
               −1 session<span *ngIf="c.sessionsRemainingAfter !== null"> · {{ c.sessionsRemainingAfter }} left</span>
             </span>
             <span class="what warn" *ngIf="!c.decremented">no session deducted</span>
+            <button type="button" class="checkin-delete-btn" [disabled]="c.id ? checkInBusy.has(c.id) : true"
+                    (click)="deleteCheckIn(c)" aria-label="Delete check-in">
+              <ion-icon name="trash-outline"></ion-icon>
+            </button>
           </div>
         </section>
 

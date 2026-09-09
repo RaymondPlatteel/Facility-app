@@ -639,6 +639,27 @@ ion-content {
       font-style: normal;
     }
   }
+
+  .checkin-delete-btn {
+    margin-left: auto;
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: #4a6378;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+
+    ion-icon { font-size: 14px; }
+
+    &:hover { color: #ff5a6a; background: rgba(255, 90, 106, 0.1); }
+    &:disabled { opacity: 0.4; cursor: default; }
+  }
 }
 
 .workout-row {

@@ -27,10 +27,10 @@
 
     <div class="table-actions" *ngIf="viewMode === 'table'">
       <div class="status-filter">
-        <button [class.active]="tableStatusFilter === 'all'" (click)="setTableStatusFilter('all')">All</button>
         <button [class.active]="tableStatusFilter === 'active'" (click)="setTableStatusFilter('active')">Active</button>
         <button [class.active]="tableStatusFilter === 'completed'" (click)="setTableStatusFilter('completed')">Completed</button>
         <button [class.active]="tableStatusFilter === 'prospect'" (click)="setTableStatusFilter('prospect')">Prospect</button>
+        <button [class.active]="tableStatusFilter === 'all'" (click)="setTableStatusFilter('all')">All</button>
       </div>
       <ion-button size="small" fill="outline" class="grey-btn" (click)="addNewRow()" aria-label="Add package">Create New Package</ion-button>
     </div>
@@ -190,6 +190,15 @@
                 <ion-select-option value="completed">Completed</ion-select-option>
                 <ion-select-option value="prospect">Prospect</ion-select-option>
               </ion-select>
+              <!-- Billing state is Stripe's, not editable here — shown so
+                   it's obvious which packages renew themselves (and which
+                   ones an athlete has turned off) without leaving the app. -->
+              <div class="sub-chip auto" *ngIf="pkg.stripeSubscriptionId" title="Renews monthly via Stripe">
+                <ion-icon name="refresh-outline"></ion-icon> Auto-renew
+              </div>
+              <div class="sub-chip off" *ngIf="!pkg.stripeSubscriptionId && pkg.subscriptionCanceledAt" title="The athlete cancelled their monthly membership">
+                Renewal off
+              </div>
             </td>
             <td [style.width.px]="columnWidths.cost">
               <div class="time-summary" id="cost-{{pkg.id || i}}">

@@ -72,7 +72,13 @@ export function generateScheduleForRange(
   start: Date,
   end: Date,
   overrides: SessionOverride[] = [],
-  singleSessions: SingleSession[] = []
+  singleSessions: SingleSession[] = [],
+  // Which package statuses count as "schedulable" — defaults to active-only
+  // everywhere (attendance, today's schedule, device calendar sync all want
+  // just what's actually running). The packages-page calendar overview
+  // passes ['active', 'completed'] so a package's history doesn't vanish
+  // from the calendar the instant it wraps up.
+  statuses: string[] = ['active']
 ): ScheduleEntry[] {
   const rangeStart = dateOnly(start);
   const rangeEnd = dateOnly(end);
@@ -82,7 +88,7 @@ export function generateScheduleForRange(
   };
 
   const pkgById = new Map<string, PackageRecord>();
-  const active = packages.filter(p => p.status === 'active' && (p.daysOfWeek?.length ?? 0) > 0);
+  const active = packages.filter(p => statuses.includes(p.status) && (p.daysOfWeek?.length ?? 0) > 0);
   for (const p of active) pkgById.set(p.id || p.packageId, p);
 
   const overrideByKey = new Map<string, SessionOverride>();
