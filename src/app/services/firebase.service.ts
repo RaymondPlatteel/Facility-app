@@ -789,22 +789,11 @@ export class FirebaseService {
       if (typeof pkg.sessionDurationMinutes !== 'number' || !isFinite(pkg.sessionDurationMinutes)) {
         pkg.sessionDurationMinutes = 60;
       }
-      // Packages with training days are schedulable — treat legacy prospect rows as active.
-      // This best-effort migration write must never be able to sink the whole
-      // read: if it fails (permissions, offline, whatever), the in-memory
-      // `pkg.status` is already corrected above, so the caller still gets a
-      // usable list — it just tries the persist again next load.
-      if (pkg.status === 'prospect' && pkg.daysOfWeek.length > 0) {
-        pkg.status = 'active';
-        try {
-          await updateDoc(doc(this.db, 'packages', d.id), {
-            status: 'active',
-            updatedAt: new Date().toISOString()
-          });
-        } catch (err) {
-          console.error(`listPackages: failed to persist legacy prospect->active migration for ${d.id}`, err);
-        }
-      }
+      // A prospect can hold a tentative day/time without becoming a
+      // confirmed, billing client — this used to force-promote any
+      // prospect with days assigned to 'active' on every single read,
+      // which made "prospect" unusable as a tentative-hold state (the
+      // coach's manual choice never survived the next page load).
       packages.push(pkg);
     }
     return packages;

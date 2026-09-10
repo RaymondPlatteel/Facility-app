@@ -390,9 +390,12 @@ export class PackagesPage implements OnInit {
   // are assigned once per package (stable across toggles/rebuilds), alphabetically.
   private buildLegend() {
     // Completed stays alongside active here — a package finishing shouldn't
-    // instantly erase its sessions from the calendar overview.
+    // instantly erase its sessions from the calendar overview. Prospect
+    // holds too — matches the 'prospect' status now included in the
+    // buildCalendar() generateScheduleForRange call below; without a color
+    // mapped here, those entries would generate but render with no dot.
     const active = this.packages
-      .filter(p => (p.status === 'active' || p.status === 'completed') && (p.id || p.packageId))
+      .filter(p => (p.status === 'active' || p.status === 'completed' || p.status === 'prospect') && (p.id || p.packageId))
       .slice()
       .sort((a, b) => (a.packageName || '').localeCompare(b.packageName || ''));
 
@@ -422,7 +425,7 @@ export class PackagesPage implements OnInit {
   private buildMonthBlock(monthDate: Date): CalendarMonth {
     const gridStart = startOfWeek(monthDate);
     const gridEnd = addDays(gridStart, 41);
-    const entries = generateScheduleForRange(this.packages, gridStart, gridEnd, this.overrides, [], ['active', 'completed']);
+    const entries = generateScheduleForRange(this.packages, gridStart, gridEnd, this.overrides, [], ['active', 'completed', 'prospect']);
     const todayKey = localDateString();
 
     const allDays: CalendarDay[] = [];
@@ -591,9 +594,11 @@ export class PackagesPage implements OnInit {
         payments[cid] = { ...(payments[cid] || {}), amount: 0, paid: true };
       }
     }
-    if ((pkg.daysOfWeek?.length ?? 0) > 0 && pkg.status === 'prospect') {
-      pkg.status = 'active';
-    }
+    // A prospect can hold a tentative day/time without becoming a confirmed,
+    // billing client — it used to auto-promote to 'active' the instant days
+    // were assigned, which meant "prospect" could never actually mean
+    // "tentative hold" in practice. The coach flips it to Active manually
+    // once it's real.
     // derive linkedClientNames from ids
     const idToName = new Map(this.clients.map(c => [c.id!, c.fullName]));
     const names = (pkg.linkedClientIds || []).map(id => idToName.get(id) || '').filter(Boolean);
