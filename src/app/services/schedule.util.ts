@@ -11,10 +11,20 @@ import { PackageRecord, SessionOverride, SingleSession } from './firebase.servic
 // explicitly approved to pay later or in installments. That's a deliberate
 // override of the same "not paid in full" state, not a payment the system
 // forgot about, so it clears this check same as `paid` would.
+//
+// Only clients still in linkedClientIds count. `clientPayments` is keyed by
+// client id and nothing ever removes an old entry when a client is
+// unlinked from the package (see packages.page.ts's linked-clients editor),
+// so a stale unpaid record for someone no longer even on the package would
+// otherwise block scheduling for everyone still linked, with no visible
+// sign why — exactly what happened when a removed client's leftover
+// `paid: false` record silently blocked a package for the 3 people
+// actually on it.
 function hasUnpaidOnlineBalance(pkg: PackageRecord): boolean {
   const payments = pkg.clientPayments;
   if (!payments) return false;
-  return Object.values(payments).some(p => !p.paid && !p.paymentPlan);
+  const linked = new Set(pkg.linkedClientIds || []);
+  return Object.entries(payments).some(([clientId, p]) => linked.has(clientId) && !p.paid && !p.paymentPlan);
 }
 
 // One recurring training slot derived from an active package, OR a one-off
