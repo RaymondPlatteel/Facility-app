@@ -103,7 +103,6 @@
       <table class="crm-table" style="table-layout: fixed; width: 100%">
         <thead>
           <tr>
-            <th [style.width.px]="columnWidths.packageId">Package ID<div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('packageId', $event)"></div></th>
             <th [style.width.px]="columnWidths.packageName">Package Name<div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('packageName', $event)"></div></th>
             <th [style.width.px]="columnWidths.linkedClients"><span class="th-wrap">Linked<br>Clients</span><div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('linkedClients', $event)"></div></th>
             <th [style.width.px]="columnWidths.trainer">Trainer<div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('trainer', $event)"></div></th>
@@ -121,7 +120,6 @@
         </thead>
         <tbody>
           <tr *ngFor="let pkg of filteredPackages; let i = index; trackBy: trackByPkg">
-            <td [style.width.px]="columnWidths.packageId">{{ pkg.packageId || '—' }}</td>
             <td [style.width.px]="columnWidths.packageName">
               <ion-input class="table-input" [(ngModel)]="pkg.packageName" (ionBlur)="saveRow(pkg)" placeholder="Standard Training"></ion-input>
             </td>
