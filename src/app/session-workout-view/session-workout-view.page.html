@@ -65,7 +65,7 @@
         Previous Section
       </ion-button>
       <ion-button expand="block" fill="solid" color="primary" (click)="nextSection()">
-        {{ currentSectionIndex === ((workout.sections?.length || 0) - 1) ? 'Finish Workout' : 'Next Section' }}
+        {{ currentSectionIndex === (workout.sections.length - 1) ? 'Finish Workout' : 'Next Section' }}
       </ion-button>
     </div>
   </div>

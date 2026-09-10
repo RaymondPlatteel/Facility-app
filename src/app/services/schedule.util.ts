@@ -1,5 +1,22 @@
 import { PackageRecord, SessionOverride, SingleSession } from './firebase.service';
 
+// A package with NO clientPayments at all isn't being tracked through
+// online payment — that's a coach scheduling someone by hand and
+// collecting payment their own way, same as always, unaffected by this.
+// A package that DOES have a payment record but shows `paid: false` for
+// someone is one the payment system is actively tracking as incomplete —
+// that one shouldn't show as scheduled until it's actually paid, even
+// though status may already say 'active' with days/times assigned.
+// The one exception is `paymentPlan: true` — a client the coach has
+// explicitly approved to pay later or in installments. That's a deliberate
+// override of the same "not paid in full" state, not a payment the system
+// forgot about, so it clears this check same as `paid` would.
+function hasUnpaidOnlineBalance(pkg: PackageRecord): boolean {
+  const payments = pkg.clientPayments;
+  if (!payments) return false;
+  return Object.values(payments).some(p => !p.paid && !p.paymentPlan);
+}
+
 // One recurring training slot derived from an active package, OR a one-off
 // SingleSession folded into the same shape (packageId `single:<id>`,
 // isSingle true) so the whole Schedule page — cards, the session modal,
@@ -72,7 +89,13 @@ export function generateScheduleForRange(
   start: Date,
   end: Date,
   overrides: SessionOverride[] = [],
-  singleSessions: SingleSession[] = []
+  singleSessions: SingleSession[] = [],
+  // Which package statuses count as "schedulable" — defaults to active-only
+  // everywhere (attendance, today's schedule, device calendar sync all want
+  // just what's actually running). The packages-page calendar overview
+  // passes ['active', 'completed'] so a package's history doesn't vanish
+  // from the calendar the instant it wraps up.
+  statuses: string[] = ['active']
 ): ScheduleEntry[] {
   const rangeStart = dateOnly(start);
   const rangeEnd = dateOnly(end);
@@ -82,7 +105,7 @@ export function generateScheduleForRange(
   };
 
   const pkgById = new Map<string, PackageRecord>();
-  const active = packages.filter(p => p.status === 'active' && (p.daysOfWeek?.length ?? 0) > 0);
+  const active = packages.filter(p => statuses.includes(p.status) && (p.daysOfWeek?.length ?? 0) > 0 && !hasUnpaidOnlineBalance(p));
   for (const p of active) pkgById.set(p.id || p.packageId, p);
 
   const overrideByKey = new Map<string, SessionOverride>();

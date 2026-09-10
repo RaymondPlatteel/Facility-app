@@ -577,3 +577,34 @@ ion-popover.cost-pop-wrap {
 }
 
 
+
+/* Monthly-membership state on a package row. "auto" = Stripe is billing
+   this athlete on a recurring schedule; "off" = they had a subscription
+   and cancelled it, which stays visible rather than silently reverting to
+   looking like it never existed. */
+.sub-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+
+  ion-icon { font-size: 11px; }
+
+  &.auto {
+    color: #2dd36f;
+    background: rgba(45, 211, 111, 0.12);
+    border: 1px solid rgba(45, 211, 111, 0.4);
+  }
+
+  &.off {
+    color: #88a6bf;
+    background: rgba(136, 166, 191, 0.1);
+    border: 1px solid rgba(136, 166, 191, 0.3);
+  }
+}

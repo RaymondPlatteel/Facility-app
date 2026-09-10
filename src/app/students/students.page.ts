@@ -586,6 +586,52 @@ export class StudentsPage implements OnInit {
     await alert.present();
   }
 
+  // ---------- Check-in history ----------
+  checkInBusy = new Set<string>();
+
+  async deleteCheckIn(c: CheckIn) {
+    if (!c.id || this.checkInBusy.has(c.id)) return;
+    const alert = await this.alertController.create({
+      header: 'Delete check-in?',
+      message: c.decremented
+        ? `Removes this visit from ${c.clientName}'s history and restores one session.`
+        : `Removes this visit from ${c.clientName}'s history.`,
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Delete',
+          role: 'destructive',
+          handler: () => this.doDeleteCheckIn(c)
+        }
+      ]
+    });
+    await alert.present();
+  }
+
+  private async doDeleteCheckIn(c: CheckIn) {
+    const id = c.id!;
+    this.checkInBusy.add(id);
+    try {
+      const remaining = await this.firebase.undoCheckIn(c);
+      this.clientCheckIns = this.clientCheckIns.filter(x => x.id !== id);
+      if (c.packageId && remaining != null) {
+        const pkg = this.clientPackages.find(p => p.id === c.packageId);
+        if (pkg) pkg.sessionsRemaining = remaining;
+        if (this.selected?.activePackage?.id === c.packageId) {
+          this.selected.sessionsRemaining = remaining;
+        }
+        const row = this.rows.find(r => r.activePackage?.id === c.packageId);
+        if (row) row.sessionsRemaining = remaining;
+      }
+      this.toast('Check-in deleted');
+    } catch (err) {
+      console.error('Clients: failed to delete check-in', err);
+      this.toast('Could not delete check-in', 'danger');
+    } finally {
+      this.checkInBusy.delete(id);
+    }
+  }
+
   async adjustSessions(pkg: PackageRecord, delta: number) {
     if (!pkg.id) return;
     try {
