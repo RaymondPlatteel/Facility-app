@@ -302,6 +302,15 @@ export interface PackageRecord {
   // daysOfWeek.length x weeks. Each session gets logged ad hoc as it
   // happens rather than being pre-scheduled.
   perSessionPack?: boolean;
+  // No one pays for this package — every linked client (current and any
+  // added later) gets priced at $0 and marked paid automatically instead of
+  // the coach typing 0 in for each person. See packages.page.ts's saveRow().
+  isFree?: boolean;
+  // Meets on a fixed daily-ish schedule with no makeups — attendance is
+  // tracked for the coach's own data but isn't what decrements sessions.
+  // Sessions count down by scheduled calendar day instead of by check-in
+  // (see schedule.util.ts's countScheduledOccurrences()).
+  dailyGroupProgram?: boolean;
   cost: number; // derived: sum of clientPayments amounts
   clientPayments?: { [clientId: string]: ClientPayment };
   trainerId?: string; // which trainer runs these sessions (see TRAINERS in auth.service)

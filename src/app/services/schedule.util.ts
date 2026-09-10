@@ -92,6 +92,26 @@ export function addDays(d: Date, days: number): Date {
   return next;
 }
 
+// For a `dailyGroupProgram` package (meets on a fixed schedule with no
+// makeups — attendance is data, not what decrements sessions): counts how
+// many of the package's scheduled weekdays have occurred from purchaseDate
+// through `asOf` (today, by default), inclusive of both ends, capped at
+// totalSessions since a package can't be "more than fully used". This
+// replaces the check-in-derived count as sessionsUsed for these packages —
+// see packages.page.ts's saveRow()/loadData().
+export function countScheduledOccurrences(pkg: PackageRecord, asOf: Date = new Date()): number {
+  const start = parseLocalDate(pkg.purchaseDate);
+  if (!start || !(pkg.daysOfWeek?.length)) return 0;
+  const days = new Set(pkg.daysOfWeek);
+  const end = dateOnly(asOf);
+  const cap = pkg.totalSessions ?? Infinity;
+  let count = 0;
+  for (let d = dateOnly(start); d <= end && count < cap; d = addDays(d, 1)) {
+    if (days.has(DAY_LABELS[d.getDay()])) count++;
+  }
+  return count;
+}
+
 // Expand active packages into concrete schedule entries within [start, end] inclusive.
 // Per-occurrence reschedule overrides relocate or pull in occurrences as needed.
 export function generateScheduleForRange(

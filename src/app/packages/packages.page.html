@@ -150,6 +150,7 @@
                 <ion-select-option *ngFor="let d of daysOfWeekOptions" [value]="d">{{ d }}</ion-select-option>
               </ion-select>
               <div class="per-session-badge" *ngIf="pkg.perSessionPack">Pack of {{ pkg.totalSessions }} sessions</div>
+              <div class="daily-group-badge" *ngIf="pkg.dailyGroupProgram" title="Sessions count down by scheduled day, not check-in">Daily group</div>
             </td>
             <td [style.width.px]="columnWidths.timeOfDay">
               <div class="time-summary" (click)="openTimesPopover($event, pkg, i)">{{ formatDayTimes(pkg) }}</div>
@@ -181,7 +182,8 @@
             </td>
             <td [style.width.px]="columnWidths.cost">
               <div class="time-summary" (click)="openCostPopover($event, pkg)">
-                $ {{ totalCost(pkg) }}
+                <span *ngIf="pkg.isFree" class="free-badge">Free</span>
+                <span *ngIf="!pkg.isFree">$ {{ totalCost(pkg) }}</span>
                 <ion-icon
                   *ngIf="hasUnpaid(pkg)"
                   name="alert-circle"
@@ -210,6 +212,10 @@
           <div class="times-pop" *ngIf="activeTimesPkg as pkg">
             <div class="times-pop-header">Session Times</div>
             <div class="times-pop-body">
+              <label class="pay-field daily-group-toggle">
+                <input type="checkbox" [checked]="!!pkg.dailyGroupProgram" (change)="toggleDailyGroup(pkg)" />
+                <span>Daily group — no makeups (sessions count down by scheduled day, not check-in)</span>
+              </label>
               <div class="time-row" *ngFor="let d of pkg.daysOfWeek">
                 <span class="day-label">{{ d }}</span>
                 <input class="time-field" type="time"
@@ -232,18 +238,22 @@
           <div class="times-pop" *ngIf="activeCostPkg as pkg">
             <div class="times-pop-header">Payment</div>
             <div class="times-pop-body">
+              <label class="pay-field free-toggle">
+                <input type="checkbox" [checked]="!!pkg.isFree" (change)="toggleFree(pkg)" />
+                <span>Free package (everyone linked is $0, auto-paid)</span>
+              </label>
               <div class="pay-block" *ngFor="let cid of pkg.linkedClientIds">
                 <div class="pay-block-top">
                   <span class="day-label">{{ clientName(cid) }}</span>
                   <label class="paid-checkbox-label">
-                    <input class="paid-checkbox" type="checkbox" [checked]="isPaid(pkg, cid)" (change)="togglePaid(pkg, cid)" />
+                    <input class="paid-checkbox" type="checkbox" [checked]="isPaid(pkg, cid)" [disabled]="pkg.isFree" (change)="togglePaid(pkg, cid)" />
                     Paid
                   </label>
                 </div>
                 <div class="pay-block-fields">
                   <label class="pay-field">
                     <span>Price</span>
-                    <input type="number" min="0" [value]="paymentAmount(pkg, cid)"
+                    <input type="number" min="0" [value]="paymentAmount(pkg, cid)" [disabled]="pkg.isFree"
                            (change)="setPaymentAmount(pkg, cid, $any($event.target).value)" />
                   </label>
                   <label class="pay-field" *ngIf="!isPaid(pkg, cid)">

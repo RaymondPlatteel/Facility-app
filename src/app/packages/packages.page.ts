@@ -21,7 +21,7 @@ import { arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutli
 import { Router } from '@angular/router';
 import { FirebaseService, ClientProfile, PackageRecord, ClientPayment, SessionOverride, localDateString } from '../services/firebase.service';
 import { ToastController } from '@ionic/angular/standalone';
-import { generateScheduleForRange, startOfWeek, addDays } from '../services/schedule.util';
+import { generateScheduleForRange, startOfWeek, addDays, countScheduledOccurrences } from '../services/schedule.util';
 import { TRAINERS } from '../services/auth.service';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -311,8 +311,11 @@ export class PackagesPage implements OnInit {
     for (const p of this.packages) {
       if (!p.daysOfWeek) p.daysOfWeek = [] as any;
       if (!p.dayTimes) p.dayTimes = {} as any;
-      const used = p.id ? (usedByPackage.get(p.id) ?? 0) : 0;
-      const excused = p.id ? (excusedByPackage.get(p.id) ?? 0) : 0;
+      // Daily-group packages decrement by scheduled day, not by check-in.
+      const used = p.dailyGroupProgram
+        ? countScheduledOccurrences(p)
+        : (p.id ? (usedByPackage.get(p.id) ?? 0) : 0);
+      const excused = p.dailyGroupProgram ? 0 : (p.id ? (excusedByPackage.get(p.id) ?? 0) : 0);
       const beforeRemaining = p.sessionsRemaining;
       const beforeExpiration = p.expirationDate;
       this.recalcRow(p, used, excused);
@@ -567,13 +570,27 @@ export class PackagesPage implements OnInit {
   }
 
   async saveRow(pkg: PackageRecord, toastMessage = 'Package saved') {
-    const [sessionsUsed, excusedCount] = pkg.id
+    // Daily-group packages decrement by scheduled day, not by check-in —
+    // showing up or not, the slot is used. Skip the check-in lookups
+    // entirely and use the schedule-derived count instead.
+    const [checkedInCount, excusedCount] = pkg.id && !pkg.dailyGroupProgram
       ? await Promise.all([
           this.firebase.getDecrementedSessionCount(pkg.id),
           this.firebase.getExcusedSessionCount(pkg.id)
         ])
       : [0, 0];
+    const sessionsUsed = pkg.dailyGroupProgram ? countScheduledOccurrences(pkg) : checkedInCount;
     this.recalcRow(pkg, sessionsUsed, excusedCount);
+    if (pkg.isFree) {
+      // Every linked client is $0 and paid, current and newly-added alike —
+      // re-normalize on every save instead of only when the checkbox is
+      // first ticked, so adding a client to an already-free package doesn't
+      // need a separate manual step.
+      const payments = this.clientPaymentsOf(pkg);
+      for (const cid of pkg.linkedClientIds || []) {
+        payments[cid] = { ...(payments[cid] || {}), amount: 0, paid: true };
+      }
+    }
     if ((pkg.daysOfWeek?.length ?? 0) > 0 && pkg.status === 'prospect') {
       pkg.status = 'active';
     }
@@ -595,6 +612,8 @@ export class PackagesPage implements OnInit {
       daysOfWeek: pkg.daysOfWeek || [],
       dayTimes: pkg.dayTimes || {},
       perSessionPack: pkg.perSessionPack ?? false,
+      isFree: pkg.isFree ?? false,
+      dailyGroupProgram: pkg.dailyGroupProgram ?? false,
       cost: this.totalCost(pkg),
       clientPayments: pkg.clientPayments || {},
       trainerId: pkg.trainerId || '',
@@ -881,6 +900,20 @@ export class PackagesPage implements OnInit {
     const payments = this.clientPaymentsOf(pkg);
     const existing = payments[clientId] || { amount: 0, paid: false };
     payments[clientId] = { ...existing, paymentPlan: !existing.paymentPlan };
+    this.saveRow(pkg);
+  }
+
+  // Every linked client (now and any added later) gets zeroed to $0/paid —
+  // see saveRow()'s normalization.
+  toggleFree(pkg: PackageRecord) {
+    pkg.isFree = !pkg.isFree;
+    this.saveRow(pkg);
+  }
+
+  // Meets on a fixed schedule with no makeups — sessions decrement by
+  // scheduled day instead of by check-in. See saveRow()/loadData().
+  toggleDailyGroup(pkg: PackageRecord) {
+    pkg.dailyGroupProgram = !pkg.dailyGroupProgram;
     this.saveRow(pkg);
   }
 
