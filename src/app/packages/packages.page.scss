@@ -68,6 +68,7 @@
 .time-summary:hover { color: #dceaf6; }
 
 .unpaid-flag { color: #eb445a; font-size: 15px; flex-shrink: 0; }
+.payment-plan-flag { color: #ffc409; font-size: 15px; flex-shrink: 0; }
 
 .per-session-badge {
   display: inline-block;
@@ -140,6 +141,19 @@ ion-popover.times-pop-wrap {
 .time-field::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
 
 .paid-checkbox { width: 16px; height: 16px; accent-color: #00d4ff; cursor: pointer; }
+.paid-checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+
+.payment-plan-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #ffc409;
+  cursor: pointer;
+
+  input[type="checkbox"] { accent-color: #ffc409; cursor: pointer; }
+}
 
 // Payment popover — wider than the plain times popover to fit price + paid-so-far fields.
 ion-popover.cost-pop-wrap {

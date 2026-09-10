@@ -274,6 +274,11 @@ export interface ClientPayment {
   amount: number;       // this client's price for the package (can differ per client)
   paid: boolean;        // fully paid checkbox
   amountPaid?: number;  // running partial amount, relevant only while !paid
+  // Coach has approved this client to pay later / in installments. While
+  // true, the client is treated as cleared to schedule even though `paid`
+  // is false — suppresses the "unpaid" flag instead of just leaving them
+  // flagged as if payment were simply forgotten.
+  paymentPlan?: boolean;
 }
 
 // Packages CRM
@@ -750,12 +755,20 @@ export class FirebaseService {
         pkg.packageDuration = match ? parseInt(match[1], 10) : 1;
       }
       // Packages with training days are schedulable — treat legacy prospect rows as active.
+      // This best-effort migration write must never be able to sink the whole
+      // read: if it fails (permissions, offline, whatever), the in-memory
+      // `pkg.status` is already corrected above, so the caller still gets a
+      // usable list — it just tries the persist again next load.
       if (pkg.status === 'prospect' && pkg.daysOfWeek.length > 0) {
         pkg.status = 'active';
-        await updateDoc(doc(this.db, 'packages', d.id), {
-          status: 'active',
-          updatedAt: new Date().toISOString()
-        });
+        try {
+          await updateDoc(doc(this.db, 'packages', d.id), {
+            status: 'active',
+            updatedAt: new Date().toISOString()
+          });
+        } catch (err) {
+          console.error(`listPackages: failed to persist legacy prospect->active migration for ${d.id}`, err);
+        }
       }
       packages.push(pkg);
     }

@@ -138,6 +138,39 @@ export class PackagesPage implements OnInit {
   daysOfWeekOptions = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   trainers = TRAINERS;
 
+  // ---------- Shared row popovers ----------
+  // One popover instance per TYPE (times/cost/actions), reused across every
+  // row, instead of one per row. With ~20 packages that was ~60 eagerly
+  // mounted <ion-popover> web components on page load — each a full Stencil
+  // component with its own overlay/animation lifecycle — which was heavy
+  // enough to stall Angular's renderer and Ionic's page-transition on this
+  // page specifically (nowhere else in the app has this many overlays per
+  // page). Presenting a single shared popover programmatically, pointed at
+  // whichever row was clicked, does the same job for a fraction of the cost.
+  @ViewChild('timesPopover') timesPopoverRef?: IonPopover;
+  @ViewChild('costPopover') costPopoverRef?: IonPopover;
+  @ViewChild('actionsPopover') actionsPopoverRef?: IonPopover;
+  activeTimesPkg: PackageRecord | null = null;
+  activeTimesIndex = 0;
+  activeCostPkg: PackageRecord | null = null;
+  activeActionsPkg: PackageRecord | null = null;
+
+  openTimesPopover(ev: Event, pkg: PackageRecord, i: number) {
+    this.activeTimesPkg = pkg;
+    this.activeTimesIndex = i;
+    this.timesPopoverRef?.present(ev as any);
+  }
+
+  openCostPopover(ev: Event, pkg: PackageRecord) {
+    this.activeCostPkg = pkg;
+    this.costPopoverRef?.present(ev as any);
+  }
+
+  openActionsPopover(ev: Event, pkg: PackageRecord) {
+    this.activeActionsPkg = pkg;
+    this.actionsPopoverRef?.present(ev as any);
+  }
+
   // ---------- Receipt / invoice PDF ----------
   pdfOpen = false;
   private pdfPackage: PackageRecord | null = null;
@@ -252,9 +285,14 @@ export class PackagesPage implements OnInit {
 
     // First session on/after purchase date
     let first = findNextOnOrAfter(current);
-    // Iterate to the final session
+    // Iterate to the final session. Cap the walk — a bad/huge totalSessions
+    // (e.g. a mistyped duration) would otherwise run this loop synchronously
+    // into the millions on every single Packages-page load, freezing the
+    // whole tab with no error. This is a pure safety cap, not a feature change.
+    const MAX_ITERATIONS = 5000; // ~19 years of daily sessions — comfortably past any real package
+    const steps = Math.min(Math.max(1, totalSessions), MAX_ITERATIONS);
     let final = new Date(first);
-    for (let i = 1; i < Math.max(1, totalSessions); i++) {
+    for (let i = 1; i < steps; i++) {
       final = findNextAfter(final);
     }
     return final;
@@ -690,9 +728,20 @@ export class PackagesPage implements OnInit {
   // that wins and any real days get cleared, since a package can't be both
   // "every Monday" and "no fixed schedule" at once.
   readonly PER_SESSION_VALUE = 'PER_SESSION';
+  // Stable array references for daysSelectValue()'s fallbacks below. This is
+  // bound directly in the template ([ngModel]="daysSelectValue(pkg)" on a
+  // multi-select), which Angular re-evaluates on every change-detection
+  // pass. Returning a brand-new array literal each call (as this used to
+  // do for any perSessionPack package) means the binding's value is never
+  // referentially equal to itself between checks, so the view can never be
+  // considered stable — for a real package with perSessionPack:true this
+  // pinned Angular in an endless re-check loop (100% CPU, unresponsive tab)
+  // with no error, since nothing ever actually throws.
+  private readonly PER_SESSION_SELECTION: string[] = [this.PER_SESSION_VALUE];
+  private readonly EMPTY_DAYS: string[] = [];
 
   daysSelectValue(pkg: PackageRecord): string[] {
-    return pkg.perSessionPack ? [this.PER_SESSION_VALUE] : (pkg.daysOfWeek || []);
+    return pkg.perSessionPack ? this.PER_SESSION_SELECTION : (pkg.daysOfWeek || this.EMPTY_DAYS);
   }
 
   onDaysOfWeekChange(pkg: PackageRecord, selected: string[]) {
@@ -808,19 +857,42 @@ export class PackagesPage implements OnInit {
     this.saveRow(pkg);
   }
 
+  isPaymentPlan(pkg: PackageRecord, clientId: string): boolean {
+    return !!pkg.clientPayments?.[clientId]?.paymentPlan;
+  }
+
+  togglePaymentPlan(pkg: PackageRecord, clientId: string) {
+    const payments = this.clientPaymentsOf(pkg);
+    const existing = payments[clientId] || { amount: 0, paid: false };
+    payments[clientId] = { ...existing, paymentPlan: !existing.paymentPlan };
+    this.saveRow(pkg);
+  }
+
   // The table's Cost cell shows this total (sum of each linked client's price).
   totalCost(pkg: PackageRecord): number {
     const ids = pkg.linkedClientIds || [];
     return ids.reduce((sum, id) => sum + (pkg.clientPayments?.[id]?.amount ?? 0), 0);
   }
 
-  // How many linked clients haven't checked off "paid" yet — drives the table's unpaid flag.
+  // How many linked clients haven't checked off "paid" yet and aren't on an
+  // approved payment plan — drives the table's unpaid flag. A payment-plan
+  // client is intentionally not paid in full yet, so they don't count here.
   unpaidCount(pkg: PackageRecord): number {
-    return (pkg.linkedClientIds || []).filter(id => !this.isPaid(pkg, id)).length;
+    return (pkg.linkedClientIds || []).filter(id => !this.isPaid(pkg, id) && !this.isPaymentPlan(pkg, id)).length;
   }
 
   hasUnpaid(pkg: PackageRecord): boolean {
     return this.unpaidCount(pkg) > 0;
+  }
+
+  // Linked clients who are unpaid but explicitly approved for a payment
+  // plan — shown as a distinct, non-alarming flag from hasUnpaid().
+  paymentPlanCount(pkg: PackageRecord): number {
+    return (pkg.linkedClientIds || []).filter(id => !this.isPaid(pkg, id) && this.isPaymentPlan(pkg, id)).length;
+  }
+
+  hasPaymentPlan(pkg: PackageRecord): boolean {
+    return this.paymentPlanCount(pkg) > 0;
   }
 
   // ---------- Receipt / invoice PDF ----------
