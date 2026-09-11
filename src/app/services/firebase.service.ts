@@ -4,6 +4,7 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit } from 'firebase/firestore';
 import { environment } from '../../environments/environment';
 import { describeAssessmentChange, computeOmni, getOmniRank } from './omni.util';
+import type { TestOverrides } from './omni.util';
 
 // Local calendar date (YYYY-MM-DD). toISOString() would shift evening check-ins to the next UTC day.
 export function localDateString(d: Date = new Date()): string {
@@ -163,6 +164,11 @@ export interface ClientProfile {
   // Job Request Board: hours entered by hand once a client finishes a job
   // they accepted in Project-000 — not derived/summed automatically.
   totalHours?: number;
+  // Lets this client's assessment replace any of the 13 tracked tests with
+  // a custom one (own name, own "world record") — see the Assessments
+  // page and FitnessAssessment.testOverrides. Off by default: the 13
+  // standard tests apply to everyone unless a coach opts a client in.
+  assessmentCustomizable?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -563,6 +569,10 @@ export interface FitnessAssessment {
   timestamp: string;           // datetime-local string (assessment date & time) — unique per client
   dateLabel: string;           // pretty label for the history dropdown
   inputs: AssessmentInputs;
+  // Any of the 13 tests this specific assessment swapped for a custom one.
+  // Only meaningful when the client is assessmentCustomizable — see
+  // omni.util's computeOmni/calc* overrides param.
+  testOverrides?: TestOverrides;
   lvl: number;
   rank: OmniRank;
   createdAt?: string;
@@ -2194,6 +2204,7 @@ export class FirebaseService {
       timestamp: data['timestamp'],
       dateLabel: data['dateLabel'],
       inputs: data['inputs'],
+      testOverrides: data['testOverrides'] ?? undefined,
       lvl: data['lvl'],
       rank: data['rank'],
       createdAt: data['createdAt'],
@@ -2246,6 +2257,7 @@ export class FirebaseService {
       timestamp: a.timestamp,
       dateLabel: a.dateLabel,
       inputs: a.inputs,
+      testOverrides: a.testOverrides ?? null,
       lvl: a.lvl,
       rank: a.rank,
       createdAt: sameDay

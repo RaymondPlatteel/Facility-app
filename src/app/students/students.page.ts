@@ -394,6 +394,23 @@ export class StudentsPage implements OnInit {
     this.router.navigate(['/assessments'], { queryParams: { client: name } });
   }
 
+  // "Modify assessment" — lets this client's assessment replace any of the
+  // 13 tracked tests with a custom one (Assessments page). Persists
+  // immediately, same as a packages-page checkbox, rather than waiting on
+  // the broader Save Profile button.
+  async toggleAssessmentCustomizable() {
+    if (!this.selected?.profile.id) return;
+    const next = !this.selected.profile.assessmentCustomizable;
+    this.selected.profile.assessmentCustomizable = next;
+    try {
+      await this.firebase.updateClientProfile(this.selected.profile.id, { assessmentCustomizable: next });
+    } catch (err) {
+      console.error('Students: failed to toggle assessmentCustomizable', err);
+      this.selected.profile.assessmentCustomizable = !next;
+      this.toast('Could not save that change', 'danger');
+    }
+  }
+
   closePanel() {
     this.panelOpen = false;
     this.selected = null;

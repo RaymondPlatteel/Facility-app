@@ -11,9 +11,15 @@ import {
   trashOutline,
   documentTextOutline,
   downloadOutline,
-  trendingUpOutline
+  trendingUpOutline,
+  createOutline,
+  refreshOutline
 } from 'ionicons/icons';
-import { getOmniRank, levelColor, levelBgColor, SpeedUnit, kmToSpeedDisplay, speedDisplayToKm } from '../services/omni.util';
+import {
+  getOmniRank, levelColor, levelBgColor, SpeedUnit, kmToSpeedDisplay, speedDisplayToKm,
+  calcStrength, calcPower, calcEndurance, calcCardio, calcFlex, computeOmni
+} from '../services/omni.util';
+import type { TestKey, TestOverride, TestOverrides } from '../services/omni.util';
 import { isSRank } from '../services/level-color.util';
 import { ChromaMotionService } from '../services/chroma-motion.service';
 import { LevelUpComponent } from '../shared/level-up/level-up.component';
@@ -203,6 +209,18 @@ interface Panel {
   nameOpen: boolean;           // client dropdown expanded
   filteredNames: string[];     // cached (stable ref) dropdown options
   loadedNameKey: string;       // dedupes history load + latest-result display
+  // "Modify assessment" — gated by the matched ClientProfile's
+  // assessmentCustomizable flag (Clients page). Loaded fresh whenever the
+  // athlete name changes; testOverrides seeds from that athlete's latest
+  // saved assessment so reopening a customized athlete shows their swaps.
+  customizable: boolean;
+  testOverrides: TestOverrides;
+  // Which test slot's override editor is currently open, if any, and the
+  // in-progress name/world-record it's editing before Apply commits it to
+  // testOverrides.
+  editingTest: TestKey | null;
+  overrideDraftName: string;
+  overrideDraftRecord: number | null;
 }
 
 const RANK_COLORS: Record<OmniRank, string> = {
@@ -403,7 +421,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     private alertController: AlertController,
     private chroma: ChromaMotionService
   ) {
-    addIcons({ arrowBack, chevronDownOutline, closeOutline, trashOutline, documentTextOutline, downloadOutline, trendingUpOutline });
+    addIcons({ arrowBack, chevronDownOutline, closeOutline, trashOutline, documentTextOutline, downloadOutline, trendingUpOutline, createOutline, refreshOutline });
     // rankColor/rankBgColor stay flat once set at render time — S-Rank's
     // levelColor() already returns a static white, same as every other
     // rank returns its static hue. The moving chromium sweep lives only in
@@ -543,6 +561,11 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       // Read before the history renders — every rank and colour below is
       // computed against this athlete's threshold table.
       panel.sex = (await this.firebase.getMember(key).catch(() => null))?.sex ?? 'male';
+      // "Modify assessment" is a per-client setting from the Clients page —
+      // matched the same way calculate() matches a client at save time.
+      const matchedClient = this.clients.find(c => c.fullName.trim().toLowerCase() === key);
+      panel.customizable = matchedClient?.assessmentCustomizable ?? false;
+      panel.editingTest = null;
       panel.goals = await this.firebase.listGoalsForClient(key).catch(() => []);
       panel.goal = panel.goals.length
         ? panel.goals.reduce((a, b) => (a.updatedAt || '') >= (b.updatedAt || '') ? a : b)
@@ -631,7 +654,9 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       radarValues: null, radarNormalized: true, radarFit: false,
       backdateOpen: false, backdate: '', loadingHistory: false, opportunities: [],
       saving: false, errorMsg: false,
-      nameOpen: false, filteredNames: this.clientNames, loadedNameKey: ''
+      nameOpen: false, filteredNames: this.clientNames, loadedNameKey: '',
+      customizable: false, testOverrides: {}, editingTest: null,
+      overrideDraftName: '', overrideDraftRecord: null
     };
   }
 
@@ -728,30 +753,11 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     return '';
   }
 
-  private calcStrength(dl: number, sq: number, bn: number, pu: number): number {
-    return ((dl / 939 * 100) + (sq / 800 * 100) + (bn / 600 * 100) + (pu / 500 * 100)) / 4;
-  }
-  private calcPower(lj: number, sp: number): number {
-    return (lj / 147 * 100 + (Math.sqrt((sp - 9.58) / 0.125) * -1 + 10) * 10) / 2;
-  }
-  private calcEndurance(pu: number, pulls: number): number {
-    return (((pu / 150) * 100) + ((pulls / 49) * 100)) / 2;
-  }
-  private calcCardio(r30: number, s2: number): number {
-    const rs = r30 < 4.02336
-      ? (Math.sqrt((11.265408 - r30) / 0.11265408) * -1 + 10) * 10
-      : r30 / 11.265408 * 100;
-    return (rs + (Math.sqrt((0.804672 - s2) / 0.00804672) * -1 + 10) * 10) / 2;
-  }
-  private calcFlex(pike: number, bb: number, str: number): number {
-    const s = str < 80 ? 0 : str > 180 ? 100 : str - 80;
-    // Pike/backbend are entered on a 0-10 scale; clamp so an out-of-range
-    // value (old 0-100 data, a typo) can't inflate the score past a
-    // perfect 10.
-    const p = Math.max(0, Math.min(10, pike));
-    const b = Math.max(0, Math.min(10, bb));
-    return ((p * 10) + (b * 10) + s) / 3;
-  }
+  // calcStrength/calcPower/calcEndurance/calcCardio/calcFlex/computeOmni
+  // now come from omni.util (imported above) instead of living here as
+  // duplicates — that's the single place the "modify assessment" test
+  // overrides are implemented, and duplicating it here would mean this
+  // page silently ignoring any override a coach sets.
 
   // Display-only floor: a computed level of 0 (or below) reads as "Level 1"
   // everywhere it's shown. Doesn't touch the underlying score/xp/storage —
@@ -839,19 +845,6 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     return isFinite(v) ? v.toFixed(d) : '—';
   }
 
-  private computeOmni(i: AssessmentInputs): OmniResult {
-    const H = this.calcStrength(i.deadlift, i.squat, i.bench, i.pullup1rm);
-    const K = this.calcPower(i.longjump, i.sprint);
-    const N = this.calcEndurance(i.pushups, i.pullups);
-    const Q = this.calcCardio(i.run30, i.speed2);
-    const U = this.calcFlex(i.pike, i.backbend, i.straddle);
-    const raw = H + K + N + Q + U;
-    const exact = Math.pow(raw / 1000, 2) * 1000;
-    const lvl = Math.floor(exact);
-    const xpPct = (exact - lvl) * 100;
-    return { H, K, N, Q, U, raw, exact, lvl, xpPct };
-  }
-
   // Build the full AssessmentInputs object (raw entries + derived 1RMs).
   private buildInputs(form: AssessForm): AssessmentInputs {
     return {
@@ -926,9 +919,14 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     panel.assessmentDate = entry.timestamp;
     const i = entry.inputs;
     this.applyInputsToForm(panel, i);
+    // Whatever overrides were in effect for THIS snapshot — so re-viewing
+    // (or re-saving) an old entry keeps its own test swaps, not whatever
+    // was left over from the last entry the coach was looking at.
+    panel.testOverrides = { ...(entry.testOverrides || {}) };
+    panel.editingTest = null;
     // Render from the STORED inputs (not re-derived from the form) so legacy
     // entries display their true saved scores.
-    const totals = this.computeOmni(i);
+    const totals = computeOmni(i, panel.testOverrides);
     this.renderResult(panel, panel.athleteName.trim() || 'Athlete', i, totals);
   }
 
@@ -1011,7 +1009,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     const nameInput = panel.athleteName.trim();
     const name = nameInput || 'Athlete';
     const inputs = this.buildInputs(panel.form);
-    const totals = this.computeOmni(inputs);
+    const totals = computeOmni(inputs, panel.testOverrides);
     // Captured BEFORE the save and before loadHistory replaces it — this is
     // the level the athlete walked in with, and the animation needs both
     // ends of the climb.
@@ -1032,6 +1030,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
             month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
           }),
           inputs,
+          testOverrides: panel.customizable && Object.keys(panel.testOverrides).length ? panel.testOverrides : undefined,
           lvl: totals.lvl,
           rank: panel.rank
         });
@@ -1097,7 +1096,8 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     const latest = panel.history[panel.history.length - 1];
     if (latest) {
       this.applyInputsToForm(panel, latest.inputs);
-      const totals = this.computeOmni(latest.inputs);
+      panel.testOverrides = { ...(latest.testOverrides || {}) };
+      const totals = computeOmni(latest.inputs, panel.testOverrides);
       this.renderResult(panel, panel.athleteName.trim() || 'Athlete', latest.inputs, totals);
       return;
     }
@@ -1106,10 +1106,13 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     this.resetToFreshAthlete(panel);
   }
 
+  // Goals share the athlete's current test identity (there's no separate
+  // "goal has its own custom tests" concept) — panel.testOverrides, loaded
+  // from their latest real assessment, applies here too.
   private loadGoalIntoForm(panel: Panel, goal: AssessmentGoal) {
     panel.goalTargetDate = goal.targetDate || '';
     this.applyInputsToForm(panel, goal.inputs);
-    const totals = this.computeOmni(goal.inputs);
+    const totals = computeOmni(goal.inputs, panel.testOverrides);
     this.renderResult(panel, panel.athleteName.trim() || 'Athlete', goal.inputs, totals);
   }
 
@@ -1155,7 +1158,8 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       return;
     }
     this.applyInputsToForm(panel, latest.inputs);
-    const totals = this.computeOmni(latest.inputs);
+    panel.testOverrides = { ...(latest.testOverrides || {}) };
+    const totals = computeOmni(latest.inputs, panel.testOverrides);
     this.renderResult(panel, panel.athleteName.trim() || 'Athlete', latest.inputs, totals);
     this.toast('Reset to current stats — set a target date and Save Goal');
   }
@@ -1171,7 +1175,8 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     const latest = panel.history[panel.history.length - 1];
     if (latest) {
       this.applyInputsToForm(panel, latest.inputs);
-      const totals = this.computeOmni(latest.inputs);
+      panel.testOverrides = { ...(latest.testOverrides || {}) };
+      const totals = computeOmni(latest.inputs, panel.testOverrides);
       this.renderResult(panel, panel.athleteName.trim() || 'Athlete', latest.inputs, totals);
     } else {
       this.resetToFreshAthlete(panel);
@@ -1190,7 +1195,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       return;
     }
     const inputs = this.buildInputs(panel.form);
-    const totals = this.computeOmni(inputs);
+    const totals = computeOmni(inputs, panel.testOverrides);
     this.renderResult(panel, nameInput, inputs, totals);
 
     panel.saving = true;
@@ -1215,7 +1220,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   private latestExactFor(panel: Panel): number | null {
     const prior = panel.history.length ? panel.history[panel.history.length - 1] : null;
     if (!prior) return null;
-    return this.computeOmni(prior.inputs).exact;
+    return computeOmni(prior.inputs, prior.testOverrides).exact;
   }
 
   // Show the latest saved assessment (display only, no save) — used on client pick.
@@ -1238,6 +1243,8 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   private resetToFreshAthlete(panel: Panel) {
     panel.form = this.blankForm();
     panel.selectedHistoryTs = '';
+    panel.testOverrides = {};
+    panel.editingTest = null;
 
     panel.result = { H: 0, K: 0, N: 0, Q: 0, U: 0, raw: 0, exact: 0, lvl: 0, xpPct: 0 };
     panel.resultName = (panel.athleteName.trim() || 'Athlete').toUpperCase();
@@ -1261,6 +1268,60 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     panel.radarValues = { current: [0, 0, 0, 0, 0], prev: null, prevLabel: '' };
     panel.radar = this.buildRadar(panel);
     panel.opportunities = [];
+  }
+
+  // ---------- "modify assessment" per-test overrides ----------
+  // A client with assessmentCustomizable=true (toggled on the Clients page)
+  // lets a coach replace any of the 13 tracked tests with a custom one —
+  // same raw-value input the test already had, different name and "world
+  // record" reference driving the score (see omni.util's overrideScore).
+  // Applying an override updates panel.testOverrides but doesn't recompute
+  // the shown result until the next Calculate, same as editing any other
+  // field in this form.
+  testLabel(panel: Panel, key: TestKey, fallback: string): string {
+    return panel.testOverrides[key]?.name || fallback;
+  }
+
+  isTestOverridden(panel: Panel, key: TestKey): boolean {
+    return !!panel.testOverrides[key];
+  }
+
+  hasAnyOverride(panel: Panel): boolean {
+    return Object.keys(panel.testOverrides).length > 0;
+  }
+
+  openTestOverride(panel: Panel, key: TestKey, fallbackLabel: string) {
+    if (!panel.customizable) return;
+    panel.editingTest = key;
+    const existing = panel.testOverrides[key];
+    panel.overrideDraftName = existing?.name ?? fallbackLabel;
+    panel.overrideDraftRecord = existing?.worldRecord ?? null;
+  }
+
+  closeTestOverride(panel: Panel) {
+    panel.editingTest = null;
+  }
+
+  applyTestOverride(panel: Panel) {
+    const key = panel.editingTest;
+    if (!key) return;
+    const name = (panel.overrideDraftName || '').trim();
+    const wr = Number(panel.overrideDraftRecord);
+    if (!name || !wr || wr <= 0) {
+      this.toast('Enter a name and a world record greater than 0', 'warning');
+      return;
+    }
+    panel.testOverrides = { ...panel.testOverrides, [key]: { name, worldRecord: wr } };
+    panel.editingTest = null;
+    this.toast('Test replaced — press Calculate to see the new score');
+  }
+
+  revertTestOverride(panel: Panel, key: TestKey) {
+    const next = { ...panel.testOverrides };
+    delete next[key];
+    panel.testOverrides = next;
+    panel.editingTest = null;
+    this.toast('Reverted to the standard test — press Calculate to see the new score');
   }
 
   // XP bar: grow/shrink from where it currently is instead of resetting to 0.
@@ -1317,7 +1378,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     this.animateBar(panel, prevShown, totals);
 
     panel.chart = this.buildMiniChart(panel, totals);
-    panel.opportunities = this.buildOpportunities(inputs);
+    panel.opportunities = this.buildOpportunities(inputs, panel.testOverrides);
 
     // Comparison baselines = every other saved day, newest first. Reset the
     // chosen baseline to the auto previous whenever a fresh result renders.
@@ -1465,12 +1526,13 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     let prevLabel = '';
     if (prevEntry) {
       const i = prevEntry.inputs;
+      const ov = prevEntry.testOverrides;
       prev = [
-        this.calcStrength(i.deadlift, i.squat, i.bench, i.pullup1rm),
-        this.calcPower(i.longjump, i.sprint),
-        this.calcEndurance(i.pushups, i.pullups),
-        this.calcCardio(i.run30, i.speed2),
-        this.calcFlex(i.pike, i.backbend, i.straddle)
+        calcStrength(i.deadlift, i.squat, i.bench, i.pullup1rm, ov),
+        calcPower(i.longjump, i.sprint, ov),
+        calcEndurance(i.pushups, i.pullups, ov),
+        calcCardio(i.run30, i.speed2, ov),
+        calcFlex(i.pike, i.backbend, i.straddle, ov)
       ];
       const d = new Date(prevEntry.timestamp);
       prevLabel = isNaN(d.getTime())
@@ -1553,8 +1615,8 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     };
   }
 
-  private buildOpportunities(inputs: AssessmentInputs): Opportunity[] {
-    return this.getTopProgressOpportunities(inputs, ASSESSMENT_META.length).map(o => {
+  private buildOpportunities(inputs: AssessmentInputs, overrides?: TestOverrides): Opportunity[] {
+    return this.getTopProgressOpportunities(inputs, ASSESSMENT_META.length, overrides).map(o => {
       const direction = o.nextVal > o.current ? 'Increase' : 'Decrease';
       const stepSize = Math.abs(o.nextVal - o.current).toFixed(o.decimals);
       const unitSuffix = o.unit ? ` ${o.unit}` : '';
@@ -1574,12 +1636,13 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   private categoryDelta(curr: number, type: 'H' | 'K' | 'N' | 'Q' | 'U', prevEntry: FitnessAssessment | null): { text: string; color: string } {
     if (!prevEntry) return { text: '—', color: '#4a6378' };
     const i = prevEntry.inputs;
+    const ov = prevEntry.testOverrides;
     let prev = 0;
-    if (type === 'H') prev = this.calcStrength(i.deadlift, i.squat, i.bench, i.pullup1rm);
-    else if (type === 'K') prev = this.calcPower(i.longjump, i.sprint);
-    else if (type === 'N') prev = this.calcEndurance(i.pushups, i.pullups);
-    else if (type === 'Q') prev = this.calcCardio(i.run30, i.speed2);
-    else if (type === 'U') prev = this.calcFlex(i.pike, i.backbend, i.straddle);
+    if (type === 'H') prev = calcStrength(i.deadlift, i.squat, i.bench, i.pullup1rm, ov);
+    else if (type === 'K') prev = calcPower(i.longjump, i.sprint, ov);
+    else if (type === 'N') prev = calcEndurance(i.pushups, i.pullups, ov);
+    else if (type === 'Q') prev = calcCardio(i.run30, i.speed2, ov);
+    else if (type === 'U') prev = calcFlex(i.pike, i.backbend, i.straddle, ov);
     const diff = curr - prev;
     const pct = (diff / (prev || 1)) * 100;
     const color = diff > 0 ? '#2dd36f' : diff < 0 ? '#ff5a6a' : '#4a6378';
@@ -1587,20 +1650,21 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   }
 
   // ---------- "estimated progression" projections (one step of improvement per test) ----------
-  private getTopProgressOpportunities(inputs: AssessmentInputs, limit: number = ASSESSMENT_META.length) {
-    const base = this.computeOmni(inputs);
+  private getTopProgressOpportunities(inputs: AssessmentInputs, limit: number = ASSESSMENT_META.length, overrides?: TestOverrides) {
+    const base = computeOmni(inputs, overrides);
     const best: Array<{ label: string; unit: string; current: number; nextVal: number; gain: number; projectedLvl: number; decimals: number }> = [];
 
     ASSESSMENT_META.forEach(test => {
       const current = Number((inputs as any)[test.key] || 0);
       const candidates = [current + test.step, current - test.step].filter(v => v >= test.min && v <= test.max);
       let bestForTest: typeof best[number] | null = null;
+      const label = overrides?.[test.key as TestKey]?.name || test.label;
       candidates.forEach(nextVal => {
         const trialInputs = { ...inputs, [test.key]: nextVal } as AssessmentInputs;
-        const trial = this.computeOmni(trialInputs);
+        const trial = computeOmni(trialInputs, overrides);
         const gain = trial.exact - base.exact;
         if (!bestForTest || gain > bestForTest.gain) {
-          bestForTest = { label: test.label, unit: test.unit, current, nextVal, gain, projectedLvl: trial.lvl, decimals: test.decimals };
+          bestForTest = { label, unit: test.unit, current, nextVal, gain, projectedLvl: trial.lvl, decimals: test.decimals };
         }
       });
       // Every test gets an entry unless both step directions fall outside its valid range.
@@ -1710,17 +1774,18 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     const getCatHistory = (type: 'H' | 'K' | 'N' | 'Q' | 'U'): (number | null)[] =>
       lastFive.map(e => {
         const i = e.inputs;
-        if (type === 'H') return this.calcStrength(i.deadlift, i.squat, i.bench, i.pullup1rm);
-        if (type === 'K') return this.calcPower(i.longjump, i.sprint);
-        if (type === 'N') return this.calcEndurance(i.pushups, i.pullups);
-        if (type === 'Q') return this.calcCardio(i.run30, i.speed2);
-        return this.calcFlex(i.pike, i.backbend, i.straddle);
+        const ov = e.testOverrides;
+        if (type === 'H') return calcStrength(i.deadlift, i.squat, i.bench, i.pullup1rm, ov);
+        if (type === 'K') return calcPower(i.longjump, i.sprint, ov);
+        if (type === 'N') return calcEndurance(i.pushups, i.pullups, ov);
+        if (type === 'Q') return calcCardio(i.run30, i.speed2, ov);
+        return calcFlex(i.pike, i.backbend, i.straddle, ov);
       });
 
     const catHist = { H: getCatHistory('H'), K: getCatHistory('K'), N: getCatHistory('N'), Q: getCatHistory('Q'), U: getCatHistory('U') };
     const projections = this.getProjectedGrowth(panel.history, r.lvl);
     const inputs = this.buildInputs(panel.form);
-    const topOpportunities = this.getTopProgressOpportunities(inputs, 5);
+    const topOpportunities = this.getTopProgressOpportunities(inputs, 5, panel.testOverrides);
     const topOpportunitiesHtml = topOpportunities.length
       ? topOpportunities.map((o, idx) => {
           const direction = o.nextVal > o.current ? 'Increase' : 'Decrease';

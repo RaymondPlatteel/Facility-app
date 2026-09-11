@@ -254,6 +254,10 @@
               <ion-icon name="trending-up-outline"></ion-icon> Record Assessment
             </button>
           </ng-template>
+          <label class="toggle-row">
+            <input type="checkbox" [checked]="!!selected?.profile?.assessmentCustomizable" (change)="toggleAssessmentCustomizable()" />
+            <span>Allow modifying assessment (replace any test with a custom one)</span>
+          </label>
         </section>
 
         <!-- Check-in history -->

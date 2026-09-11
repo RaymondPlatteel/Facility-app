@@ -170,7 +170,11 @@
             <div class="fs-title">Strength</div>
             <div class="form-row" *ngFor="let lift of strengthLifts">
               <label class="fr-label">
-                {{ lift.label }}
+                <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, lift.key)"
+                      [class.editable]="panel.customizable" (click)="openTestOverride(panel, lift.key, lift.label)">
+                  {{ testLabel(panel, lift.key, lift.label) }}
+                  <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
+                </span>
                 <span class="fr-hint">{{ oneRmLabel(panel, lift) }}</span>
               </label>
               <div class="fr-inputs">
@@ -190,14 +194,26 @@
           <div class="form-section">
             <div class="fs-title">Power</div>
             <div class="form-row">
-              <label class="fr-label">Long Jump</label>
+              <label class="fr-label">
+                <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'longjump')"
+                      [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'longjump', 'Long Jump')">
+                  {{ testLabel(panel, 'longjump', 'Long Jump') }}
+                  <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
+                </span>
+              </label>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.longjump" />
                 <span class="fr-suffix">in</span>
               </div>
             </div>
             <div class="form-row">
-              <label class="fr-label">100m Sprint</label>
+              <label class="fr-label">
+                <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'sprint')"
+                      [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'sprint', '100m Sprint')">
+                  {{ testLabel(panel, 'sprint', '100m Sprint') }}
+                  <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
+                </span>
+              </label>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" step="0.01" placeholder="0.00" [(ngModel)]="panel.form.sprint" />
                 <span class="fr-suffix">sec</span>
@@ -209,14 +225,26 @@
           <div class="form-section">
             <div class="fs-title">Muscular Endurance</div>
             <div class="form-row">
-              <label class="fr-label">Pushups</label>
+              <label class="fr-label">
+                <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'pushups')"
+                      [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'pushups', 'Pushups')">
+                  {{ testLabel(panel, 'pushups', 'Pushups') }}
+                  <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
+                </span>
+              </label>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.pushups" />
                 <span class="fr-suffix">reps</span>
               </div>
             </div>
             <div class="form-row">
-              <label class="fr-label">Pull-ups</label>
+              <label class="fr-label">
+                <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'pullups')"
+                      [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'pullups', 'Pull-ups')">
+                  {{ testLabel(panel, 'pullups', 'Pull-ups') }}
+                  <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
+                </span>
+              </label>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.pullups" />
                 <span class="fr-suffix">reps</span>
@@ -228,7 +256,13 @@
           <div class="form-section">
             <div class="fs-title">Cardio</div>
             <div class="form-row">
-              <label class="fr-label">30 Min Run</label>
+              <label class="fr-label">
+                <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'run30')"
+                      [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'run30', '30 Min Run')">
+                  {{ testLabel(panel, 'run30', '30 Min Run') }}
+                  <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
+                </span>
+              </label>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" step="0.01" placeholder="0.00"
                        [ngModel]="panel.form.run30Display" (ngModelChange)="onSpeedDisplayChanged(panel, 'run30', $event)" />
@@ -240,7 +274,13 @@
               </div>
             </div>
             <div class="form-row">
-              <label class="fr-label">2 Min Speed</label>
+              <label class="fr-label">
+                <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'speed2')"
+                      [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'speed2', '2 Min Speed')">
+                  {{ testLabel(panel, 'speed2', '2 Min Speed') }}
+                  <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
+                </span>
+              </label>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" step="0.001" placeholder="0.000"
                        [ngModel]="panel.form.speed2Display" (ngModelChange)="onSpeedDisplayChanged(panel, 'speed2', $event)" />
@@ -257,25 +297,68 @@
           <div class="form-section">
             <div class="fs-title">Flexibility</div>
             <div class="form-row">
-              <label class="fr-label">Pike</label>
+              <label class="fr-label">
+                <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'pike')"
+                      [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'pike', 'Pike')">
+                  {{ testLabel(panel, 'pike', 'Pike') }}
+                  <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
+                </span>
+              </label>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.pike" />
                 <span class="fr-suffix">0–10</span>
               </div>
             </div>
             <div class="form-row">
-              <label class="fr-label">Backbend</label>
+              <label class="fr-label">
+                <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'backbend')"
+                      [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'backbend', 'Backbend')">
+                  {{ testLabel(panel, 'backbend', 'Backbend') }}
+                  <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
+                </span>
+              </label>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.backbend" />
                 <span class="fr-suffix">0–10</span>
               </div>
             </div>
             <div class="form-row">
-              <label class="fr-label">Straddle</label>
+              <label class="fr-label">
+                <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'straddle')"
+                      [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'straddle', 'Straddle')">
+                  {{ testLabel(panel, 'straddle', 'Straddle') }}
+                  <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
+                </span>
+              </label>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.straddle" />
                 <span class="fr-suffix">deg</span>
               </div>
+            </div>
+          </div>
+
+          <!-- "Modify assessment" test-override editor — one shared popup per
+               panel, opened by clicking any test's label above (only shown
+               when this athlete's assessmentCustomizable flag is on). -->
+          <div class="override-overlay" *ngIf="panel.editingTest" (click)="closeTestOverride(panel)">
+            <div class="override-sheet" (click)="$event.stopPropagation()">
+              <div class="override-sheet-head">
+                <span>Replace Test</span>
+                <button type="button" class="icon-btn" (click)="closeTestOverride(panel)" aria-label="Close">
+                  <ion-icon name="close-outline"></ion-icon>
+                </button>
+              </div>
+              <label class="field-label" for="override-name-input">Test Name</label>
+              <input id="override-name-input" class="text-input" type="text" placeholder="e.g. Trap Bar Deadlift"
+                     [(ngModel)]="panel.overrideDraftName" />
+              <label class="field-label" for="override-record-input">World Record</label>
+              <input id="override-record-input" class="text-input" type="number" placeholder="e.g. 700"
+                     [(ngModel)]="panel.overrideDraftRecord" />
+              <p class="override-hint">The raw result is still typed into this test's usual field — a perfect score at this world record gives 100.</p>
+              <button type="button" class="override-apply" (click)="applyTestOverride(panel)">Apply</button>
+              <button type="button" class="override-revert" *ngIf="isTestOverridden(panel, panel.editingTest)" (click)="revertTestOverride(panel, panel.editingTest)">
+                <ion-icon name="refresh-outline"></ion-icon> Revert to standard test
+              </button>
             </div>
           </div>
 
@@ -358,6 +441,7 @@
                 <div class="level-delta" *ngIf="panel.levelDelta" [style.color]="panel.levelDelta.color">
                   {{ panel.levelDelta.text }}
                 </div>
+                <div class="modified-badge" *ngIf="hasAnyOverride(panel)" title="One or more tests replaced with a custom test">Modified</div>
               </div>
               <div class="score-bar-wrap">
                 <div class="score-bar-bg">

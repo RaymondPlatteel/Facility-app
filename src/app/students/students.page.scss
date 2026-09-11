@@ -526,6 +526,20 @@ ion-content {
   padding: 4px 0 8px;
 }
 
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #133748;
+  font-size: 12.5px;
+  color: #88a6bf;
+  cursor: pointer;
+
+  input[type="checkbox"] { width: 16px; height: 16px; accent-color: #00d4ff; cursor: pointer; flex-shrink: 0; }
+}
+
 .sub-hint {
   color: #88a6bf;
   font-size: 13px;
