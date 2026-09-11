@@ -755,6 +755,8 @@ export class FirebaseService {
         linkedPackages: data['linkedPackages'],
         totalPackages: data['totalPackages'],
         totalRevenue: data['totalRevenue'],
+        totalHours: data['totalHours'],
+        assessmentCustomizable: data['assessmentCustomizable'],
         createdAt: data['createdAt'],
         updatedAt: data['updatedAt']
       } as ClientProfile;
