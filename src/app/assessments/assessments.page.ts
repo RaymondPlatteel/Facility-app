@@ -461,6 +461,17 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   // page) wouldn't show up in the athlete dropdown until a full app reload.
   async ionViewWillEnter() {
     await this.refreshClients();
+    // A coach may have just flipped "modify assessment" on the Clients page
+    // for whoever's already loaded in a panel here — this page is cached
+    // across navigations, so re-check every return visit instead of only
+    // when an athlete is freshly selected (commitAthleteName does the same
+    // check, but won't re-run just from switching back to this tab).
+    for (const p of this.panels) {
+      const key = p.athleteName.trim().toLowerCase();
+      if (!key) continue;
+      const matched = this.clients.find(c => c.fullName.trim().toLowerCase() === key);
+      p.customizable = matched?.assessmentCustomizable ?? false;
+    }
   }
 
   private async refreshClients() {
@@ -550,6 +561,15 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   async commitAthleteName(panel: Panel) {
     const key = panel.athleteName.trim().toLowerCase();
     if (!key) return;
+    // "Modify assessment" is a per-client setting from the Clients page,
+    // matched the same way calculate() matches a client at save time.
+    // Refreshed BEFORE the dedupe guard below (and again on every
+    // ionViewWillEnter — see its comment) since a coach can flip that
+    // toggle on the Clients page while this exact athlete stays loaded/
+    // cached here, and re-selecting the same name would otherwise never
+    // pick the change up.
+    const matchedClient = this.clients.find(c => c.fullName.trim().toLowerCase() === key);
+    panel.customizable = matchedClient?.assessmentCustomizable ?? false;
     // Dedupe change+select double-fires, but only when a load actually
     // succeeded — an empty history is retried so a failed/slow fetch can't
     // permanently wedge this client.
@@ -561,10 +581,6 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       // Read before the history renders — every rank and colour below is
       // computed against this athlete's threshold table.
       panel.sex = (await this.firebase.getMember(key).catch(() => null))?.sex ?? 'male';
-      // "Modify assessment" is a per-client setting from the Clients page —
-      // matched the same way calculate() matches a client at save time.
-      const matchedClient = this.clients.find(c => c.fullName.trim().toLowerCase() === key);
-      panel.customizable = matchedClient?.assessmentCustomizable ?? false;
       panel.editingTest = null;
       panel.goals = await this.firebase.listGoalsForClient(key).catch(() => []);
       panel.goal = panel.goals.length
