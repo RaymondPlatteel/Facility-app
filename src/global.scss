@@ -173,3 +173,20 @@ ion-datetime {
 // Coach dashboard: the sidebar is a permanent on-screen column (see
 // app.component.scss), not a floating button over page content — so
 // nothing here needs to reserve top clearance for it.
+//
+// But the sidebar layout's main content area (.app-content under
+// ion-app.has-sidebar) has no top chrome of its own — unlike the
+// signed-out kiosk layout, whose fixed .app-nav bar already reserves
+// env(safe-area-inset-top) for the notch/dynamic island via its height.
+// Any admin page that renders without its own <ion-header> (most of
+// them — see each page's template) needs that clearance added directly
+// to its content, or its top row sits underneath the status bar/notch
+// on real devices. `--padding-top` is the officially-supported way to
+// pad ion-content's internal scroll area; it isn't subject to the usual
+// "padding on an absolutely-positioned child's container gets ignored"
+// gotcha because Ionic applies it inside the component's own shadow DOM.
+// Pages *with* an ion-header don't need — and must not get — this,
+// since ion-header already reserves the same safe-area space itself.
+ion-app.has-sidebar .app-content ion-content.content-no-header {
+  --padding-top: env(safe-area-inset-top);
+}
