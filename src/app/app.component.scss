@@ -492,6 +492,17 @@ ion-app.has-sidebar {
     height: calc(100% - 52px - env(safe-area-inset-top));
     width: 100%;
   }
+
+  // A separate, independent fix (global.scss's .content-no-header rule)
+  // also reserves env(safe-area-inset-top) on header-less pages — that
+  // predates the top bar above and is still what covers the 769-900px
+  // icon-rail range, where .app-content isn't pushed down at all. At this
+  // width the top bar's own margin-top already does that job, so it's
+  // double-counted here specifically: zero it out rather than touching
+  // the shared rule and regressing the wider range it still needs to cover.
+  ion-app.has-sidebar .app-content ion-content.content-no-header {
+    --padding-top: 0;
+  }
 }
 
 /* Global admin PIN keypad */
