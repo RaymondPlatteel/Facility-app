@@ -17,11 +17,11 @@ import {
   IonPopover,
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline } from 'ionicons/icons';
+import { arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline, refreshOutline } from 'ionicons/icons';
 import { Router } from '@angular/router';
 import { FirebaseService, ClientProfile, PackageRecord, ClientPayment, SessionOverride, localDateString } from '../services/firebase.service';
 import { ToastController } from '@ionic/angular/standalone';
-import { generateScheduleForRange, startOfWeek, addDays } from '../services/schedule.util';
+import { generateScheduleForRange, startOfWeek, addDays, countScheduledOccurrences } from '../services/schedule.util';
 import { TRAINERS } from '../services/auth.service';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -108,7 +108,7 @@ export class PackagesPage implements OnInit {
   searchQuery = '';
   clients: ClientProfile[] = [];
   packages: PackageRecord[] = [];
-  tableStatusFilter: 'all' | PackageStatus = 'all';
+  tableStatusFilter: 'all' | PackageStatus = 'active';
 
   get filteredPackages(): PackageRecord[] {
     if (this.tableStatusFilter === 'all') return this.packages;
@@ -138,6 +138,39 @@ export class PackagesPage implements OnInit {
   daysOfWeekOptions = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   trainers = TRAINERS;
 
+  // ---------- Shared row popovers ----------
+  // One popover instance per TYPE (times/cost/actions), reused across every
+  // row, instead of one per row. With ~20 packages that was ~60 eagerly
+  // mounted <ion-popover> web components on page load — each a full Stencil
+  // component with its own overlay/animation lifecycle — which was heavy
+  // enough to stall Angular's renderer and Ionic's page-transition on this
+  // page specifically (nowhere else in the app has this many overlays per
+  // page). Presenting a single shared popover programmatically, pointed at
+  // whichever row was clicked, does the same job for a fraction of the cost.
+  @ViewChild('timesPopover') timesPopoverRef?: IonPopover;
+  @ViewChild('costPopover') costPopoverRef?: IonPopover;
+  @ViewChild('actionsPopover') actionsPopoverRef?: IonPopover;
+  activeTimesPkg: PackageRecord | null = null;
+  activeTimesIndex = 0;
+  activeCostPkg: PackageRecord | null = null;
+  activeActionsPkg: PackageRecord | null = null;
+
+  openTimesPopover(ev: Event, pkg: PackageRecord, i: number) {
+    this.activeTimesPkg = pkg;
+    this.activeTimesIndex = i;
+    this.timesPopoverRef?.present(ev as any);
+  }
+
+  openCostPopover(ev: Event, pkg: PackageRecord) {
+    this.activeCostPkg = pkg;
+    this.costPopoverRef?.present(ev as any);
+  }
+
+  openActionsPopover(ev: Event, pkg: PackageRecord) {
+    this.activeActionsPkg = pkg;
+    this.actionsPopoverRef?.present(ev as any);
+  }
+
   // ---------- Receipt / invoice PDF ----------
   pdfOpen = false;
   private pdfPackage: PackageRecord | null = null;
@@ -163,7 +196,7 @@ export class PackagesPage implements OnInit {
     private firebase: FirebaseService,
     private toastController: ToastController
   ) {
-    addIcons({ arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline });
+    addIcons({ arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline, refreshOutline });
   }
 
   ngOnInit(): void {
@@ -252,9 +285,14 @@ export class PackagesPage implements OnInit {
 
     // First session on/after purchase date
     let first = findNextOnOrAfter(current);
-    // Iterate to the final session
+    // Iterate to the final session. Cap the walk — a bad/huge totalSessions
+    // (e.g. a mistyped duration) would otherwise run this loop synchronously
+    // into the millions on every single Packages-page load, freezing the
+    // whole tab with no error. This is a pure safety cap, not a feature change.
+    const MAX_ITERATIONS = 5000; // ~19 years of daily sessions — comfortably past any real package
+    const steps = Math.min(Math.max(1, totalSessions), MAX_ITERATIONS);
     let final = new Date(first);
-    for (let i = 1; i < Math.max(1, totalSessions); i++) {
+    for (let i = 1; i < steps; i++) {
       final = findNextAfter(final);
     }
     return final;
@@ -262,9 +300,10 @@ export class PackagesPage implements OnInit {
 
   async loadData() {
     this.clients = await this.firebase.listClientProfiles();
-    const [packages, usedByPackage, overrides] = await Promise.all([
+    const [packages, usedByPackage, excusedByPackage, overrides] = await Promise.all([
       this.firebase.listPackages(),
       this.firebase.getDecrementedCountsByPackage(),
+      this.firebase.getExcusedCountsByPackage(),
       this.firebase.listSessionOverrides()
     ]);
     this.packages = packages;
@@ -272,16 +311,22 @@ export class PackagesPage implements OnInit {
     for (const p of this.packages) {
       if (!p.daysOfWeek) p.daysOfWeek = [] as any;
       if (!p.dayTimes) p.dayTimes = {} as any;
-      const used = p.id ? (usedByPackage.get(p.id) ?? 0) : 0;
+      // Daily-group packages decrement by scheduled day, not by check-in.
+      const used = p.dailyGroupProgram
+        ? countScheduledOccurrences(p)
+        : (p.id ? (usedByPackage.get(p.id) ?? 0) : 0);
+      const excused = p.dailyGroupProgram ? 0 : (p.id ? (excusedByPackage.get(p.id) ?? 0) : 0);
       const beforeRemaining = p.sessionsRemaining;
-      this.recalcRow(p, used);
-      if (p.id && beforeRemaining !== p.sessionsRemaining) {
+      const beforeExpiration = p.expirationDate;
+      this.recalcRow(p, used, excused);
+      if (p.id && (beforeRemaining !== p.sessionsRemaining || beforeExpiration !== p.expirationDate)) {
         await this.firebase.upsertPackage({
           id: p.id,
           packageName: p.packageName,
           totalSessions: p.totalSessions,
           sessionsPerWeek: p.sessionsPerWeek,
-          sessionsRemaining: p.sessionsRemaining
+          sessionsRemaining: p.sessionsRemaining,
+          expirationDate: p.expirationDate
         });
       }
     }
@@ -344,8 +389,13 @@ export class PackagesPage implements OnInit {
   // Every active package gets a dot color, shown/hidden via the checklist. Colors
   // are assigned once per package (stable across toggles/rebuilds), alphabetically.
   private buildLegend() {
+    // Completed stays alongside active here — a package finishing shouldn't
+    // instantly erase its sessions from the calendar overview. Prospect
+    // holds too — matches the 'prospect' status now included in the
+    // buildCalendar() generateScheduleForRange call below; without a color
+    // mapped here, those entries would generate but render with no dot.
     const active = this.packages
-      .filter(p => p.status === 'active' && (p.id || p.packageId))
+      .filter(p => (p.status === 'active' || p.status === 'completed' || p.status === 'prospect') && (p.id || p.packageId))
       .slice()
       .sort((a, b) => (a.packageName || '').localeCompare(b.packageName || ''));
 
@@ -375,7 +425,7 @@ export class PackagesPage implements OnInit {
   private buildMonthBlock(monthDate: Date): CalendarMonth {
     const gridStart = startOfWeek(monthDate);
     const gridEnd = addDays(gridStart, 41);
-    const entries = generateScheduleForRange(this.packages, gridStart, gridEnd, this.overrides);
+    const entries = generateScheduleForRange(this.packages, gridStart, gridEnd, this.overrides, [], ['active', 'completed', 'prospect']);
     const todayKey = localDateString();
 
     const allDays: CalendarDay[] = [];
@@ -523,13 +573,32 @@ export class PackagesPage implements OnInit {
   }
 
   async saveRow(pkg: PackageRecord, toastMessage = 'Package saved') {
-    const sessionsUsed = pkg.id
-      ? await this.firebase.getDecrementedSessionCount(pkg.id)
-      : 0;
-    this.recalcRow(pkg, sessionsUsed);
-    if ((pkg.daysOfWeek?.length ?? 0) > 0 && pkg.status === 'prospect') {
-      pkg.status = 'active';
+    // Daily-group packages decrement by scheduled day, not by check-in —
+    // showing up or not, the slot is used. Skip the check-in lookups
+    // entirely and use the schedule-derived count instead.
+    const [checkedInCount, excusedCount] = pkg.id && !pkg.dailyGroupProgram
+      ? await Promise.all([
+          this.firebase.getDecrementedSessionCount(pkg.id),
+          this.firebase.getExcusedSessionCount(pkg.id)
+        ])
+      : [0, 0];
+    const sessionsUsed = pkg.dailyGroupProgram ? countScheduledOccurrences(pkg) : checkedInCount;
+    this.recalcRow(pkg, sessionsUsed, excusedCount);
+    if (pkg.isFree) {
+      // Every linked client is $0 and paid, current and newly-added alike —
+      // re-normalize on every save instead of only when the checkbox is
+      // first ticked, so adding a client to an already-free package doesn't
+      // need a separate manual step.
+      const payments = this.clientPaymentsOf(pkg);
+      for (const cid of pkg.linkedClientIds || []) {
+        payments[cid] = { ...(payments[cid] || {}), amount: 0, paid: true };
+      }
     }
+    // A prospect can hold a tentative day/time without becoming a confirmed,
+    // billing client — it used to auto-promote to 'active' the instant days
+    // were assigned, which meant "prospect" could never actually mean
+    // "tentative hold" in practice. The coach flips it to Active manually
+    // once it's real.
     // derive linkedClientNames from ids
     const idToName = new Map(this.clients.map(c => [c.id!, c.fullName]));
     const names = (pkg.linkedClientIds || []).map(id => idToName.get(id) || '').filter(Boolean);
@@ -548,6 +617,8 @@ export class PackagesPage implements OnInit {
       daysOfWeek: pkg.daysOfWeek || [],
       dayTimes: pkg.dayTimes || {},
       perSessionPack: pkg.perSessionPack ?? false,
+      isFree: pkg.isFree ?? false,
+      dailyGroupProgram: pkg.dailyGroupProgram ?? false,
       cost: this.totalCost(pkg),
       clientPayments: pkg.clientPayments || {},
       trainerId: pkg.trainerId || '',
@@ -638,7 +709,7 @@ export class PackagesPage implements OnInit {
     this.packages = this.packages.filter(p => p.id !== pkg.id);
   }
 
-  recalcRow(pkg: PackageRecord, sessionsUsed?: number) {
+  recalcRow(pkg: PackageRecord, sessionsUsed?: number, excusedCount = 0) {
     const duration = Number(pkg.packageDuration) || 1;
 
     // Per-session pack: no recurring weekly slot, so there's nothing to
@@ -673,9 +744,14 @@ export class PackagesPage implements OnInit {
       pkg.sessionsRemaining = total;
     }
     if (pkg.purchaseDate) {
+      // An excused occurrence still happens on the calendar — it just
+      // doesn't deduct — so it doesn't get the client any closer to their
+      // last real session. Push the projection out by however many of
+      // those have happened, or the "Final Session" date cuts the calendar
+      // off before sessionsRemaining actually reaches zero.
       const final = this.computeFinalSessionDate(
         new Date(pkg.purchaseDate),
-        total,
+        total + excusedCount,
         pkg.daysOfWeek,
         duration
       );
@@ -690,9 +766,22 @@ export class PackagesPage implements OnInit {
   // that wins and any real days get cleared, since a package can't be both
   // "every Monday" and "no fixed schedule" at once.
   readonly PER_SESSION_VALUE = 'PER_SESSION';
+  // Stable array references for daysSelectValue()'s fallbacks below. This is
+  // bound directly in the template ([ngModel]="daysSelectValue(pkg)" on a
+  // multi-select), which Angular re-evaluates on every change-detection
+  // pass. Returning a brand-new array literal each call (as this used to
+  // do for any perSessionPack package) means the binding's value is never
+  // referentially equal to itself between checks, so the view can never be
+  // considered stable — for a real package with perSessionPack:true this
+  // pinned Angular in an endless re-check loop (100% CPU, unresponsive tab)
+  // with no error, since nothing ever actually throws. (Same bug, found and
+  // fixed independently in Project-000's sibling schedule code the night
+  // before — confirms this really is the root cause.)
+  private readonly PER_SESSION_SELECTION: string[] = [this.PER_SESSION_VALUE];
+  private readonly EMPTY_DAYS: string[] = [];
 
   daysSelectValue(pkg: PackageRecord): string[] {
-    return pkg.perSessionPack ? [this.PER_SESSION_VALUE] : (pkg.daysOfWeek || []);
+    return pkg.perSessionPack ? this.PER_SESSION_SELECTION : (pkg.daysOfWeek || this.EMPTY_DAYS);
   }
 
   onDaysOfWeekChange(pkg: PackageRecord, selected: string[]) {
@@ -808,19 +897,56 @@ export class PackagesPage implements OnInit {
     this.saveRow(pkg);
   }
 
+  isPaymentPlan(pkg: PackageRecord, clientId: string): boolean {
+    return !!pkg.clientPayments?.[clientId]?.paymentPlan;
+  }
+
+  togglePaymentPlan(pkg: PackageRecord, clientId: string) {
+    const payments = this.clientPaymentsOf(pkg);
+    const existing = payments[clientId] || { amount: 0, paid: false };
+    payments[clientId] = { ...existing, paymentPlan: !existing.paymentPlan };
+    this.saveRow(pkg);
+  }
+
+  // Every linked client (now and any added later) gets zeroed to $0/paid —
+  // see saveRow()'s normalization.
+  toggleFree(pkg: PackageRecord) {
+    pkg.isFree = !pkg.isFree;
+    this.saveRow(pkg);
+  }
+
+  // Meets on a fixed schedule with no makeups — sessions decrement by
+  // scheduled day instead of by check-in. See saveRow()/loadData().
+  toggleDailyGroup(pkg: PackageRecord) {
+    pkg.dailyGroupProgram = !pkg.dailyGroupProgram;
+    this.saveRow(pkg);
+  }
+
   // The table's Cost cell shows this total (sum of each linked client's price).
   totalCost(pkg: PackageRecord): number {
     const ids = pkg.linkedClientIds || [];
     return ids.reduce((sum, id) => sum + (pkg.clientPayments?.[id]?.amount ?? 0), 0);
   }
 
-  // How many linked clients haven't checked off "paid" yet — drives the table's unpaid flag.
+  // How many linked clients haven't checked off "paid" yet and aren't on an
+  // approved payment plan — drives the table's unpaid flag. A payment-plan
+  // client is intentionally not paid in full yet, so they don't count here.
   unpaidCount(pkg: PackageRecord): number {
-    return (pkg.linkedClientIds || []).filter(id => !this.isPaid(pkg, id)).length;
+    return (pkg.linkedClientIds || []).filter(id => !this.isPaid(pkg, id) && !this.isPaymentPlan(pkg, id)).length;
   }
 
   hasUnpaid(pkg: PackageRecord): boolean {
     return this.unpaidCount(pkg) > 0;
+  }
+
+  // Linked clients who are unpaid but explicitly approved for a payment
+  // plan — shown as a distinct, non-alarming flag from hasUnpaid().
+  paymentPlanCount(pkg: PackageRecord): number {
+    return (pkg.linkedClientIds || []).filter(id => !this.isPaid(pkg, id) && this.isPaymentPlan(pkg, id)).length;
+  }
+
+  hasPaymentPlan(pkg: PackageRecord): boolean {
+    return this.paymentPlanCount(pkg) > 0;
   }
 
   // ---------- Receipt / invoice PDF ----------

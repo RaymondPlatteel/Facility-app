@@ -34,6 +34,7 @@ import {
   addDays,
   formatTime12h
 } from '../services/schedule.util';
+import { PAYMENTS_WORKER_URL, COACH_API_SECRET, paymentsConfigured } from '../services/payments.config';
 
 type ViewMode = 'week' | 'month';
 
@@ -713,6 +714,15 @@ export class SchedulePage implements OnInit, ViewWillEnter {
         );
         if (pkg?.id && saved.sessionsRemainingAfter != null) pkg.sessionsRemaining = saved.sessionsRemainingAfter;
         this.presentToast(`${client.name} — ${this.statusLabel(status)}`);
+
+        // "They weren't here and they don't get charged for it" — an
+        // excused absence also slides their next subscription charge by
+        // one session's worth. Only on a fresh excuse (not on re-tapping
+        // an already-excused row, which would postpone twice for one
+        // absence), and only for packages that actually bill monthly.
+        if (status === 'excused' && existing?.status !== 'excused' && pkg?.id) {
+          this.postponeBillingFor(pkg.id, client.name);
+        }
       }
     } catch (err) {
       console.error('Schedule: failed to set attendance', err);
@@ -721,6 +731,31 @@ export class SchedulePage implements OnInit, ViewWillEnter {
     } finally {
       this.busyRowKeys.delete(key);
     }
+  }
+
+  // Fire-and-forget: attendance is already saved and the coach has been
+  // told. A billing delay failing (Worker down, package not on a
+  // subscription) must never roll back or error-toast the check-in itself
+  // — the Worker no-ops quietly for non-subscription packages, which is
+  // the common case for anyone paying per-package.
+  private postponeBillingFor(packageId: string, clientName: string): void {
+    if (!paymentsConfigured()) return;
+    fetch(`${PAYMENTS_WORKER_URL}/postpone-billing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Coach-Secret': COACH_API_SECRET },
+      body: JSON.stringify({ packageId, sessions: 1 })
+    })
+      .then(async res => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          console.error('Schedule: postpone-billing failed', res.status, data);
+          return;
+        }
+        if (data.postponedDays) {
+          this.presentToast(`${clientName} — next charge pushed back ${Math.round(data.postponedDays * 10) / 10} days`);
+        }
+      })
+      .catch(err => console.error('Schedule: postpone-billing request failed', err));
   }
 
   statusLabel(status: AttendanceStatus | 'none'): string {

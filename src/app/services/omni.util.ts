@@ -46,29 +46,84 @@ function num(v: number | null | undefined): number {
   return typeof v === 'number' && isFinite(v) ? v : 0;
 }
 
-export function calcStrength(dl: number, sq: number, bn: number, pu: number): number {
-  return ((dl / 939 * 100) + (sq / 800 * 100) + (bn / 600 * 100) + (pu / 500 * 100)) / 4;
+// ---------- Per-test overrides ("modify assessment") ----------
+// A coach can swap out any one of the 13 tracked tests for a custom one on
+// a per-client basis (see ClientProfile.assessmentCustomizable and the
+// Assessments page). The raw result still gets typed into that same test's
+// existing input — only its name and "world record" reference change, so
+// the swap can't touch anything about how a raw value is entered or which
+// category it counts toward.
+//
+// Every test but sprint is "higher is better" (more weight/reps/distance
+// wins); sprint is the one time-based, lower-is-better test. An override
+// always scores as a straight ratio against the custom world record in
+// that same direction — deliberately NOT trying to replicate the sqrt
+// curves calcPower/calcCardio use for their time-ish sub-tests, since
+// those exist to smooth out extreme values near a world record and a
+// coach typing a custom name+record for, say, a made-up strength variant
+// has no equivalent curve to reproduce. In practice this only matters for
+// the tests a coach would actually plausibly swap (the strength lifts,
+// which already scored via a plain ratio to begin with) — everything else
+// keeps its original, un-overridden formula unless a coach overrides it.
+export type TestKey = keyof AssessmentInputs;
+
+export interface TestOverride {
+  name: string;        // custom test name, e.g. "Trap Bar Deadlift"
+  worldRecord: number; // replaces that slot's built-in reference value
 }
-export function calcPower(lj: number, sp: number): number {
-  return (lj / 147 * 100 + (Math.sqrt((sp - 9.58) / 0.125) * -1 + 10) * 10) / 2;
+
+export type TestOverrides = Partial<Record<TestKey, TestOverride>>;
+
+const LOWER_IS_BETTER: ReadonlySet<TestKey> = new Set<TestKey>(['sprint']);
+
+function overrideScore(raw: number, worldRecord: number, key: TestKey): number {
+  if (!worldRecord) return 0;
+  const pct = LOWER_IS_BETTER.has(key) ? (worldRecord / (raw || Infinity)) * 100 : (raw / worldRecord) * 100;
+  return isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
 }
-export function calcEndurance(pu: number, pulls: number): number {
-  return (((pu / 150) * 100) + ((pulls / 49) * 100)) / 2;
+
+// Runs a slot's normal (un-overridden) scoring unless `overrides` has an
+// entry for it, in which case that entry's world record drives a plain
+// ratio score instead. `fallback` is the slot's usual formula contribution
+// (e.g. `dl / 939 * 100`) — passed as a thunk so it's only evaluated when
+// actually needed.
+function slotScore(raw: number, key: TestKey, overrides: TestOverrides | undefined, fallback: () => number): number {
+  const ov = overrides?.[key];
+  return ov ? overrideScore(raw, ov.worldRecord, key) : fallback();
 }
-export function calcCardio(r30: number, s2: number): number {
-  const rs = r30 < 4.02336
+
+export function calcStrength(dl: number, sq: number, bn: number, pu: number, overrides?: TestOverrides): number {
+  const dlScore = slotScore(dl, 'deadlift', overrides, () => dl / 939 * 100);
+  const sqScore = slotScore(sq, 'squat', overrides, () => sq / 800 * 100);
+  const bnScore = slotScore(bn, 'bench', overrides, () => bn / 600 * 100);
+  const puScore = slotScore(pu, 'pullup1rm', overrides, () => pu / 500 * 100);
+  return (dlScore + sqScore + bnScore + puScore) / 4;
+}
+export function calcPower(lj: number, sp: number, overrides?: TestOverrides): number {
+  const ljScore = slotScore(lj, 'longjump', overrides, () => lj / 147 * 100);
+  const spScore = slotScore(sp, 'sprint', overrides, () => (Math.sqrt((sp - 9.58) / 0.125) * -1 + 10) * 10);
+  return (ljScore + spScore) / 2;
+}
+export function calcEndurance(pu: number, pulls: number, overrides?: TestOverrides): number {
+  const puScore = slotScore(pu, 'pushups', overrides, () => (pu / 150) * 100);
+  const pullsScore = slotScore(pulls, 'pullups', overrides, () => (pulls / 49) * 100);
+  return (puScore + pullsScore) / 2;
+}
+export function calcCardio(r30: number, s2: number, overrides?: TestOverrides): number {
+  const rs = slotScore(r30, 'run30', overrides, () => r30 < 4.02336
     ? (Math.sqrt((11.265408 - r30) / 0.11265408) * -1 + 10) * 10
-    : r30 / 11.265408 * 100;
-  return (rs + (Math.sqrt((0.804672 - s2) / 0.00804672) * -1 + 10) * 10) / 2;
+    : r30 / 11.265408 * 100);
+  const s2Score = slotScore(s2, 'speed2', overrides, () => (Math.sqrt((0.804672 - s2) / 0.00804672) * -1 + 10) * 10);
+  return (rs + s2Score) / 2;
 }
-export function calcFlex(pike: number, bb: number, str: number): number {
-  const s = str < 80 ? 0 : str > 180 ? 100 : str - 80;
+export function calcFlex(pike: number, bb: number, str: number, overrides?: TestOverrides): number {
   // Pike/backbend are entered on a 0-10 scale (see FIELD_LIMITS); clamp
   // here too so a stray out-of-range value (an old 0-100 entry, a typo)
   // can't inflate the score past what a perfect 10 would give.
-  const p = Math.max(0, Math.min(10, pike));
-  const b = Math.max(0, Math.min(10, bb));
-  return ((p * 10) + (b * 10) + s) / 3;
+  const pikeScore = slotScore(pike, 'pike', overrides, () => Math.max(0, Math.min(10, pike)) * 10);
+  const bbScore = slotScore(bb, 'backbend', overrides, () => Math.max(0, Math.min(10, bb)) * 10);
+  const strScore = slotScore(str, 'straddle', overrides, () => str < 80 ? 0 : str > 180 ? 100 : str - 80);
+  return (pikeScore + bbScore + strScore) / 3;
 }
 
 export interface OmniTotals {
@@ -76,12 +131,12 @@ export interface OmniTotals {
   raw: number; exact: number; lvl: number; xpPct: number;
 }
 
-export function computeOmni(i: AssessmentInputs): OmniTotals {
-  const H = calcStrength(num(i.deadlift), num(i.squat), num(i.bench), num(i.pullup1rm));
-  const K = calcPower(num(i.longjump), num(i.sprint));
-  const N = calcEndurance(num(i.pushups), num(i.pullups));
-  const Q = calcCardio(num(i.run30), num(i.speed2));
-  const U = calcFlex(num(i.pike), num(i.backbend), num(i.straddle));
+export function computeOmni(i: AssessmentInputs, overrides?: TestOverrides): OmniTotals {
+  const H = calcStrength(num(i.deadlift), num(i.squat), num(i.bench), num(i.pullup1rm), overrides);
+  const K = calcPower(num(i.longjump), num(i.sprint), overrides);
+  const N = calcEndurance(num(i.pushups), num(i.pullups), overrides);
+  const Q = calcCardio(num(i.run30), num(i.speed2), overrides);
+  const U = calcFlex(num(i.pike), num(i.backbend), num(i.straddle), overrides);
   const raw = H + K + N + Q + U;
   const exact = Math.pow(raw / 1000, 2) * 1000;
   const lvl = isFinite(exact) ? Math.floor(exact) : 0;

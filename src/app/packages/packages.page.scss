@@ -68,6 +68,7 @@
 .time-summary:hover { color: #dceaf6; }
 
 .unpaid-flag { color: #eb445a; font-size: 15px; flex-shrink: 0; }
+.payment-plan-flag { color: #ffc409; font-size: 15px; flex-shrink: 0; }
 
 .per-session-badge {
   display: inline-block;
@@ -78,6 +79,23 @@
   color: #00d4ff;
   font-size: 10.5px;
   font-weight: 600;
+}
+
+.daily-group-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(6, 214, 160, 0.4);
+  background: rgba(6, 214, 160, 0.08);
+  color: #06d6a0;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.free-badge {
+  color: #06d6a0;
+  font-weight: 700;
 }
 
 // Session-times popover
@@ -140,6 +158,36 @@ ion-popover.times-pop-wrap {
 .time-field::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
 
 .paid-checkbox { width: 16px; height: 16px; accent-color: #00d4ff; cursor: pointer; }
+.paid-checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+
+.payment-plan-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #ffc409;
+  cursor: pointer;
+
+  input[type="checkbox"] { accent-color: #ffc409; cursor: pointer; }
+}
+
+.free-toggle,
+.daily-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #133748;
+  font-size: 12px;
+  color: #06d6a0;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+
+  input[type="checkbox"] { width: 16px; height: 16px; accent-color: #06d6a0; cursor: pointer; }
+}
 
 // Payment popover — wider than the plain times popover to fit price + paid-so-far fields.
 ion-popover.cost-pop-wrap {
@@ -563,3 +611,34 @@ ion-popover.cost-pop-wrap {
 }
 
 
+
+/* Monthly-membership state on a package row. "auto" = Stripe is billing
+   this athlete on a recurring schedule; "off" = they had a subscription
+   and cancelled it, which stays visible rather than silently reverting to
+   looking like it never existed. */
+.sub-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+
+  ion-icon { font-size: 11px; }
+
+  &.auto {
+    color: #2dd36f;
+    background: rgba(45, 211, 111, 0.12);
+    border: 1px solid rgba(45, 211, 111, 0.4);
+  }
+
+  &.off {
+    color: #88a6bf;
+    background: rgba(136, 166, 191, 0.1);
+    border: 1px solid rgba(136, 166, 191, 0.3);
+  }
+}

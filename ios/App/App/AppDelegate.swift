@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import WebKit
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,8 +8,21 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        clearStaleWebViewAssetCache()
         return true
+    }
+
+    // WKWebView persists its own disk/memory cache of the JS/CSS/HTML
+    // Capacitor serves (Library/Caches/WebKit) — installing a new build
+    // OVER an existing one does not clear it, so the old bundle can keep
+    // getting served indefinitely even though the new one is sitting right
+    // there on disk. Clearing just the disk/memory cache (never
+    // localStorage, cookies, or IndexedDB — those hold real app state like
+    // the Calendar Sync toggle) on every launch means a fresh build always
+    // wins without needing a full uninstall each deploy.
+    private func clearStaleWebViewAssetCache() {
+        let types: Set<String> = [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache]
+        WKWebsiteDataStore.default().removeData(ofTypes: types, modifiedSince: .distantPast) {}
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

@@ -4,6 +4,7 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit } from 'firebase/firestore';
 import { environment } from '../../environments/environment';
 import { describeAssessmentChange, computeOmni, getOmniRank } from './omni.util';
+import type { TestOverrides } from './omni.util';
 
 // Local calendar date (YYYY-MM-DD). toISOString() would shift evening check-ins to the next UTC day.
 export function localDateString(d: Date = new Date()): string {
@@ -163,6 +164,11 @@ export interface ClientProfile {
   // Job Request Board: hours entered by hand once a client finishes a job
   // they accepted in Project-000 — not derived/summed automatically.
   totalHours?: number;
+  // Lets this client's assessment replace any of the 13 tracked tests with
+  // a custom one (own name, own "world record") — see the Assessments
+  // page and FitnessAssessment.testOverrides. Off by default: the 13
+  // standard tests apply to everyone unless a coach opts a client in.
+  assessmentCustomizable?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -274,6 +280,11 @@ export interface ClientPayment {
   amount: number;       // this client's price for the package (can differ per client)
   paid: boolean;        // fully paid checkbox
   amountPaid?: number;  // running partial amount, relevant only while !paid
+  // Coach has approved this client to pay later / in installments. While
+  // true, the client is treated as cleared to schedule even though `paid`
+  // is false — suppresses the "unpaid" flag instead of just leaving them
+  // flagged as if payment were simply forgotten.
+  paymentPlan?: boolean;
 }
 
 // Packages CRM
@@ -297,12 +308,28 @@ export interface PackageRecord {
   // daysOfWeek.length x weeks. Each session gets logged ad hoc as it
   // happens rather than being pre-scheduled.
   perSessionPack?: boolean;
+  // No one pays for this package — every linked client (current and any
+  // added later) gets priced at $0 and marked paid automatically instead of
+  // the coach typing 0 in for each person. See packages.page.ts's saveRow().
+  isFree?: boolean;
+  // Meets on a fixed daily-ish schedule with no makeups — attendance is
+  // tracked for the coach's own data but isn't what decrements sessions.
+  // Sessions count down by scheduled calendar day instead of by check-in
+  // (see schedule.util.ts's countScheduledOccurrences()).
+  dailyGroupProgram?: boolean;
   cost: number; // derived: sum of clientPayments amounts
   clientPayments?: { [clientId: string]: ClientPayment };
   trainerId?: string; // which trainer runs these sessions (see TRAINERS in auth.service)
   purchaseDate?: string; // ISO
   expirationDate?: string; // ISO (auto-calculated)
   status: 'active' | 'completed' | 'prospect';
+  // Set by the payments Worker when an athlete starts an auto-renewing
+  // monthly membership; cleared (and subscriptionCanceledAt stamped) when
+  // it's cancelled. Read-only from this app — billing state belongs to
+  // Stripe, and the Worker is what reconciles it.
+  stripeSubscriptionId?: string;
+  stripeCustomerId?: string;
+  subscriptionCanceledAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -542,6 +569,10 @@ export interface FitnessAssessment {
   timestamp: string;           // datetime-local string (assessment date & time) — unique per client
   dateLabel: string;           // pretty label for the history dropdown
   inputs: AssessmentInputs;
+  // Any of the 13 tests this specific assessment swapped for a custom one.
+  // Only meaningful when the client is assessmentCustomizable — see
+  // omni.util's computeOmni/calc* overrides param.
+  testOverrides?: TestOverrides;
   lvl: number;
   rank: OmniRank;
   createdAt?: string;
@@ -724,6 +755,8 @@ export class FirebaseService {
         linkedPackages: data['linkedPackages'],
         totalPackages: data['totalPackages'],
         totalRevenue: data['totalRevenue'],
+        totalHours: data['totalHours'],
+        assessmentCustomizable: data['assessmentCustomizable'],
         createdAt: data['createdAt'],
         updatedAt: data['updatedAt']
       } as ClientProfile;
@@ -749,14 +782,30 @@ export class FirebaseService {
         const match = /^(\d+)/.exec(String(pkg.packageDuration || ''));
         pkg.packageDuration = match ? parseInt(match[1], 10) : 1;
       }
-      // Packages with training days are schedulable — treat legacy prospect rows as active.
-      if (pkg.status === 'prospect' && pkg.daysOfWeek.length > 0) {
-        pkg.status = 'active';
-        await updateDoc(doc(this.db, 'packages', d.id), {
-          status: 'active',
-          updatedAt: new Date().toISOString()
-        });
+      // These are typed non-optional but come straight off a raw Firestore
+      // cast above, so a doc written before the field existed (or by the
+      // payments Worker, which only sets what it knows) yields undefined
+      // and makes the type a lie. Anything downstream doing arithmetic on
+      // them then produces NaN — which renders as a blank or "NaN" in the
+      // table rather than failing loudly. Normalize once, here, so the
+      // declared types are actually true everywhere else.
+      if (typeof pkg.totalSessions !== 'number' || !isFinite(pkg.totalSessions)) {
+        pkg.totalSessions = 0;
       }
+      if (typeof pkg.sessionsPerWeek !== 'number' || !isFinite(pkg.sessionsPerWeek)) {
+        pkg.sessionsPerWeek = Array.isArray(pkg.daysOfWeek) ? pkg.daysOfWeek.length : 0;
+      }
+      if (typeof pkg.cost !== 'number' || !isFinite(pkg.cost)) {
+        pkg.cost = 0;
+      }
+      if (typeof pkg.sessionDurationMinutes !== 'number' || !isFinite(pkg.sessionDurationMinutes)) {
+        pkg.sessionDurationMinutes = 60;
+      }
+      // A prospect can hold a tentative day/time without becoming a
+      // confirmed, billing client — this used to force-promote any
+      // prospect with days assigned to 'active' on every single read,
+      // which made "prospect" unusable as a tentative-hold state (the
+      // coach's manual choice never survived the next page load).
       packages.push(pkg);
     }
     return packages;
@@ -1252,6 +1301,38 @@ export class FirebaseService {
     const counts = new Map<string, number>();
     datesByPackage.forEach((dates, packageId) => counts.set(packageId, dates.size));
     return counts;
+  }
+
+  // An excused occurrence doesn't deduct a session, but it did occupy a
+  // calendar slot — the package's final-session projection needs to know
+  // how many of these have happened so it can extend the recurring pattern
+  // by that many extra occurrences (otherwise the last real session gets
+  // cut off the calendar even though sessionsRemaining says it's owed).
+  // Same distinct-date-per-package shape as getDecrementedCountsByPackage.
+  async getExcusedCountsByPackage(): Promise<Map<string, number>> {
+    const snap = await getDocs(query(this.checkInsCollection(), where('status', '==', 'excused')));
+    const datesByPackage = new Map<string, Set<string>>();
+    snap.forEach(d => {
+      const packageId = d.data()['packageId'] as string | undefined;
+      if (!packageId) return;
+      const date = d.data()['date'] as string;
+      if (!datesByPackage.has(packageId)) datesByPackage.set(packageId, new Set());
+      datesByPackage.get(packageId)!.add(date);
+    });
+    const counts = new Map<string, number>();
+    datesByPackage.forEach((dates, packageId) => counts.set(packageId, dates.size));
+    return counts;
+  }
+
+  async getExcusedSessionCount(packageId: string): Promise<number> {
+    const snap = await getDocs(query(
+      this.checkInsCollection(),
+      where('packageId', '==', packageId),
+      where('status', '==', 'excused')
+    ));
+    const dates = new Set<string>();
+    snap.forEach(d => dates.add(d.data()['date']));
+    return dates.size;
   }
 
   // Newest first. Sorted client-side per query field to avoid composite indexes.
@@ -1931,7 +2012,12 @@ export class FirebaseService {
           id: doc.id,
           name: data['name'],
           description: data['description'],
-          sections: data['sections'],
+          // Typed non-optional, so several callers index straight into it
+          // (session-workout-view does `workout?.sections[i]`, which throws
+          // if sections is undefined rather than just returning undefined).
+          // A workout doc saved without sections would crash the live
+          // session view — default here so the declared type is true.
+          sections: data['sections'] ?? [],
           totalDuration: data['totalDuration'],
           equipment: data['equipment'],
           tags: data['tags'],
@@ -2120,6 +2206,7 @@ export class FirebaseService {
       timestamp: data['timestamp'],
       dateLabel: data['dateLabel'],
       inputs: data['inputs'],
+      testOverrides: data['testOverrides'] ?? undefined,
       lvl: data['lvl'],
       rank: data['rank'],
       createdAt: data['createdAt'],
@@ -2172,6 +2259,7 @@ export class FirebaseService {
       timestamp: a.timestamp,
       dateLabel: a.dateLabel,
       inputs: a.inputs,
+      testOverrides: a.testOverrides ?? null,
       lvl: a.lvl,
       rank: a.rank,
       createdAt: sameDay

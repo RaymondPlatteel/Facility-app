@@ -27,10 +27,10 @@
 
     <div class="table-actions" *ngIf="viewMode === 'table'">
       <div class="status-filter">
-        <button [class.active]="tableStatusFilter === 'all'" (click)="setTableStatusFilter('all')">All</button>
         <button [class.active]="tableStatusFilter === 'active'" (click)="setTableStatusFilter('active')">Active</button>
         <button [class.active]="tableStatusFilter === 'completed'" (click)="setTableStatusFilter('completed')">Completed</button>
         <button [class.active]="tableStatusFilter === 'prospect'" (click)="setTableStatusFilter('prospect')">Prospect</button>
+        <button [class.active]="tableStatusFilter === 'all'" (click)="setTableStatusFilter('all')">All</button>
       </div>
       <ion-button size="small" fill="outline" class="grey-btn" (click)="addNewRow()" aria-label="Add package">Create New Package</ion-button>
     </div>
@@ -103,7 +103,6 @@
       <table class="crm-table" style="table-layout: fixed; width: 100%">
         <thead>
           <tr>
-            <th [style.width.px]="columnWidths.packageId">Package ID<div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('packageId', $event)"></div></th>
             <th [style.width.px]="columnWidths.packageName">Package Name<div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('packageName', $event)"></div></th>
             <th [style.width.px]="columnWidths.linkedClients"><span class="th-wrap">Linked<br>Clients</span><div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('linkedClients', $event)"></div></th>
             <th [style.width.px]="columnWidths.trainer">Trainer<div class="col-resizer" (mousedown)="onHeaderResizeMouseDown('trainer', $event)"></div></th>
@@ -121,7 +120,6 @@
         </thead>
         <tbody>
           <tr *ngFor="let pkg of filteredPackages; let i = index; trackBy: trackByPkg">
-            <td [style.width.px]="columnWidths.packageId">{{ pkg.packageId || '—' }}</td>
             <td [style.width.px]="columnWidths.packageName">
               <ion-input class="table-input" [(ngModel)]="pkg.packageName" (ionBlur)="saveRow(pkg)" placeholder="Standard Training"></ion-input>
             </td>
@@ -150,30 +148,10 @@
                 <ion-select-option *ngFor="let d of daysOfWeekOptions" [value]="d">{{ d }}</ion-select-option>
               </ion-select>
               <div class="per-session-badge" *ngIf="pkg.perSessionPack">Pack of {{ pkg.totalSessions }} sessions</div>
+              <div class="daily-group-badge" *ngIf="pkg.dailyGroupProgram" title="Sessions count down by scheduled day, not check-in">Daily group</div>
             </td>
             <td [style.width.px]="columnWidths.timeOfDay">
-              <div class="time-summary" id="times-{{pkg.id || i}}">{{ formatDayTimes(pkg) }}</div>
-              <ion-popover class="times-pop-wrap" trigger="times-{{pkg.id || i}}" [dismissOnSelect]="false" (didPresent)="seedDefaultTimes(pkg, i)" #timesPopover>
-                <ng-template>
-                  <div class="times-pop">
-                    <div class="times-pop-header">Session Times</div>
-                    <div class="times-pop-body">
-                      <div class="time-row" *ngFor="let d of pkg.daysOfWeek">
-                        <span class="day-label">{{ d }}</span>
-                        <input class="time-field" type="time"
-                               [value]="pkg.dayTimes && pkg.dayTimes[d] ? pkg.dayTimes[d] : ''"
-                               (input)="setDayTime(pkg, d, $any($event.target).value, i)"
-                               (change)="setDayTime(pkg, d, $any($event.target).value, i)"
-                               (keydown.enter)="$event.preventDefault(); timesPopover.dismiss(); saveRow(pkg)" />
-                      </div>
-                      <div class="times-pop-empty" *ngIf="!pkg.daysOfWeek || pkg.daysOfWeek.length === 0">
-                        Select days of week first.
-                      </div>
-                    </div>
-                    <button class="times-pop-done" (click)="saveRow(pkg); timesPopover.dismiss()">Done</button>
-                  </div>
-                </ng-template>
-              </ion-popover>
+              <div class="time-summary" (click)="openTimesPopover($event, pkg, i)">{{ formatDayTimes(pkg) }}</div>
             </td>
             <td [style.width.px]="columnWidths.sessionsRemaining">
               {{ pkg.sessionsRemaining ?? 0 }}
@@ -190,66 +168,124 @@
                 <ion-select-option value="completed">Completed</ion-select-option>
                 <ion-select-option value="prospect">Prospect</ion-select-option>
               </ion-select>
+              <!-- Billing state is Stripe's, not editable here — shown so
+                   it's obvious which packages renew themselves (and which
+                   ones an athlete has turned off) without leaving the app. -->
+              <div class="sub-chip auto" *ngIf="pkg.stripeSubscriptionId" title="Renews monthly via Stripe">
+                <ion-icon name="refresh-outline"></ion-icon> Auto-renew
+              </div>
+              <div class="sub-chip off" *ngIf="!pkg.stripeSubscriptionId && pkg.subscriptionCanceledAt" title="The athlete cancelled their monthly membership">
+                Renewal off
+              </div>
             </td>
             <td [style.width.px]="columnWidths.cost">
-              <div class="time-summary" id="cost-{{pkg.id || i}}">
-                $ {{ totalCost(pkg) }}
+              <div class="time-summary" (click)="openCostPopover($event, pkg)">
+                <span *ngIf="pkg.isFree" class="free-badge">Free</span>
+                <span *ngIf="!pkg.isFree">$ {{ totalCost(pkg) }}</span>
                 <ion-icon
                   *ngIf="hasUnpaid(pkg)"
                   name="alert-circle"
                   class="unpaid-flag"
                   [title]="unpaidCount(pkg) + ' of ' + pkg.linkedClientIds.length + ' not paid in full'"></ion-icon>
+                <ion-icon
+                  *ngIf="hasPaymentPlan(pkg)"
+                  name="time-outline"
+                  class="payment-plan-flag"
+                  [title]="paymentPlanCount(pkg) + ' of ' + pkg.linkedClientIds.length + ' on a payment plan'"></ion-icon>
               </div>
-              <ion-popover class="cost-pop-wrap" trigger="cost-{{pkg.id || i}}" [dismissOnSelect]="false" #costPopover>
-                <ng-template>
-                  <div class="times-pop">
-                    <div class="times-pop-header">Payment</div>
-                    <div class="times-pop-body">
-                      <div class="pay-block" *ngFor="let cid of pkg.linkedClientIds">
-                        <div class="pay-block-top">
-                          <span class="day-label">{{ clientName(cid) }}</span>
-                          <input class="paid-checkbox" type="checkbox" [checked]="isPaid(pkg, cid)" (change)="togglePaid(pkg, cid)" />
-                        </div>
-                        <div class="pay-block-fields">
-                          <label class="pay-field">
-                            <span>Price</span>
-                            <input type="number" min="0" [value]="paymentAmount(pkg, cid)"
-                                   (change)="setPaymentAmount(pkg, cid, $any($event.target).value)" />
-                          </label>
-                          <label class="pay-field" *ngIf="!isPaid(pkg, cid)">
-                            <span>Paid so far</span>
-                            <input type="number" min="0" [value]="amountPaidSoFar(pkg, cid)"
-                                   (change)="setAmountPaidSoFar(pkg, cid, $any($event.target).value)" />
-                          </label>
-                        </div>
-                      </div>
-                      <div class="times-pop-empty" *ngIf="!pkg.linkedClientIds || pkg.linkedClientIds.length === 0">
-                        Link clients first.
-                      </div>
-                    </div>
-                    <button class="times-pop-done" (click)="costPopover.dismiss()">Done</button>
-                  </div>
-                </ng-template>
-              </ion-popover>
             </td>
             <td [style.width.px]="columnWidths.actions" class="actions-cell">
-              <ion-icon id="pkg-actions-{{pkg.id || i}}" class="ellipsis" name="ellipsis-vertical"></ion-icon>
-              <ion-popover trigger="pkg-actions-{{pkg.id || i}}" [dismissOnSelect]="true">
-                <ng-template>
-                  <ion-list>
-                    <ion-item button *ngFor="let cid of pkg.linkedClientIds" (click)="openReceipt(pkg, cid)">
-                      {{ isPaid(pkg, cid) ? 'Receipt' : 'Invoice' }} — {{ clientName(cid) }}
-                    </ion-item>
-                    <ion-item button (click)="duplicatePackage(pkg)" [disabled]="!pkg.id">Duplicate</ion-item>
-                    <ion-item button (click)="renewPackage(pkg)" [disabled]="!pkg.id">Renew</ion-item>
-                    <ion-item button (click)="onDeletePackage(pkg)">Delete</ion-item>
-                  </ion-list>
-                </ng-template>
-              </ion-popover>
+              <ion-icon class="ellipsis" name="ellipsis-vertical" (click)="openActionsPopover($event, pkg)"></ion-icon>
             </td>
           </tr>
         </tbody>
       </table>
+
+      <!-- Shared popovers, one per type, reused across every row (see the
+           ViewChild block in the component for why: ~20 packages x 3
+           popovers each was ~60 eagerly-mounted overlay components, heavy
+           enough to stall this page specifically). -->
+      <ion-popover class="times-pop-wrap" [dismissOnSelect]="false" (didPresent)="activeTimesPkg && seedDefaultTimes(activeTimesPkg, activeTimesIndex)" #timesPopover>
+        <ng-template>
+          <div class="times-pop" *ngIf="activeTimesPkg as pkg">
+            <div class="times-pop-header">Session Times</div>
+            <div class="times-pop-body">
+              <label class="pay-field daily-group-toggle">
+                <input type="checkbox" [checked]="!!pkg.dailyGroupProgram" (change)="toggleDailyGroup(pkg)" />
+                <span>Daily group — no makeups (sessions count down by scheduled day, not check-in)</span>
+              </label>
+              <div class="time-row" *ngFor="let d of pkg.daysOfWeek">
+                <span class="day-label">{{ d }}</span>
+                <input class="time-field" type="time"
+                       [value]="pkg.dayTimes && pkg.dayTimes[d] ? pkg.dayTimes[d] : ''"
+                       (input)="setDayTime(pkg, d, $any($event.target).value, activeTimesIndex)"
+                       (change)="setDayTime(pkg, d, $any($event.target).value, activeTimesIndex)"
+                       (keydown.enter)="$event.preventDefault(); timesPopover.dismiss(); saveRow(pkg)" />
+              </div>
+              <div class="times-pop-empty" *ngIf="!pkg.daysOfWeek || pkg.daysOfWeek.length === 0">
+                Select days of week first.
+              </div>
+            </div>
+            <button class="times-pop-done" (click)="saveRow(pkg); timesPopover.dismiss()">Done</button>
+          </div>
+        </ng-template>
+      </ion-popover>
+
+      <ion-popover class="cost-pop-wrap" [dismissOnSelect]="false" #costPopover>
+        <ng-template>
+          <div class="times-pop" *ngIf="activeCostPkg as pkg">
+            <div class="times-pop-header">Payment</div>
+            <div class="times-pop-body">
+              <label class="pay-field free-toggle">
+                <input type="checkbox" [checked]="!!pkg.isFree" (change)="toggleFree(pkg)" />
+                <span>Free package (everyone linked is $0, auto-paid)</span>
+              </label>
+              <div class="pay-block" *ngFor="let cid of pkg.linkedClientIds">
+                <div class="pay-block-top">
+                  <span class="day-label">{{ clientName(cid) }}</span>
+                  <label class="paid-checkbox-label">
+                    <input class="paid-checkbox" type="checkbox" [checked]="isPaid(pkg, cid)" [disabled]="pkg.isFree" (change)="togglePaid(pkg, cid)" />
+                    Paid
+                  </label>
+                </div>
+                <div class="pay-block-fields">
+                  <label class="pay-field">
+                    <span>Price</span>
+                    <input type="number" min="0" [value]="paymentAmount(pkg, cid)" [disabled]="pkg.isFree"
+                           (change)="setPaymentAmount(pkg, cid, $any($event.target).value)" />
+                  </label>
+                  <label class="pay-field" *ngIf="!isPaid(pkg, cid)">
+                    <span>Paid so far</span>
+                    <input type="number" min="0" [value]="amountPaidSoFar(pkg, cid)"
+                           (change)="setAmountPaidSoFar(pkg, cid, $any($event.target).value)" />
+                  </label>
+                </div>
+                <label class="pay-field payment-plan-toggle" *ngIf="!isPaid(pkg, cid)">
+                  <input type="checkbox" [checked]="isPaymentPlan(pkg, cid)" (change)="togglePaymentPlan(pkg, cid)" />
+                  <span>Approved for payment plan (pay later / installments)</span>
+                </label>
+              </div>
+              <div class="times-pop-empty" *ngIf="!pkg.linkedClientIds || pkg.linkedClientIds.length === 0">
+                Link clients first.
+              </div>
+            </div>
+            <button class="times-pop-done" (click)="costPopover.dismiss()">Done</button>
+          </div>
+        </ng-template>
+      </ion-popover>
+
+      <ion-popover [dismissOnSelect]="true" #actionsPopover>
+        <ng-template>
+          <ion-list *ngIf="activeActionsPkg as pkg">
+            <ion-item button *ngFor="let cid of pkg.linkedClientIds" (click)="openReceipt(pkg, cid)">
+              {{ isPaid(pkg, cid) ? 'Receipt' : 'Invoice' }} — {{ clientName(cid) }}
+            </ion-item>
+            <ion-item button (click)="duplicatePackage(pkg)" [disabled]="!pkg.id">Duplicate</ion-item>
+            <ion-item button (click)="renewPackage(pkg)" [disabled]="!pkg.id">Renew</ion-item>
+            <ion-item button (click)="onDeletePackage(pkg)">Delete</ion-item>
+          </ion-list>
+        </ng-template>
+      </ion-popover>
     </div>
   </div>
 </ion-content>

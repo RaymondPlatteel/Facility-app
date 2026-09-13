@@ -1,5 +1,32 @@
 import { PackageRecord, SessionOverride, SingleSession } from './firebase.service';
 
+// A package with NO clientPayments at all isn't being tracked through
+// online payment — that's a coach scheduling someone by hand and
+// collecting payment their own way, same as always, unaffected by this.
+// A package that DOES have a payment record but shows `paid: false` for
+// someone is one the payment system is actively tracking as incomplete —
+// that one shouldn't show as scheduled until it's actually paid, even
+// though status may already say 'active' with days/times assigned.
+// The one exception is `paymentPlan: true` — a client the coach has
+// explicitly approved to pay later or in installments. That's a deliberate
+// override of the same "not paid in full" state, not a payment the system
+// forgot about, so it clears this check same as `paid` would.
+//
+// Only clients still in linkedClientIds count. `clientPayments` is keyed by
+// client id and nothing ever removes an old entry when a client is
+// unlinked from the package (see packages.page.ts's linked-clients editor),
+// so a stale unpaid record for someone no longer even on the package would
+// otherwise block scheduling for everyone still linked, with no visible
+// sign why — exactly what happened when a removed client's leftover
+// `paid: false` record silently blocked a package for the 3 people
+// actually on it.
+function hasUnpaidOnlineBalance(pkg: PackageRecord): boolean {
+  const payments = pkg.clientPayments;
+  if (!payments) return false;
+  const linked = new Set(pkg.linkedClientIds || []);
+  return Object.entries(payments).some(([clientId, p]) => linked.has(clientId) && !p.paid && !p.paymentPlan);
+}
+
 // One recurring training slot derived from an active package, OR a one-off
 // SingleSession folded into the same shape (packageId `single:<id>`,
 // isSingle true) so the whole Schedule page — cards, the session modal,
@@ -65,6 +92,26 @@ export function addDays(d: Date, days: number): Date {
   return next;
 }
 
+// For a `dailyGroupProgram` package (meets on a fixed schedule with no
+// makeups — attendance is data, not what decrements sessions): counts how
+// many of the package's scheduled weekdays have occurred from purchaseDate
+// through `asOf` (today, by default), inclusive of both ends, capped at
+// totalSessions since a package can't be "more than fully used". This
+// replaces the check-in-derived count as sessionsUsed for these packages —
+// see packages.page.ts's saveRow()/loadData().
+export function countScheduledOccurrences(pkg: PackageRecord, asOf: Date = new Date()): number {
+  const start = parseLocalDate(pkg.purchaseDate);
+  if (!start || !(pkg.daysOfWeek?.length)) return 0;
+  const days = new Set(pkg.daysOfWeek);
+  const end = dateOnly(asOf);
+  const cap = pkg.totalSessions ?? Infinity;
+  let count = 0;
+  for (let d = dateOnly(start); d <= end && count < cap; d = addDays(d, 1)) {
+    if (days.has(DAY_LABELS[d.getDay()])) count++;
+  }
+  return count;
+}
+
 // Expand active packages into concrete schedule entries within [start, end] inclusive.
 // Per-occurrence reschedule overrides relocate or pull in occurrences as needed.
 export function generateScheduleForRange(
@@ -72,7 +119,13 @@ export function generateScheduleForRange(
   start: Date,
   end: Date,
   overrides: SessionOverride[] = [],
-  singleSessions: SingleSession[] = []
+  singleSessions: SingleSession[] = [],
+  // Which package statuses count as "schedulable" — defaults to active-only
+  // everywhere (attendance, today's schedule, device calendar sync all want
+  // just what's actually running). The packages-page calendar overview
+  // passes ['active', 'completed'] so a package's history doesn't vanish
+  // from the calendar the instant it wraps up.
+  statuses: string[] = ['active']
 ): ScheduleEntry[] {
   const rangeStart = dateOnly(start);
   const rangeEnd = dateOnly(end);
@@ -82,7 +135,7 @@ export function generateScheduleForRange(
   };
 
   const pkgById = new Map<string, PackageRecord>();
-  const active = packages.filter(p => p.status === 'active' && (p.daysOfWeek?.length ?? 0) > 0);
+  const active = packages.filter(p => statuses.includes(p.status) && (p.daysOfWeek?.length ?? 0) > 0 && !hasUnpaidOnlineBalance(p));
   for (const p of active) pkgById.set(p.id || p.packageId, p);
 
   const overrideByKey = new Map<string, SessionOverride>();

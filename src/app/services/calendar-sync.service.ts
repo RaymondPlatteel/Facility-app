@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { debounceTime } from 'rxjs/operators';
 import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
 import { CapacitorCalendar, CalendarPermissionScope } from '@ebarooni/capacitor-calendar';
 import { ScheduleEntry, generateScheduleForRange, addDays } from './schedule.util';
 import { FirebaseService } from './firebase.service';
@@ -36,6 +37,22 @@ export class CalendarSyncService {
         this.syncCurrentSchedule().catch(err =>
           console.error('CalendarSync: auto-sync after data change failed', err));
       });
+
+    // scheduleDataChanged$ only fires on THIS running app instance — a
+    // change made from the web app (or another device) never touches it,
+    // since it's just an in-memory signal, not something Firestore
+    // broadcasts. Firestore is the shared source of truth regardless of
+    // where an edit came from, so re-pulling and reconciling against it
+    // every time this app comes to the foreground is what actually catches
+    // those — the coach doesn't have to happen to open Schedule or Settings
+    // first, just open the app.
+    if (this.isSupported) {
+      App.addListener('appStateChange', ({ isActive }) => {
+        if (!isActive) return;
+        this.syncCurrentSchedule().catch(err =>
+          console.error('CalendarSync: foreground sync failed', err));
+      });
+    }
   }
 
   get isSupported(): boolean {
@@ -62,18 +79,52 @@ export class CalendarSyncService {
     localStorage.setItem(EVENT_MAP_KEY, JSON.stringify(map));
   }
 
-  // Requests write access and resolves the dedicated calendar. Returns false
+  // Requests full access and resolves the dedicated calendar. Returns false
   // (without throwing) if the user declines the permission prompt.
+  //
+  // This used to request WRITE-ONLY access, which seemed like the right
+  // (more private) ask since the app only ever adds/moves/removes its own
+  // events. But the whole "find the existing calendar by name, never
+  // duplicate" scheme depends on listCalendars() actually enumerating
+  // calendars — and on iOS 17+, EKEventStore.calendars(for:) returns an
+  // EMPTY array under write-only authorization (Apple's privacy design:
+  // write-only apps can't discover what's already on the calendar, by
+  // name or otherwise). That silently broke every lookup: it could never
+  // find the calendar it made last time, so every sync created a new one.
+  // Full access is what listCalendars() actually needs to work at all.
   async enable(): Promise<boolean> {
     if (!this.isSupported) return false;
-    const { result } = await CapacitorCalendar.requestWriteOnlyCalendarAccess();
-    if (result !== 'granted') return false;
+    const granted = await this.ensureFullAccess();
+    if (!granted) return false;
 
     const id = await this.resolveCalendarId(true);
     if (!id) return false;
 
     localStorage.setItem(ENABLED_KEY, 'true');
     return true;
+  }
+
+  // Self-healing upgrade path: anyone who enabled sync before this fix is
+  // stuck at the old write-only grant, which iOS won't silently upgrade on
+  // its own — re-requesting is what surfaces the "Full Access" prompt (or,
+  // if already granted, resolves instantly with no UI). Called at the top
+  // of every resolveCalendarId() so this fixes itself the next time sync
+  // runs (app open, a schedule edit, opening Settings) rather than needing
+  // the coach to find and re-toggle the setting by hand.
+  private async ensureFullAccess(): Promise<boolean> {
+    try {
+      const { result } = await CapacitorCalendar.checkPermission({ scope: CalendarPermissionScope.READ_CALENDAR });
+      if (result === 'granted') return true;
+    } catch (err) {
+      console.error('CalendarSync: checkPermission failed', err);
+    }
+    try {
+      const { result } = await CapacitorCalendar.requestFullCalendarAccess();
+      return result === 'granted';
+    } catch (err) {
+      console.error('CalendarSync: requestFullCalendarAccess failed', err);
+      return false;
+    }
   }
 
   // Removes the dedicated calendar(s) and forgets all locally-tracked event
@@ -83,6 +134,10 @@ export class CalendarSyncService {
   // hand in the Calendar app.
   async disable(): Promise<void> {
     if (this.isSupported) {
+      // Same reason as resolveCalendarId(): under write-only access,
+      // listCalendars() below sees nothing, so cleanup would silently do
+      // nothing instead of actually removing every duplicate.
+      await this.ensureFullAccess();
       const cached = this.calendarId;
       try {
         const { result: calendars } = await CapacitorCalendar.listCalendars();
@@ -119,17 +174,56 @@ export class CalendarSyncService {
   // storage cleared, restore from backup — it created ANOTHER calendar with
   // the same name alongside the one already on the device, and whatever
   // sharing had been set up on the old one was left behind with it.
+  //
+  // Guarded against running twice at once (a debounced data-change sync and
+  // the appStateChange foreground sync can land within milliseconds of each
+  // other): two concurrent calls would each independently decide which
+  // duplicate to "keep" from their own snapshot and delete the rest — if
+  // those snapshots ever disagreed, each call could delete the other's
+  // pick, leaving zero calendars behind instead of one. Only one call runs
+  // at a time; a second one just waits for the first's result.
+  private resolveInFlight: Promise<string | null> | null = null;
+
   private async resolveCalendarId(createIfMissing: boolean): Promise<string | null> {
+    if (this.resolveInFlight) return this.resolveInFlight;
+    this.resolveInFlight = this.doResolveCalendarId(createIfMissing);
+    try {
+      return await this.resolveInFlight;
+    } finally {
+      this.resolveInFlight = null;
+    }
+  }
+
+  private async doResolveCalendarId(createIfMissing: boolean): Promise<string | null> {
     if (!this.isSupported) return null;
+    // Upgrades a stale write-only grant if that's all this device ever had —
+    // see ensureFullAccess()'s comment. No-ops (no prompt) once full access
+    // is already granted.
+    await this.ensureFullAccess();
 
     const cached = this.calendarId;
     let found: string | null = null;
     try {
       const { result: calendars } = await CapacitorCalendar.listCalendars();
-      if (cached && calendars.some(c => c.id === cached)) {
+      const matches = calendars.filter(c => c.title === CALENDAR_NAME);
+      if (matches.length > 1) {
+        // Duplicates from before this fix (or a one-off race) — consolidate
+        // onto one (the cached one if it's among them, else the first) and
+        // delete the rest so they stop piling up in Apple Calendar.
+        const keep = matches.find(c => c.id === cached) ?? matches[0];
+        for (const extra of matches) {
+          if (extra.id === keep.id) continue;
+          try {
+            await CapacitorCalendar.deleteCalendar({ id: extra.id });
+          } catch (err) {
+            console.error('CalendarSync: failed to delete duplicate calendar', extra.id, err);
+          }
+        }
+        found = keep.id;
+      } else if (matches.length === 1) {
+        found = matches[0].id;
+      } else if (cached && calendars.some(c => c.id === cached)) {
         found = cached;
-      } else {
-        found = calendars.find(c => c.title === CALENDAR_NAME)?.id ?? null;
       }
     } catch (err) {
       // Can't enumerate — trust the cached id rather than risk creating a
