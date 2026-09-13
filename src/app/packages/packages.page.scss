@@ -642,3 +642,17 @@ ion-popover.cost-pop-wrap {
     border: 1px solid rgba(136, 166, 191, 0.3);
   }
 }
+
+// Phone width: the mobile top bar (app.component) now carries this page's
+// title AND back button — this whole native header was just a second
+// copy of both, stacked right below the real one, with nothing else in it.
+@media (max-width: 768px) {
+  ion-header { display: none; }
+}
+
+// The "Create New Package" button now lives in the top bar (see
+// TopBarActionService wiring in packages.page.ts) — its old spot here
+// would just be a second, identical button doing the same thing.
+@media (max-width: 768px) {
+  .grey-btn { display: none; }
+}

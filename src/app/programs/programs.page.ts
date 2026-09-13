@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
@@ -9,6 +9,7 @@ import {
   peopleOutline, calendarOutline, clipboardOutline, readerOutline
 } from 'ionicons/icons';
 import { FirebaseService, Program, WorkoutLog } from '../services/firebase.service';
+import { TopBarActionService } from '../services/top-bar-action.service';
 
 @Component({
   selector: 'app-programs',
@@ -17,7 +18,7 @@ import { FirebaseService, Program, WorkoutLog } from '../services/firebase.servi
   standalone: true,
   imports: [IonContent, IonIcon, CommonModule, FormsModule, RouterModule]
 })
-export class ProgramsPage implements OnInit, ViewWillEnter {
+export class ProgramsPage implements OnInit, OnDestroy, ViewWillEnter {
   loading = true;
   programs: Program[] = [];
   recentLogs: WorkoutLog[] = [];
@@ -26,7 +27,8 @@ export class ProgramsPage implements OnInit, ViewWillEnter {
     private firebase: FirebaseService,
     private router: Router,
     private toastController: ToastController,
-    private alertController: AlertController
+    private alertController: AlertController,
+    private topBarAction: TopBarActionService
   ) {
     addIcons({
       arrowBack, add, barbellOutline, createOutline, trashOutline, copyOutline,
@@ -35,7 +37,12 @@ export class ProgramsPage implements OnInit, ViewWillEnter {
   }
 
   async ngOnInit() {
+    this.topBarAction.set({ label: 'New Program', icon: 'add', onClick: () => this.newProgram() });
     await this.load(true);
+  }
+
+  ngOnDestroy() {
+    this.topBarAction.clear();
   }
 
   async ionViewWillEnter() {

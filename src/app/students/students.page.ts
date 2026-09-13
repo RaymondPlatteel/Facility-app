@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -38,6 +38,7 @@ import {
 import { rankLetter, rankLabel, levelColor as omniLevelColor } from '../services/omni.util';
 import { isSRank } from '../services/level-color.util';
 import { ChromaMotionService } from '../services/chroma-motion.service';
+import { TopBarActionService } from '../services/top-bar-action.service';
 
 interface ClientRow {
   profile: ClientProfile;
@@ -57,7 +58,7 @@ type StatusFilter = 'all' | 'active' | 'prospect' | 'paused' | 'inactive';
   standalone: true,
   imports: [IonContent, IonIcon, CommonModule, FormsModule]
 })
-export class StudentsPage implements OnInit {
+export class StudentsPage implements OnInit, OnDestroy {
   loading = true;
   searchQuery = '';
   statusFilter: StatusFilter = 'all';
@@ -133,7 +134,8 @@ export class StudentsPage implements OnInit {
     private router: Router,
     private toastController: ToastController,
     private alertController: AlertController,
-    private chroma: ChromaMotionService
+    private chroma: ChromaMotionService,
+    private topBarAction: TopBarActionService
   ) {
     addIcons({
       arrowBack,
@@ -157,7 +159,12 @@ export class StudentsPage implements OnInit {
   }
 
   async ngOnInit() {
+    this.topBarAction.set({ label: 'New Client', icon: 'add-outline', onClick: () => this.newClient() });
     await this.loadData();
+  }
+
+  ngOnDestroy() {
+    this.topBarAction.clear();
   }
 
   async ionViewWillEnter() {

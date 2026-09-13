@@ -10,7 +10,7 @@
         <h1>Jobs</h1>
         <p>{{ jobs.length }} posting{{ jobs.length === 1 ? '' : 's' }} · shows as a 3x3 board in the client app</p>
       </div>
-      <button class="primary-btn" (click)="startCreate()" *ngIf="editingId === null">
+      <button class="primary-btn page-header-action" (click)="startCreate()" *ngIf="editingId === null">
         <ion-icon name="add-outline"></ion-icon>
         New Job
       </button>

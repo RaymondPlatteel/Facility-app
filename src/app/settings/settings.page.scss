@@ -147,3 +147,17 @@ ion-content {
   background: #00d4ff;
   transform: translateX(20px);
 }
+
+// Phone width: the mobile top bar (app.component) now shows this page's
+// real title next to the hamburger — this page's own copy would just be a
+// second, identical title stacked right below it.
+@media (max-width: 768px) {
+  .crm-title h1 { display: none; }
+}
+
+// Phone width: the top bar's own back arrow (app.component) now does this
+// page's "back" job — this page's own back button would just be a second
+// one, doing the same thing, right below the real one.
+@media (max-width: 768px) {
+  .icon-btn[aria-label^="Back"] { display: none; }
+}

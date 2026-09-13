@@ -1164,3 +1164,46 @@ ion-content {
   .ls-header { flex-wrap: wrap; }
   .ls-header-right { text-align: left; }
 }
+
+// Phone width: the header above still crammed a title, subtitle, HUD
+// flavor text, and three separate button groups into one row that only
+// ever got flex-wrap — on an actual phone that meant the title fighting
+// the button row for space and everything overlapping/clipping instead of
+// wrapping cleanly. Full restructure: title takes its own row, the fine
+// print (pure decoration, not information anyone needs) goes away
+// entirely, and the controls become their own wrapping row underneath.
+@media (max-width: 600px) {
+  .ls-header {
+    row-gap: 10px;
+  }
+
+  .ls-title {
+    flex: 1 1 100%;
+    order: 1;
+
+    h1 {
+      font-size: 20px;
+      letter-spacing: 1.5px;
+    }
+
+    p {
+      font-size: 9px;
+      letter-spacing: 2px;
+    }
+  }
+
+  .ls-header-right {
+    flex: 1 1 100%;
+    order: 2;
+    text-align: left;
+  }
+
+  .fine-print {
+    display: none;
+  }
+
+  .head-controls {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+}

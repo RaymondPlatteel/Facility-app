@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -23,6 +23,7 @@ import { FirebaseService, ClientProfile, PackageRecord, ClientPayment, SessionOv
 import { ToastController } from '@ionic/angular/standalone';
 import { generateScheduleForRange, startOfWeek, addDays, countScheduledOccurrences } from '../services/schedule.util';
 import { TRAINERS } from '../services/auth.service';
+import { TopBarActionService } from '../services/top-bar-action.service';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -104,7 +105,7 @@ interface PackageForm {
     FormsModule
   ]
 })
-export class PackagesPage implements OnInit {
+export class PackagesPage implements OnInit, OnDestroy {
   searchQuery = '';
   clients: ClientProfile[] = [];
   packages: PackageRecord[] = [];
@@ -194,7 +195,8 @@ export class PackagesPage implements OnInit {
   constructor(
     private router: Router,
     private firebase: FirebaseService,
-    private toastController: ToastController
+    private toastController: ToastController,
+    private topBarAction: TopBarActionService
   ) {
     addIcons({ arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline, refreshOutline });
   }
@@ -202,6 +204,23 @@ export class PackagesPage implements OnInit {
   ngOnInit(): void {
     this.recalculateTotals();
     this.loadData();
+    this.syncTopBarAction();
+  }
+
+  ngOnDestroy() {
+    this.topBarAction.clear();
+  }
+
+  // Only worth showing in table view — a calendar has no "add a row" to
+  // create. Called on load and every time the view toggles, rather than
+  // just once, so the button actually disappears/reappears with the view
+  // instead of staying stuck in whichever state ngOnInit saw first.
+  private syncTopBarAction() {
+    if (this.viewMode === 'table') {
+      this.topBarAction.set({ label: 'New Package', icon: 'cube-outline', onClick: () => this.addNewRow() });
+    } else {
+      this.topBarAction.clear();
+    }
   }
 
   goBack() {
@@ -337,6 +356,7 @@ export class PackagesPage implements OnInit {
   setViewMode(mode: 'table' | 'calendar') {
     if (this.viewMode === mode) return;
     this.viewMode = mode;
+    this.syncTopBarAction();
     if (mode === 'calendar') {
       this.buildLegend();
       this.buildCalendar();

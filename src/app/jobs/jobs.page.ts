@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -6,6 +6,7 @@ import { IonContent, IonIcon, ToastController } from '@ionic/angular/standalone'
 import { addIcons } from 'ionicons';
 import { arrowBack, addOutline, createOutline, trashOutline, closeOutline, saveOutline, peopleOutline, chevronDownOutline } from 'ionicons/icons';
 import { FirebaseService, JobPosting, JobAcceptance } from '../services/firebase.service';
+import { TopBarActionService } from '../services/top-bar-action.service';
 
 interface JobForm {
   title: string;
@@ -40,7 +41,7 @@ function blankForm(): JobForm {
   standalone: true,
   imports: [IonContent, IonIcon, CommonModule, FormsModule]
 })
-export class JobsPage implements OnInit {
+export class JobsPage implements OnInit, OnDestroy {
   loading = true;
   jobs: JobPosting[] = [];
   acceptancesByJob = new Map<string, JobAcceptance[]>();
@@ -53,13 +54,19 @@ export class JobsPage implements OnInit {
   constructor(
     private firebase: FirebaseService,
     private router: Router,
-    private toastController: ToastController
+    private toastController: ToastController,
+    private topBarAction: TopBarActionService
   ) {
     addIcons({ arrowBack, addOutline, createOutline, trashOutline, closeOutline, saveOutline, peopleOutline, chevronDownOutline });
   }
 
   async ngOnInit() {
+    this.topBarAction.set({ label: 'New Job', icon: 'add-outline', onClick: () => this.startCreate() });
     await this.loadData();
+  }
+
+  ngOnDestroy() {
+    this.topBarAction.clear();
   }
 
   goBack() {

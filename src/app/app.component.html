@@ -29,11 +29,34 @@
     </div>
   </nav>
 
-  <!-- Admin mode: signed-in coach — standard dashboard sidebar. Always
-       on screen, no hover/tap-to-open overlay — back to how it was
-       before that was tried; it caused more broken navigation than it
-       solved. -->
-  <aside class="app-sidebar" *ngIf="isAuthenticated">
+  <!-- Admin mode, phone width: one consolidated top bar — hamburger (Home
+       only) or back arrow (everywhere else) on the left, the real page
+       title next to it, and whatever "+ New X" action the current page
+       registered (see TopBarActionService) on the right. The persistent
+       sidebar becomes a slide-in drawer, opened from Home's hamburger;
+       desktop/tablet keeps the always-on sidebar untouched — see the
+       max-width: 768px rule in app.component.scss. -->
+  <div class="mobile-topbar" *ngIf="isAuthenticated">
+    <button class="mobile-menu-btn" (click)="onTopBarLeftButton()" [attr.aria-label]="isHomeRoute ? 'Open menu' : 'Back'">
+      <ion-icon [name]="isHomeRoute ? 'menu-outline' : 'arrow-back'"></ion-icon>
+    </button>
+    <!-- The real page title (from the route's data.title) — each page's
+         own on-screen title is hidden on mobile so this is the only one,
+         not a second title stacked below an empty bar. -->
+    <span class="mobile-topbar-brand">{{ pageTitle }}</span>
+    <button class="mobile-topbar-action" *ngIf="topBarAction" (click)="topBarAction.onClick()">
+      <ion-icon [name]="topBarAction.icon"></ion-icon>
+      <span>{{ topBarAction.label }}</span>
+    </button>
+  </div>
+  <div class="sidebar-backdrop" *ngIf="isAuthenticated && mobileMenuOpen" (click)="closeMobileMenu()"></div>
+
+  <!-- Admin mode: signed-in coach — standard dashboard sidebar. Always on
+       screen on desktop/tablet (no hover/tap-to-open overlay — that was
+       tried before and caused more broken navigation than it solved). On
+       phone width it's the same markup, but becomes the slide-in drawer
+       the hamburger above toggles — see .mobile-open in the stylesheet. -->
+  <aside class="app-sidebar" *ngIf="isAuthenticated" [class.mobile-open]="mobileMenuOpen">
     <a routerLink="/home" class="sidebar-brand">
       <span class="brand-name">Project [000]</span>
     </a>

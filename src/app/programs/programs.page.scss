@@ -259,3 +259,26 @@ ion-content {
     .log-program, .log-count { display: none; }
   }
 }
+
+// Phone width: the mobile top bar (app.component) now shows this page's
+// real title next to the hamburger — this page's own copy would just be a
+// second, identical title stacked right below it.
+@media (max-width: 768px) {
+  .prog-title h1 { display: none; }
+}
+
+// Phone width: the top bar's own back arrow (app.component) now does this
+// page's "back" job — this page's own back button would just be a second
+// one, doing the same thing, right below the real one.
+@media (max-width: 768px) {
+  .icon-btn[aria-label^="Back"] { display: none; }
+}
+
+// The "+ New Program" button now lives in the top bar (see
+// TopBarActionService wiring in programs.page.ts) — its old spot here
+// would just be a second, identical button. The OTHER "New Program"
+// button (the large empty-state CTA when there are no programs at all)
+// is untouched — that one's real content, not a duplicate of anything.
+@media (max-width: 768px) {
+  .page-header-action { display: none; }
+}

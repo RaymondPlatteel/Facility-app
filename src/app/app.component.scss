@@ -301,6 +301,17 @@ ion-app.has-sidebar {
   }
 }
 
+/* Hidden on desktop/tablet — only the phone breakpoint below turns these
+   on. Declared here (not just inside the media query) so there's no flash
+   of an unstyled bar before the stylesheet's media rules apply. */
+.mobile-topbar {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
 // Below this width the full labels get tight — collapse to an icon-only
 // rail instead of wrapping/overflowing.
 @media (max-width: 900px) {
@@ -338,12 +349,165 @@ ion-app.has-sidebar {
   }
 }
 
+/* ---------------------------------------------------------------------
+   Phone width: the icon-only rail above still ate 76px permanently and
+   the schedule/packages/etc. pages underneath had no shared top-inset
+   handling of their own (the sidebar layout normally shifts content
+   RIGHT, not down, so nothing here ever reserved room for the notch/
+   Dynamic Island) — content rendered cropped, partly behind it. Below
+   this width the sidebar becomes a full slide-in drawer instead (real
+   labels, not icons), and a slim top bar takes over the job the sidebar
+   used to skip: reserving safe-area-inset-top so every page sits below
+   the Dynamic Island instead of under it.
+   --------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: calc(52px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) calc(16px + env(safe-area-inset-right)) 0 calc(12px + env(safe-area-inset-left));
+    z-index: 9998;
+    background: rgba(8, 8, 16, 0.96);
+    border-bottom: 1px solid rgba(0, 212, 255, 0.12);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-sizing: border-box;
+  }
+
+  .mobile-menu-btn {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: #dceaf6;
+    font-size: 22px;
+    cursor: pointer;
+
+    &:active {
+      background: rgba(255, 255, 255, 0.08);
+    }
+  }
+
+  .mobile-topbar-brand {
+    flex: 1;
+    min-width: 0;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #00d4ff;
+    text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // The current page's relocated "+ New X" action — same slot every page
+  // that has one uses, so it never competes with the title for space.
+  .mobile-topbar-action {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    background: rgba(0, 212, 255, 0.08);
+    color: #00d4ff;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+
+    ion-icon { font-size: 15px; flex-shrink: 0; }
+
+    &:active { background: rgba(0, 212, 255, 0.16); }
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  // Full drawer, not the icon rail — overrides the max-width:900px block
+  // above (this rule comes later in the file, so it wins at equal
+  // specificity). Off-screen by default, slides in over the content
+  // rather than pushing it, since there's no spare width to push into.
+  .app-sidebar {
+    width: 260px;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    z-index: 10000;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+
+    &.mobile-open {
+      transform: translateX(0);
+    }
+
+    .sidebar-link span,
+    .sidebar-group-title,
+    .nav-trainer span,
+    .nav-btn span {
+      display: inline;
+    }
+
+    .sidebar-link {
+      justify-content: flex-start;
+    }
+
+    .sidebar-brand {
+      justify-content: flex-start;
+      padding: 0 20px;
+
+      .brand-name {
+        font-size: 15px;
+
+        &::first-letter {
+          font-size: inherit;
+        }
+      }
+    }
+  }
+
+  // No permanent sidebar to shift away from — full width, pushed down
+  // below the new top bar (and its safe-area-inset-top) instead of the
+  // sidebar layout's usual margin-left shift.
+  ion-app.has-sidebar .app-content {
+    margin-top: calc(52px + env(safe-area-inset-top));
+    margin-left: 0;
+    height: calc(100% - 52px - env(safe-area-inset-top));
+    width: 100%;
+  }
+}
+
 /* Global admin PIN keypad */
 .keypad-modal {
   --background: #01070f;
   --width: 420px;
   --height: 560px;
   --border-radius: 16px;
+
+  // A fixed 420px is wider than a phone screen — Ionic doesn't clamp a
+  // custom --width to the viewport on its own, so this was overflowing
+  // instead of fitting.
+  @media (max-width: 460px) {
+    --width: calc(100vw - 32px);
+    --height: min(560px, calc(100vh - 64px));
+  }
 }
 
 .keypad-container {

@@ -743,3 +743,40 @@ textarea.fld-input { resize: vertical; }
   .builder { grid-template-columns: 1fr; }
   .builder-sidebar { position: static; max-height: 280px; }
 }
+
+// Phone width: .attr-row's fixed 110px + 150px + 32px columns left almost
+// nothing for the actual value inputs (sets/reps/weight etc.) — 292px of
+// fixed-width columns plus gaps on a ~350px-wide content area, so the one
+// column that matters most got clipped down to a sliver. Re-lay the same
+// four pieces (label, strategy, value, delete) into a small 3-row stack
+// via grid-template-areas instead of trying to fit them all on one line.
+@media (max-width: 600px) {
+  .attr-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "label   delete"
+      "strategy strategy"
+      "value   value";
+    row-gap: 8px;
+  }
+
+  .attr-label { grid-area: label; }
+  .attr-delete { grid-area: delete; }
+
+  .strategy-select {
+    grid-area: strategy;
+    width: 100%;
+  }
+
+  .attr-value {
+    grid-area: value;
+    flex-wrap: wrap;
+  }
+
+  // .setup-grid's 380px column minimum is wider than a phone screen itself
+  // — auto-fit still enforces that minimum even in a single column, so it
+  // was forcing horizontal overflow instead of ever actually wrapping.
+  .setup-grid {
+    grid-template-columns: 1fr;
+  }
+}

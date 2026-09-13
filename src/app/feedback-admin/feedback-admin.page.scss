@@ -236,3 +236,10 @@ ion-toolbar {
   line-height: 1.55;
   white-space: pre-wrap;
 }
+
+// Phone width: the mobile top bar (app.component) now carries this page's
+// title AND back button — this whole native header was just a second
+// copy of both, stacked right below the real one, with nothing else in it.
+@media (max-width: 768px) {
+  ion-header { display: none; }
+}

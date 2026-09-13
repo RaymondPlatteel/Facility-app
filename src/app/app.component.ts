@@ -1,10 +1,11 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { IonApp, IonRouterOutlet, IonIcon, IonModal } from '@ionic/angular/standalone';
-import { RouterModule, Router } from '@angular/router';
-import { CommonModule } from '@angular/common';
+import { RouterModule, Router, ActivatedRoute, NavigationEnd } from '@angular/router';
+import { CommonModule, Location } from '@angular/common';
 import { AuthService, Trainer } from './services/auth.service';
 import { FirebaseService } from './services/firebase.service';
 import { CalendarSyncService } from './services/calendar-sync.service';
+import { TopBarActionService, TopBarAction } from './services/top-bar-action.service';
 import { addIcons } from 'ionicons';
 import {
   lockClosedOutline,
@@ -26,7 +27,9 @@ import {
   trendingUpOutline,
   notificationsOutline,
   personCircleOutline,
-  menuOutline
+  menuOutline,
+  arrowBack,
+  addOutline
 } from 'ionicons/icons';
 
 @Component({
@@ -38,6 +41,31 @@ import {
 export class AppComponent implements OnInit, OnDestroy {
   isAuthenticated = false;
   currentTrainer: Trainer | null = null;
+
+  // Mobile nav: the persistent sidebar becomes a slide-in overlay drawer
+  // below the phone breakpoint (see app.component.scss) — this is just
+  // whether that drawer is open. Desktop/tablet never reads this.
+  mobileMenuOpen = false;
+
+  // The mobile top bar's title — the ACTUAL page title (from the active
+  // route's data.title, see app.routes.ts), not a static "Project [000]"
+  // repeated on every page. Each page's own on-screen title is hidden on
+  // mobile (see each page's own stylesheet) specifically because this bar
+  // now carries it instead — one title, not two stacked on top of each
+  // other. Home has no title of its own, so it keeps the brand name here.
+  pageTitle = 'Project [000]';
+
+  // Home is the only screen with nowhere to "go back" to — everywhere else
+  // the top bar's left button is a back arrow (same job each page's own
+  // now-hidden back button used to do), and the hamburger/full nav drawer
+  // moves to being Home-only. One consistent way in, one consistent way
+  // back, instead of both existing on every page at once.
+  isHomeRoute = true;
+
+  // A page's own "+ New X" action, relocated into the top bar's right side
+  // instead of living in its own header row below — see
+  // TopBarActionService's comment for the set/clear contract pages follow.
+  topBarAction: TopBarAction | null = null;
 
   // Admin PIN keypad (hosted here so it can open from anywhere)
   keypadOpen = false;
@@ -61,6 +89,9 @@ export class AppComponent implements OnInit, OnDestroy {
     private authService: AuthService,
     private firebase: FirebaseService,
     private router: Router,
+    private activatedRoute: ActivatedRoute,
+    private location: Location,
+    private topBarActionService: TopBarActionService,
     private calendarSync: CalendarSyncService
   ) {
     addIcons({
@@ -83,7 +114,9 @@ export class AppComponent implements OnInit, OnDestroy {
       trendingUpOutline,
       notificationsOutline,
       personCircleOutline,
-      menuOutline
+      menuOutline,
+      arrowBack,
+      addOutline
     });
   }
 
@@ -97,6 +130,44 @@ export class AppComponent implements OnInit, OnDestroy {
     this.pendingReviewInterval = setInterval(() => {
       if (this.isAuthenticated) this.refreshPendingReviewCount();
     }, 60000);
+    this.router.events.subscribe(event => {
+      if (!(event instanceof NavigationEnd)) return;
+      // Walk to the deepest activated route — data.title lives on the
+      // leaf route (app.routes.ts), never on the root.
+      let route = this.activatedRoute;
+      while (route.firstChild) route = route.firstChild;
+      this.pageTitle = route.snapshot.data['title'] || 'Project [000]';
+      const goingHome = event.urlAfterRedirects === '/home' || event.urlAfterRedirects === '/';
+      this.isHomeRoute = goingHome;
+      // Tapping a link closes the drawer while it takes you to that page —
+      // but landing back on Home (via the top bar's back arrow, same as
+      // any other back navigation) reopens it instead of leaving you
+      // looking at a plain Home screen with no obvious way back into the
+      // drawer you were just using.
+      this.mobileMenuOpen = goingHome;
+    });
+    this.topBarActionService.action$.subscribe(action => { this.topBarAction = action; });
+  }
+
+  toggleMobileMenu() {
+    this.mobileMenuOpen = !this.mobileMenuOpen;
+  }
+
+  closeMobileMenu() {
+    this.mobileMenuOpen = false;
+  }
+
+  // The top bar's one left-side button: opens the nav drawer on Home
+  // (nowhere to go "back" to there), goes back everywhere else. Plain
+  // browser-history back rather than each page's own bespoke goBack() —
+  // pages are almost always reached by tapping into them from wherever
+  // makes sense, so history already points to the right place, and one
+  // generic implementation is what makes it possible for the app shell
+  // (which doesn't know any given page's "back" destination) to own this
+  // button at all.
+  onTopBarLeftButton() {
+    if (this.isHomeRoute) this.toggleMobileMenu();
+    else this.location.back();
   }
 
   ngOnDestroy() {
