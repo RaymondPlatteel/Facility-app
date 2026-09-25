@@ -17,12 +17,18 @@ import {
 } from 'ionicons/icons';
 import {
   getOmniRank, levelColor, levelBgColor, SpeedUnit, kmToSpeedDisplay, speedDisplayToKm,
-  calcStrength, calcPower, calcEndurance, calcCardio, calcFlex, computeOmni
+  calcStrength, calcPower, calcEndurance, calcCardio, calcFlex, computeOmni,
+  overrideScore, isCurveTest, CURVE_TEST_DEFAULTS, RATIO_TEST_DEFAULTS,
+  rankLetter, getCategoryRank, categoryRankPct, categoryColor, categoryBgColor, isCategorySRank,
+  getTestRank, testColor, testBgColor,
+  RESILIENCE_TESTS, RESILIENCE_REPS, blankResilienceInputs, calcResilience, resilienceTestPct,
+  RESILIENCE_GROUPS, calcResilienceGroup, getResilienceRank, resilienceColor, resilienceBgColor
 } from '../services/omni.util';
-import type { TestKey, TestOverride, TestOverrides } from '../services/omni.util';
+import type { TestKey, TestOverride, TestOverrides, OmniCategory, ScoredTestKey, ResilienceKey, ResilienceInputs, ResilienceGroupKey } from '../services/omni.util';
 import { isSRank } from '../services/level-color.util';
 import { ChromaMotionService } from '../services/chroma-motion.service';
 import { LevelUpComponent } from '../shared/level-up/level-up.component';
+import { ResilienceGridDirective } from './resilience-grid.directive';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import {
@@ -32,7 +38,7 @@ import {
   OmniRank,
   ClientProfile,
   Member,
-  localDateString, Sex, AssessmentGoal } from '../services/firebase.service';
+  localDateString, Sex, AssessmentGoal, ResilienceEntry } from '../services/firebase.service';
 
 // Live result of an Omni Method computation.
 interface OmniResult {
@@ -43,7 +49,11 @@ interface OmniResult {
 interface SubCard {
   label: string;
   value: number;
-  pct: number;          // bar fill 0-100
+  rankPct: number;      // bar fill 0-100, along this category's rank ladder
+  rankGlyph: string;
+  color: string;        // this category's own rank colour (static fallback)
+  bg: string;
+  isS: boolean;         // paint from the live chromatic ramp instead of `color`
   deltaText: string;
   deltaColor: string;
 }
@@ -164,7 +174,15 @@ interface Panel {
   goalTargetDate: string;
   // Current/Goals tab, mirroring Project 000's toggle exactly: same form,
   // same result display, switched by what it's reading from and saving to.
-  view: 'current' | 'goals';
+  view: 'current' | 'goals' | 'resilience';
+  // Resilience tab: its own dated history, independent of assessments.
+  // resilienceForm holds the ten resistances being edited right now.
+  resilience: ResilienceEntry[];
+  selectedResilienceId: string;
+  resilienceForm: Record<ResilienceKey, number | null>;
+  resilienceDate: string;              // datetime-local value
+  resilienceSaving: boolean;
+  resilienceSaved: boolean;
   assessmentDate: string;              // datetime-local value
   form: AssessForm;
   history: FitnessAssessment[];        // oldest → newest, for the loaded athlete
@@ -216,11 +234,13 @@ interface Panel {
   customizable: boolean;
   testOverrides: TestOverrides;
   // Which test slot's override editor is currently open, if any, and the
-  // in-progress name/world-record it's editing before Apply commits it to
-  // testOverrides.
+  // in-progress name/formula constants it's editing before Apply commits
+  // them to testOverrides. overrideDraftSpread only applies to curve-type
+  // slots (see omni.util's isCurveTest) — null/unused for ratio-type ones.
   editingTest: TestKey | null;
   overrideDraftName: string;
   overrideDraftRecord: number | null;
+  overrideDraftSpread: number | null;
 }
 
 const RANK_COLORS: Record<OmniRank, string> = {
@@ -315,7 +335,7 @@ const ASSESSMENT_META = [
   templateUrl: './assessments.page.html',
   styleUrls: ['./assessments.page.scss'],
   standalone: true,
-  imports: [IonContent, IonIcon, CommonModule, FormsModule, LevelUpComponent]
+  imports: [IonContent, IonIcon, CommonModule, FormsModule, LevelUpComponent, ResilienceGridDirective]
 })
 export class AssessmentsPage implements OnInit, OnDestroy {
   // The rank-up takeover. Driven directly rather than by a watcher: a coach
@@ -351,6 +371,67 @@ export class AssessmentsPage implements OnInit, OnDestroy {
 
   subCardLabel(label: string): string {
     return this.panelCount >= 3 ? (AssessmentsPage.CATEGORY_ABBREV[label] ?? label) : label;
+  }
+
+  // An S-RANK category reads off the live chromatic ramp, same as an S-RANK
+  // athlete does — hence methods rather than values baked into the cards, so
+  // they re-read the moving colour each change-detection pass.
+  catColor(s: SubCard): string {
+    return s.isS ? this.chroma.hex : s.color;
+  }
+
+  catGrad(s: SubCard): string {
+    return s.isS ? this.chroma.gradient : `linear-gradient(${s.color}, ${s.color})`;
+  }
+
+  catGlare(s: SubCard): string {
+    return s.isS ? this.chroma.glare : 'none';
+  }
+
+  // ---- per-test ranks (the "Test Ranks" toggle above the form) ----
+  private static readonly TEST_TINT_KEY = 'facility_test_tint';
+  colorByTestRank = AssessmentsPage.readTestTint();
+
+  private static readTestTint(): boolean {
+    try {
+      // Off unless the coach has turned it on.
+      return localStorage.getItem(AssessmentsPage.TEST_TINT_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  setTestTint(on: boolean) {
+    this.colorByTestRank = on;
+    try {
+      localStorage.setItem(AssessmentsPage.TEST_TINT_KEY, on ? '1' : '0');
+    } catch {
+      // Blocked storage — still works for this visit, just not remembered.
+    }
+  }
+
+  // Ranks a test on its own ladder (see testRankThresholds), from whatever
+  // is typed in right now, so it moves as the coach enters numbers. The row
+  // re-binds --rbc/--rbc-bg/--rbc-grad from this, so the field itself takes
+  // the test's rank colour exactly as a category card does — S included,
+  // which gets the live chrome border and a plain white label. Null while
+  // the toggle is off or the test is still blank.
+  testRank(panel: Panel, key: string): { glyph: string; color: string; bg: string; grad: string; label: string; isS: boolean } | null {
+    if (!this.colorByTestRank) return null;
+    const k = key as ScoredTestKey;
+    const inputs = this.buildInputs(panel.form);
+    if (!inputs[k]) return null;
+    const rank = getTestRank(k, inputs, panel.sex, panel.testOverrides);
+    const isS = rank === 'S-RANK';
+    const color = isS ? this.chroma.hex : testColor(k, inputs, panel.sex, panel.testOverrides);
+    return {
+      glyph: rankLetter(rank),
+      color,
+      bg: testBgColor(k, inputs, panel.sex, panel.testOverrides),
+      grad: isS ? this.chroma.gradient : `linear-gradient(${color}, ${color})`,
+      label: isS ? '#ffffff' : color,
+      isS
+    };
   }
 
   // ---- PDF (single shared modal for whichever panel requested it) ----
@@ -583,6 +664,13 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       panel.sex = (await this.firebase.getMember(key).catch(() => null))?.sex ?? 'male';
       panel.editingTest = null;
       panel.goals = await this.firebase.listGoalsForClient(key).catch(() => []);
+      panel.resilience = await this.firebase.listResilienceForClient(key).catch(() => []);
+      panel.selectedResilienceId = panel.resilience[0]?.id || '';
+      panel.resilienceForm = panel.resilience[0]
+        ? this.resilienceToForm(panel.resilience[0])
+        : this.blankResilienceForm();
+      panel.resilienceDate = panel.resilience[0]?.timestamp || this.nowLocal();
+      panel.resilienceSaved = false;
       panel.goal = panel.goals.length
         ? panel.goals.reduce((a, b) => (a.updatedAt || '') >= (b.updatedAt || '') ? a : b)
         : null;
@@ -659,9 +747,271 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     };
   }
 
+  private blankResilienceForm(): Record<ResilienceKey, number | null> {
+    return RESILIENCE_TESTS.reduce((acc, t) => {
+      acc[t.key] = null;
+      return acc;
+    }, {} as Record<ResilienceKey, number | null>);
+  }
+
+  // ---------- Resilience tab ----------
+  // Ten fixed exercises, every one done as sets of RESILIENCE_REPS reps, so
+  // only the resistance is recorded. None of this feeds the OMPAR score.
+  readonly resilienceTests = RESILIENCE_TESTS;
+  readonly resilienceReps = RESILIENCE_REPS;
+
+  // Scored live off the form rather than the saved entry, so the number
+  // moves as the coach types instead of only after a save.
+  resilienceScore(panel: Panel): number {
+    return calcResilience(this.resilienceFormInputs(panel));
+  }
+
+  resilienceTestPct(panel: Panel, key: ResilienceKey): number {
+    return resilienceTestPct(key, Number(panel.resilienceForm[key] ?? 0));
+  }
+
+  resilienceLoggedCount(panel: Panel): number {
+    return RESILIENCE_TESTS.filter(t => Number(panel.resilienceForm[t.key] ?? 0) > 0).length;
+  }
+
+  private resilienceFormInputs(panel: Panel): ResilienceInputs {
+    const inputs = { ...blankResilienceInputs() };
+    for (const t of RESILIENCE_TESTS) {
+      const v = panel.resilienceForm[t.key];
+      inputs[t.key] = typeof v === 'number' && isFinite(v) ? v : 0;
+    }
+    return inputs;
+  }
+
+  // ---------- Resilience results pane ----------
+  // Scored live off the form, so the panel on the right tracks what the
+  // coach is typing rather than only the last saved entry.
+  readonly resilienceGroups = RESILIENCE_GROUPS;
+
+  resilienceRank(panel: Panel): OmniRank {
+    return getResilienceRank(this.resilienceScore(panel), panel.sex);
+  }
+
+  // The whole resilience pane tints off the RESILIENCE rank, not the
+  // athlete's OMPAR rank — an A-RANK athlete with D-RANK joints should see
+  // a D-RANK coloured panel, which is the entire point of showing it.
+  // S-RANK reads off the live chromatic ramp, same as everywhere else an
+  // S-RANK surface does.
+  resilienceIsS(panel: Panel): boolean {
+    return getResilienceRank(this.resilienceScore(panel), panel.sex) === 'S-RANK';
+  }
+
+  resilienceColor(panel: Panel): string {
+    return this.resilienceIsS(panel) ? this.chroma.hex : resilienceColor(this.resilienceScore(panel), panel.sex);
+  }
+
+  resilienceGrad(panel: Panel): string {
+    if (this.resilienceIsS(panel)) return this.chroma.gradient;
+    const c = resilienceColor(this.resilienceScore(panel), panel.sex);
+    return `linear-gradient(${c}, ${c})`;
+  }
+
+  resilienceGlare(panel: Panel): string {
+    return this.resilienceIsS(panel) ? this.chroma.glare : 'none';
+  }
+
+  resilienceBg(panel: Panel): string {
+    return resilienceBgColor(this.resilienceScore(panel), panel.sex);
+  }
+
+  // The left form pane (border, active-tab pill, the little live readout)
+  // sits OUTSIDE the resilience result-panel, so it doesn't inherit that
+  // panel's --rbc* overrides — it only ever saw the OMPAR --rbc* the outer
+  // .editor sets. That's why the card stayed red for an A-RANK OMPAR
+  // athlete even on the purple B-RANK Resilience tab. These four read
+  // whichever rank the ACTIVE tab is actually showing, and are bound on
+  // .form-pane itself so the tab strip and every field inside inherit the
+  // right one.
+  formPaneColor(panel: Panel): string {
+    return panel.view === 'resilience' ? this.resilienceColor(panel) : panel.rankColor;
+  }
+
+  formPaneBg(panel: Panel): string {
+    return panel.view === 'resilience' ? this.resilienceBg(panel) : panel.rankBgColor;
+  }
+
+  formPaneGrad(panel: Panel): string {
+    return panel.view === 'resilience' ? this.resilienceGrad(panel) : panel.rankGrad;
+  }
+
+  formPaneGlare(panel: Panel): string {
+    return panel.view === 'resilience' ? this.resilienceGlare(panel) : panel.rankGlare;
+  }
+
+  // Same floor+fractional convention the OMPAR Level uses — 28.7 reads as
+  // Level 28, 70% of the way to 29 — rather than a raw decimal or a "/100".
+  resilienceLevel(panel: Panel): number {
+    return Math.floor(this.resilienceScore(panel));
+  }
+
+  resilienceXp(panel: Panel): number {
+    const s = this.resilienceScore(panel);
+    return (s - Math.floor(s)) * 100;
+  }
+
+  resilienceGroupScore(panel: Panel, key: ResilienceGroupKey): number {
+    return calcResilienceGroup(key, this.resilienceFormInputs(panel));
+  }
+
+  // Each joint carries its own rank colour, off the same resilience ladder
+  // as the headline — so a B-RANK overall with C-RANK hips shows it. Each
+  // card gets its own bg/gradient too (mirrors the OMPAR category cards'
+  // catColor/catGrad/catBg trio) rather than inheriting the headline's, so
+  // a weak joint's card is fully its own rank, ground included.
+  resilienceGroupColor(panel: Panel, key: ResilienceGroupKey): string {
+    return resilienceColor(this.resilienceGroupScore(panel, key), panel.sex);
+  }
+
+  resilienceGroupGrad(panel: Panel, key: ResilienceGroupKey): string {
+    const c = this.resilienceGroupColor(panel, key);
+    return `linear-gradient(${c}, ${c})`;
+  }
+
+  resilienceGroupBg(panel: Panel, key: ResilienceGroupKey): string {
+    return resilienceBgColor(this.resilienceGroupScore(panel, key), panel.sex);
+  }
+
+  resilienceGroupRank(panel: Panel, key: ResilienceGroupKey): OmniRank {
+    return getResilienceRank(this.resilienceGroupScore(panel, key), panel.sex);
+  }
+
+  // 4-axis radar, same construction as buildRadar's 5-axis one.
+  resilienceRadar(panel: Panel): { rings: string[]; axes: Array<{ x2: number; y2: number }>;
+    labels: Array<{ x: number; y: number; text: string; anchor: string }>; pts: string;
+    dots: Array<{ x: number; y: number }> } {
+    const cx = 160, cy = 118, R = 78;
+    const n = RESILIENCE_GROUPS.length;
+    const angle = (i: number) => ((-90 + i * (360 / n)) * Math.PI) / 180;
+    const at = (i: number, radius: number) => ({
+      x: cx + radius * Math.cos(angle(i)),
+      y: cy + radius * Math.sin(angle(i))
+    });
+    // Axes run 0-60 (the S floor), not 0-100 — against a 0-100 axis every
+    // real shape collapses into a dot at the centre.
+    const frac = (v: number) => Math.min(Math.max(v / 60, 0), 1);
+    const vals = RESILIENCE_GROUPS.map(g => this.resilienceGroupScore(panel, g.key));
+    const idx = RESILIENCE_GROUPS.map((_, i) => i);
+    return {
+      rings: [0.25, 0.5, 0.75, 1].map(t =>
+        idx.map(i => { const q = at(i, t * R); return `${q.x.toFixed(1)},${q.y.toFixed(1)}`; }).join(' ')),
+      axes: idx.map(i => { const q = at(i, R); return { x2: q.x, y2: q.y }; }),
+      labels: RESILIENCE_GROUPS.map((g, i) => {
+        const q = at(i, R + 16);
+        return {
+          text: g.label, x: q.x,
+          y: q.y + (q.y > cy ? 9 : q.y < cy - R ? 0 : 4),
+          anchor: Math.abs(q.x - cx) < 10 ? 'middle' : q.x > cx ? 'start' : 'end'
+        };
+      }),
+      pts: vals.map((v, i) => { const q = at(i, frac(v) * R); return `${q.x.toFixed(1)},${q.y.toFixed(1)}`; }).join(' '),
+      dots: vals.map((v, i) => at(i, frac(v) * R))
+    };
+  }
+
+  // Score-over-time sparkline across this athlete's saved entries.
+  resilienceChart(panel: Panel): { path: string; points: Array<{ x: number; y: number; value: number; current: boolean }>;
+    xLabels: Array<{ x: number; label: string }> } | null {
+    const entries = [...panel.resilience]
+      .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''))
+      .map(e => ({ timestamp: e.timestamp, score: calcResilience(e.inputs) }));
+    if (entries.length < 2) return null;
+
+    const width = 600, height = 100, padL = 26, padR = 24, padT = 20, padB = 24;
+    const usableW = width - padL - padR, usableH = height - padT - padB;
+    let min = Math.min(...entries.map(e => e.score)), max = Math.max(...entries.map(e => e.score));
+    if (min === max) { min -= 2; max += 2; }
+    const step = usableW / (entries.length - 1);
+    const points = entries.map((e, i) => ({
+      x: padL + i * step,
+      y: padT + (1 - (e.score - min) / (max - min)) * usableH,
+      value: e.score,
+      current: i === entries.length - 1
+    }));
+    return {
+      path: points.map((q, i) => `${i === 0 ? 'M' : 'L'}${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(' '),
+      points,
+      xLabels: points.map((q, i) => {
+        const d = new Date(entries[i].timestamp);
+        return { x: q.x, label: isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
+      })
+    };
+  }
+
+  private resilienceToForm(e: ResilienceEntry): Record<ResilienceKey, number | null> {
+    return RESILIENCE_TESTS.reduce((acc, t) => {
+      const v = e.inputs?.[t.key];
+      acc[t.key] = typeof v === 'number' && v > 0 ? v : null;
+      return acc;
+    }, {} as Record<ResilienceKey, number | null>);
+  }
+
+  private showResilience(panel: Panel) {
+    const chosen = panel.resilience.find(r => r.id === panel.selectedResilienceId) || panel.resilience[0];
+    panel.resilienceForm = chosen ? this.resilienceToForm(chosen) : this.blankResilienceForm();
+    panel.resilienceDate = chosen?.timestamp || this.nowLocal();
+    panel.selectedResilienceId = chosen?.id || '';
+    panel.resilienceSaved = false;
+  }
+
+  selectResilience(panel: Panel, id: string) {
+    panel.selectedResilienceId = id;
+    this.showResilience(panel);
+  }
+
+  // Clears the form for a fresh entry without touching what is saved.
+  newResilienceEntry(panel: Panel) {
+    panel.selectedResilienceId = '';
+    panel.resilienceForm = this.blankResilienceForm();
+    panel.resilienceDate = this.nowLocal();
+    panel.resilienceSaved = false;
+  }
+
+  resilienceLabel(e: ResilienceEntry): string {
+    return e.dateLabel || (e.timestamp || '').slice(0, 10);
+  }
+
+  async saveResilience(panel: Panel) {
+    const name = panel.athleteName.trim();
+    if (!name || panel.resilienceSaving) return;
+    panel.resilienceSaving = true;
+    panel.resilienceSaved = false;
+    try {
+      const inputs = this.resilienceFormInputs(panel);
+      const timestamp = panel.resilienceDate || this.nowLocal();
+      await this.firebase.saveResilienceEntry({
+        clientId: null,
+        clientName: name,
+        nameKey: '',
+        timestamp,
+        dateLabel: new Date(timestamp).toLocaleDateString('en-US',
+          { month: 'short', day: 'numeric', year: 'numeric' }),
+        inputs
+      });
+      const key = panel.loadedNameKey;
+      if (key) {
+        panel.resilience = await this.firebase.listResilienceForClient(key).catch(() => []);
+        const sameDay = panel.resilience.find(
+          r => (r.timestamp || '').slice(0, 10) === timestamp.slice(0, 10));
+        panel.selectedResilienceId = sameDay?.id || '';
+      }
+      panel.resilienceSaved = true;
+    } catch {
+      panel.errorMsg = true;
+    } finally {
+      panel.resilienceSaving = false;
+    }
+  }
+
   private blankPanel(): Panel {
     return {
       athleteName: '', sex: 'male', goals: [], selectedGoalId: '', goal: null, goalSaving: false, goalTargetDate: '', view: 'current', assessmentDate: this.nowLocal(), form: this.blankForm(),
+      resilience: [], selectedResilienceId: '', resilienceForm: this.blankResilienceForm(),
+      resilienceDate: this.nowLocal(), resilienceSaving: false, resilienceSaved: false,
       history: [], selectedHistoryTs: '', showResult: false, result: null,
       resultName: '', rank: 'UNRANKED', rankColor: RANK_COLORS['UNRANKED'], rankBgColor: RANK_BG_ANCHORS[0].bg,
       isChroma: false, rankGrad: 'linear-gradient(#737373, #737373)', rankGlare: 'none',
@@ -672,7 +1022,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       saving: false, errorMsg: false,
       nameOpen: false, filteredNames: this.clientNames, loadedNameKey: '',
       customizable: false, testOverrides: {}, editingTest: null,
-      overrideDraftName: '', overrideDraftRecord: null
+      overrideDraftName: '', overrideDraftRecord: null, overrideDraftSpread: null
     };
   }
 
@@ -1081,11 +1431,13 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   // Mirrors Project 000's view toggle exactly, including that switching
   // tabs re-renders from whichever record actually exists rather than
   // leaving stale numbers in the form from the other tab.
-  setView(panel: Panel, view: 'current' | 'goals') {
+  setView(panel: Panel, view: 'current' | 'goals' | 'resilience') {
     if (panel.view === view) return;
     panel.view = view;
     if (view === 'goals') {
       this.showGoal(panel);
+    } else if (view === 'resilience') {
+      this.showResilience(panel);
     } else {
       this.showLatest(panel);
     }
@@ -1274,8 +1626,16 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     panel.barSnap = false;
     panel.barWidth = 0;
 
-    panel.subCards = ['Strength', 'Power', 'Endurance', 'Cardio', 'Flexibility'].map(label => ({
-      label, value: 0, pct: 0, deltaText: '—', deltaColor: '#4a6378'
+    panel.subCards = (['strength', 'power', 'endurance', 'cardio', 'flexibility'] as OmniCategory[]).map(c => ({
+      label: c.charAt(0).toUpperCase() + c.slice(1),
+      value: 0,
+      rankPct: 0,
+      rankGlyph: rankLetter(getCategoryRank(c, 0, panel.sex)),
+      color: categoryColor(c, 0, panel.sex),
+      bg: categoryBgColor(c, 0, panel.sex),
+      isS: false,
+      deltaText: '—',
+      deltaColor: '#4a6378'
     }));
     panel.levelDelta = null;
     panel.compareOptions = [];
@@ -1311,7 +1671,78 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     panel.editingTest = key;
     const existing = panel.testOverrides[key];
     panel.overrideDraftName = existing?.name ?? fallbackLabel;
-    panel.overrideDraftRecord = existing?.worldRecord ?? null;
+    if (isCurveTest(key)) {
+      const def = CURVE_TEST_DEFAULTS[key]!;
+      panel.overrideDraftRecord = existing?.worldRecord ?? def.record;
+      panel.overrideDraftSpread = existing?.spread ?? def.spread;
+    } else {
+      panel.overrideDraftRecord = existing?.worldRecord ?? RATIO_TEST_DEFAULTS[key] ?? null;
+      panel.overrideDraftSpread = null;
+    }
+  }
+
+  // Puts the draft fields back to this slot's real, current built-in
+  // numbers — for tweaking from a known-good starting point instead of
+  // whatever's currently typed in.
+  resetOverrideDraftToDefaults(panel: Panel) {
+    const key = panel.editingTest;
+    if (!key) return;
+    if (isCurveTest(key)) {
+      const def = CURVE_TEST_DEFAULTS[key]!;
+      panel.overrideDraftRecord = def.record;
+      panel.overrideDraftSpread = def.spread;
+    } else {
+      panel.overrideDraftRecord = RATIO_TEST_DEFAULTS[key] ?? null;
+    }
+  }
+
+  isCurveOverride(key: TestKey | null): boolean {
+    return !!key && isCurveTest(key);
+  }
+
+  // The raw value that will actually feed the score for this slot — same
+  // 1RM computation the standard form uses for the strength lifts, the
+  // form field directly for everything else (run30/speed2 are already
+  // stored in their canonical km, matching AssessmentInputs).
+  private overrideCurrentRaw(panel: Panel, key: TestKey): number {
+    const strengthKeys: ReadonlyArray<string> = ['deadlift', 'squat', 'bench', 'pullup1rm'];
+    if (strengthKeys.includes(key)) {
+      return this.get1RM(panel.form, key as StrengthLift['key']);
+    }
+    return this.n(panel.form[key as keyof AssessForm] as number | null);
+  }
+
+  // The exact formula, with real numbers plugged in — not a simplified
+  // description — so a coach can see precisely what will drive the score
+  // before committing to it, and watch it change live as they edit any
+  // constant. Ratio-type slots (the strength lifts, long jump) have one
+  // editable constant; curve-type slots (sprint, 30 Min Run, 2 Min Speed)
+  // have two — the record and the spread that controls how fast the score
+  // falls off past it.
+  overrideFormulaText(panel: Panel): string {
+    const key = panel.editingTest;
+    if (!key) return '';
+    const raw = this.overrideCurrentRaw(panel, key);
+    const wr = Number(panel.overrideDraftRecord) || 0;
+    if (isCurveTest(key)) {
+      const spread = Number(panel.overrideDraftSpread) || 0;
+      return `score = (10 − √((${this.fmt(raw, 3)} − ${this.fmt(wr, 3)}) ÷ ${this.fmt(spread, 5)})) × 10`;
+    }
+    return `score = (${this.fmt(raw, 2)} ÷ ${this.fmt(wr, 2)}) × 100`;
+  }
+
+  // Live score preview for the sheet — uses whatever's currently typed into
+  // this test's normal input plus the draft constants, same formula
+  // applyTestOverride() will actually save.
+  overridePreviewScore(panel: Panel): string {
+    const key = panel.editingTest;
+    if (!key) return '—';
+    const wr = Number(panel.overrideDraftRecord);
+    if (!wr || wr <= 0) return '—';
+    const raw = this.overrideCurrentRaw(panel, key);
+    if (!raw) return '—';
+    const spread = isCurveTest(key) ? (Number(panel.overrideDraftSpread) || undefined) : undefined;
+    return overrideScore(raw, wr, key, spread).toFixed(1);
   }
 
   closeTestOverride(panel: Panel) {
@@ -1324,10 +1755,19 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     const name = (panel.overrideDraftName || '').trim();
     const wr = Number(panel.overrideDraftRecord);
     if (!name || !wr || wr <= 0) {
-      this.toast('Enter a name and a world record greater than 0', 'warning');
+      this.toast('Enter a name and a record greater than 0', 'warning');
       return;
     }
-    panel.testOverrides = { ...panel.testOverrides, [key]: { name, worldRecord: wr } };
+    const override: TestOverride = { name, worldRecord: wr };
+    if (isCurveTest(key)) {
+      const spread = Number(panel.overrideDraftSpread);
+      if (!spread || spread <= 0) {
+        this.toast('Enter a curve spread greater than 0', 'warning');
+        return;
+      }
+      override.spread = spread;
+    }
+    panel.testOverrides = { ...panel.testOverrides, [key]: override };
     panel.editingTest = null;
     this.toast('Test replaced — press Calculate to see the new score');
   }
@@ -1440,17 +1880,21 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     panel.compareTs = baseline ? baseline.timestamp : '';
 
     panel.subCards = ([
-      { l: 'Strength', v: totals.H, t: 'H' as const },
-      { l: 'Power', v: totals.K, t: 'K' as const },
-      { l: 'Endurance', v: totals.N, t: 'N' as const },
-      { l: 'Cardio', v: totals.Q, t: 'Q' as const },
-      { l: 'Flexibility', v: totals.U, t: 'U' as const }
+      { l: 'Strength', v: totals.H, t: 'H' as const, c: 'strength' as OmniCategory },
+      { l: 'Power', v: totals.K, t: 'K' as const, c: 'power' as OmniCategory },
+      { l: 'Endurance', v: totals.N, t: 'N' as const, c: 'endurance' as OmniCategory },
+      { l: 'Cardio', v: totals.Q, t: 'Q' as const, c: 'cardio' as OmniCategory },
+      { l: 'Flexibility', v: totals.U, t: 'U' as const, c: 'flexibility' as OmniCategory }
     ]).map(s => {
       const delta = this.categoryDelta(s.v, s.t, baseline);
       return {
         label: s.l,
         value: s.v,
-        pct: Math.min(Math.max(s.v, 0), 100),
+        rankPct: categoryRankPct(s.c, s.v, panel.sex),
+        rankGlyph: rankLetter(getCategoryRank(s.c, s.v, panel.sex)),
+        color: categoryColor(s.c, s.v, panel.sex),
+        bg: categoryBgColor(s.c, s.v, panel.sex),
+        isS: isCategorySRank(s.c, s.v, panel.sex),
         deltaText: delta.text,
         deltaColor: delta.color
       };

@@ -1,32 +1,23 @@
 <ion-app [class.has-sidebar]="isAuthenticated">
 
-  <!-- Kiosk mode: unauthenticated, public iPad check-in — stays a slim top bar -->
-  <nav class="app-nav" *ngIf="!isAuthenticated">
-    <a routerLink="/home" class="nav-brand">
-      <span class="brand-name">Project [000]</span>
+  <!-- Kiosk mode: every kiosk-facing destination (Check In / Waiver /
+       Feedback) plus Admin stays reachable — just as a small icon row
+       instead of a full labeled/branded top bar. Reachable from every
+       kiosk page, not only Home, so there's no dead end on Waiver or
+       Feedback with no way back to Check In. -->
+  <nav class="kiosk-nav" *ngIf="!isAuthenticated">
+    <a class="kiosk-nav-btn" routerLink="/signin" routerLinkActive="active" aria-label="Check In">
+      <ion-icon name="log-in-outline"></ion-icon>
     </a>
-
-    <div class="nav-links">
-      <a routerLink="/signin" routerLinkActive="active" class="nav-link">
-        <ion-icon name="log-in-outline"></ion-icon>
-        <span>Check In</span>
-      </a>
-      <a routerLink="/feedback" routerLinkActive="active" class="nav-link">
-        <ion-icon name="chatbubbles-outline"></ion-icon>
-        <span>Feedback</span>
-      </a>
-      <a routerLink="/waiver" routerLinkActive="active" class="nav-link">
-        <ion-icon name="document-text-outline"></ion-icon>
-        <span>Waiver</span>
-      </a>
-    </div>
-
-    <div class="nav-actions">
-      <button class="nav-btn nav-btn--signin" (click)="openKeypad()">
-        <ion-icon name="keypad-outline"></ion-icon>
-        <span>Admin</span>
-      </button>
-    </div>
+    <a class="kiosk-nav-btn" routerLink="/waiver" routerLinkActive="active" aria-label="Waiver">
+      <ion-icon name="document-text-outline"></ion-icon>
+    </a>
+    <a class="kiosk-nav-btn" routerLink="/feedback" routerLinkActive="active" aria-label="Feedback">
+      <ion-icon name="chatbubbles-outline"></ion-icon>
+    </a>
+    <button class="kiosk-nav-btn kiosk-nav-btn--admin" (click)="openKeypad()" aria-label="Admin">
+      <ion-icon name="keypad-outline"></ion-icon>
+    </button>
   </nav>
 
   <!-- Admin mode, phone width: one consolidated top bar — hamburger (Home

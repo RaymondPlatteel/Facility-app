@@ -2,99 +2,45 @@
   display: block;
 }
 
-.app-nav {
+// Kiosk mode's nav — see app.component.html's comment. A small icon row,
+// not a full labeled/branded bar: everything (Check In/Waiver/Feedback/
+// Admin) stays one tap away without taking up screen real estate or
+// inviting a client to browse around.
+.kiosk-nav {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: calc(52px + env(safe-area-inset-top));
+  top: calc(12px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
   z-index: 9999;
-  background: rgba(8, 8, 16, 0.96);
-  border-bottom: 1px solid rgba(0, 212, 255, 0.12);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   display: flex;
-  align-items: center;
-  // Content sits below the notch/status bar rather than under it — the bar
-  // itself is tall enough (via height above) to reach the real screen top.
-  padding: env(safe-area-inset-top) calc(20px + env(safe-area-inset-right)) 0 calc(20px + env(safe-area-inset-left));
-  gap: 0;
-}
-
-.nav-brand {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  text-decoration: none;
-  flex-shrink: 0;
-  margin-right: 28px;
-
-  .brand-hex {
-    font-size: 18px;
-    color: #00d4ff;
-    line-height: 1;
-  }
-
-  .brand-name {
-    font-family: 'Courier New', monospace;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 5px;
-    color: #00d4ff;
-    text-transform: uppercase;
-  }
 }
 
-.nav-links {
-  flex: 1;
+.kiosk-nav-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 8, 16, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 16px;
   display: flex;
   align-items: center;
-  gap: 2px;
+  justify-content: center;
+  cursor: pointer;
+  text-decoration: none;
 
-  .nav-link {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 13px;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
-    font-size: 11.5px;
-    font-weight: 500;
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.38);
-    text-decoration: none;
-    border-radius: 6px;
-    transition: color 0.15s ease, background 0.15s ease;
-
-    ion-icon {
-      font-size: 13px;
-      flex-shrink: 0;
-    }
-
-    &:hover {
-      color: rgba(255, 255, 255, 0.75);
-      background: rgba(255, 255, 255, 0.05);
-    }
-
-    &.active {
-      color: #00d4ff;
-      background: rgba(0, 212, 255, 0.08);
-    }
+  &:hover, &.active {
+    color: #00d4ff;
+    border-color: rgba(0, 212, 255, 0.3);
   }
 
-  .nav-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
-    border-radius: 8px;
-    background: #ff5a6a;
-    color: #fff;
-    font-size: 10px;
-    font-weight: 700;
-    line-height: 1;
+  &--admin {
+    // Admin sits apart from the three client-facing destinations — a
+    // slightly dimmer default so it doesn't read as "just another kiosk
+    // option" at a glance.
+    margin-left: 4px;
   }
 }
 
@@ -112,14 +58,6 @@
   white-space: nowrap;
 
   ion-icon { font-size: 14px; }
-}
-
-.nav-actions {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: 12px;
 }
 
 .nav-btn {
@@ -153,24 +91,16 @@
       background: rgba(255, 100, 100, 0.06);
     }
   }
-
-  &--signin {
-    color: rgba(0, 212, 255, 0.7);
-    background: rgba(0, 212, 255, 0.06);
-    border-color: rgba(0, 212, 255, 0.2);
-
-    &:hover {
-      color: #00d4ff;
-      background: rgba(0, 212, 255, 0.12);
-      border-color: rgba(0, 212, 255, 0.4);
-    }
-  }
 }
 
+// Base case: kiosk mode (unauthenticated) — no top bar anymore (see
+// .kiosk-admin-btn's comment), just enough top margin to clear the notch/
+// Dynamic Island. ion-app.has-sidebar below overrides this whenever
+// authenticated, at every width.
 .app-content {
   position: relative;
-  margin-top: calc(52px + env(safe-area-inset-top));
-  height: calc(100% - 52px - env(safe-area-inset-top));
+  margin-top: env(safe-area-inset-top);
+  height: calc(100% - env(safe-area-inset-top));
   // Room for the home-indicator gesture bar on notched/Face ID devices — without
   // this, content that runs flush to the bottom edge (e.g. Live Session's footer
   // strip) gets visually clipped behind it.
@@ -655,50 +585,10 @@ ion-app.has-sidebar {
   }
 }
 
-/* ---------------------------------------------------------------------
-   Signed-out top nav on phones.
-   At 375px the brand's 28px right margin, three nav links and the sign-in
-   button added up to 479px — a hundred past the viewport, so the sign-in
-   button sat off the right edge with no way to scroll to it.
-   --------------------------------------------------------------------- */
+// .nav-btn (shared with the sidebar's Lock button) still wants tighter
+// padding at phone width — the rest of this block used to be the
+// signed-out top nav's own responsive rules, removed with .app-nav.
 @media (max-width: 560px) {
-  .app-nav {
-    // Keep the safe-area-aware top/side padding from the base rule — this
-    // only tightens the side gutters, not the notch clearance.
-    padding: env(safe-area-inset-top) calc(12px + env(safe-area-inset-right)) 0 calc(12px + env(safe-area-inset-left));
-    gap: 8px;
-  }
-
-  .nav-brand {
-    // The wordmark's 5px letter-spacing is most of its width; the hex mark
-    // alone still identifies the app at this size.
-    margin-right: 0;
-
-    .brand-name {
-      display: none;
-    }
-  }
-
-  .nav-links {
-    // Let the links shrink and, if they still don't fit, scroll on their
-    // own rather than pushing the sign-in button off-screen.
-    min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-
-    &::-webkit-scrollbar { display: none; }
-
-    .nav-link {
-      padding: 6px 9px;
-      white-space: nowrap;
-    }
-  }
-
-  .nav-actions {
-    margin-left: 4px;
-  }
-
   .nav-btn {
     padding: 6px 10px;
     white-space: nowrap;

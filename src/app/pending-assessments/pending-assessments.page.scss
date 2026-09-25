@@ -407,3 +407,47 @@ ion-content {
 @media (max-width: 768px) {
   .icon-btn[aria-label^="Back"] { display: none; }
 }
+
+/* ---- Expanded resilience submission ---- */
+.res-review {
+  padding: 10px 14px 14px;
+  border-top: 1px solid #2a2a2a;
+}
+
+.res-review-note {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6d8399;
+  margin-bottom: 8px;
+}
+
+.res-review-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 0;
+  font-family: 'Barlow', sans-serif;
+  font-size: 13px;
+  color: #dceaf6;
+
+  &.blank { opacity: 0.45; }
+}
+
+.res-review-val {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 17px;
+  color: var(--accent, #00d4ff);
+  font-variant-numeric: tabular-nums;
+}
+
+.res-review-pct {
+  min-width: 92px;
+  text-align: right;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  color: #6d8399;
+  font-variant-numeric: tabular-nums;
+}

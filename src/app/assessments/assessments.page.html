@@ -73,10 +73,12 @@
     <!-- One workspace per panel: entry form (left) + results (right) -->
     <div class="editors" [class.compare]="compare"
       [class.cols-3]="panelCount === 3" [class.cols-4]="panelCount === 4">
-      <div class="editor" *ngFor="let panel of panels; let pi = index; trackBy: trackPanel" [style.--rbc]="panel.rankColor" [style.--rbc-bg]="panel.rankBgColor" [style.--rbc-grad]="panel.rankGrad" [style.--rbc-glare]="panel.rankGlare">
+      <div class="editor" *ngFor="let panel of panels; let pi = index; trackBy: trackPanel" [class.ranks-on]="colorByTestRank" [style.--rbc]="panel.rankColor" [style.--rbc-bg]="panel.rankBgColor" [style.--rbc-grad]="panel.rankGrad" [style.--rbc-glare]="panel.rankGlare">
 
         <!-- ============ Entry form ============ -->
-        <div class="form-pane">
+        <div class="form-pane"
+             [style.--rbc]="formPaneColor(panel)" [style.--rbc-bg]="formPaneBg(panel)"
+             [style.--rbc-grad]="formPaneGrad(panel)" [style.--rbc-glare]="formPaneGlare(panel)">
 
           <!-- Current/Goals, mirroring Project 000's toggle exactly: same
                form and results below, switched by what they read from and
@@ -84,6 +86,7 @@
           <div class="view-toggle" *ngIf="panel.athleteName.trim()">
             <button type="button" [class.active]="panel.view === 'current'" (click)="setView(panel, 'current')">Current</button>
             <button type="button" [class.active]="panel.view === 'goals'" (click)="setView(panel, 'goals')">Goals</button>
+            <button type="button" [class.active]="panel.view === 'resilience'" (click)="setView(panel, 'resilience')">Resilience</button>
           </div>
 
           <div class="field">
@@ -146,6 +149,21 @@
             </div>
           </div>
 
+          <!-- The OMPAR form proper. Resilience is a separate battery with
+               its own inputs, so it replaces all of this rather than adding
+               another section to it. -->
+          <ng-container *ngIf="panel.view !== 'resilience'">
+
+          <!-- Per-test rank colours: each test ranked on its own category's
+               (adjusted) ladder — see testScore in omni.util. -->
+          <div class="test-rank-toggle">
+            <span class="trt-caption">Test Ranks</span>
+            <div class="scale-toggle">
+              <button type="button" [class.on]="!colorByTestRank" (click)="setTestTint(false)">Off</button>
+              <button type="button" [class.on]="colorByTestRank" (click)="setTestTint(true)">On</button>
+            </div>
+          </div>
+
           <!-- Anthropometrics -->
           <div class="form-section">
             <div class="fs-title">Anthropometrics</div>
@@ -168,7 +186,8 @@
           <!-- Strength -->
           <div class="form-section">
             <div class="fs-title">Strength</div>
-            <div class="form-row" *ngFor="let lift of strengthLifts">
+            <div class="form-row" *ngFor="let lift of strengthLifts" [style.--rbc]="testRank(panel, lift.key)?.color" [style.--rbc-bg]="testRank(panel, lift.key)?.bg"
+                 [style.--rbc-grad]="testRank(panel, lift.key)?.grad" [style.--test-label]="testRank(panel, lift.key)?.label">
               <label class="fr-label">
                 <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, lift.key)"
                       [class.editable]="panel.customizable" (click)="openTestOverride(panel, lift.key, lift.label)">
@@ -177,6 +196,8 @@
                 </span>
                 <span class="fr-hint">{{ oneRmLabel(panel, lift) }}</span>
               </label>
+              <span class="fr-rank" *ngIf="testRank(panel, lift.key) as r" [style.--rbc-grad]="r.grad"
+                    [style.color]="r.color" [class.chroma-text]="r.isS">{{ r.glyph }}</span>
               <div class="fr-inputs">
                 <div class="fr-input-wrap">
                   <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form[lift.weightField]" />
@@ -193,7 +214,8 @@
           <!-- Power -->
           <div class="form-section">
             <div class="fs-title">Power</div>
-            <div class="form-row">
+            <div class="form-row" [style.--rbc]="testRank(panel, 'longjump')?.color" [style.--rbc-bg]="testRank(panel, 'longjump')?.bg"
+                 [style.--rbc-grad]="testRank(panel, 'longjump')?.grad" [style.--test-label]="testRank(panel, 'longjump')?.label">
               <label class="fr-label">
                 <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'longjump')"
                       [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'longjump', 'Long Jump')">
@@ -201,12 +223,15 @@
                   <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
                 </span>
               </label>
+              <span class="fr-rank" *ngIf="testRank(panel, 'longjump') as r" [style.--rbc-grad]="r.grad"
+                    [style.color]="r.color" [class.chroma-text]="r.isS">{{ r.glyph }}</span>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.longjump" />
                 <span class="fr-suffix">in</span>
               </div>
             </div>
-            <div class="form-row">
+            <div class="form-row" [style.--rbc]="testRank(panel, 'sprint')?.color" [style.--rbc-bg]="testRank(panel, 'sprint')?.bg"
+                 [style.--rbc-grad]="testRank(panel, 'sprint')?.grad" [style.--test-label]="testRank(panel, 'sprint')?.label">
               <label class="fr-label">
                 <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'sprint')"
                       [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'sprint', '100m Sprint')">
@@ -214,6 +239,8 @@
                   <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
                 </span>
               </label>
+              <span class="fr-rank" *ngIf="testRank(panel, 'sprint') as r" [style.--rbc-grad]="r.grad"
+                    [style.color]="r.color" [class.chroma-text]="r.isS">{{ r.glyph }}</span>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" step="0.01" placeholder="0.00" [(ngModel)]="panel.form.sprint" />
                 <span class="fr-suffix">sec</span>
@@ -224,7 +251,8 @@
           <!-- Muscular Endurance -->
           <div class="form-section">
             <div class="fs-title">Muscular Endurance</div>
-            <div class="form-row">
+            <div class="form-row" [style.--rbc]="testRank(panel, 'pushups')?.color" [style.--rbc-bg]="testRank(panel, 'pushups')?.bg"
+                 [style.--rbc-grad]="testRank(panel, 'pushups')?.grad" [style.--test-label]="testRank(panel, 'pushups')?.label">
               <label class="fr-label">
                 <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'pushups')"
                       [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'pushups', 'Pushups')">
@@ -232,12 +260,15 @@
                   <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
                 </span>
               </label>
+              <span class="fr-rank" *ngIf="testRank(panel, 'pushups') as r" [style.--rbc-grad]="r.grad"
+                    [style.color]="r.color" [class.chroma-text]="r.isS">{{ r.glyph }}</span>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.pushups" />
                 <span class="fr-suffix">reps</span>
               </div>
             </div>
-            <div class="form-row">
+            <div class="form-row" [style.--rbc]="testRank(panel, 'pullups')?.color" [style.--rbc-bg]="testRank(panel, 'pullups')?.bg"
+                 [style.--rbc-grad]="testRank(panel, 'pullups')?.grad" [style.--test-label]="testRank(panel, 'pullups')?.label">
               <label class="fr-label">
                 <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'pullups')"
                       [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'pullups', 'Pull-ups')">
@@ -245,6 +276,8 @@
                   <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
                 </span>
               </label>
+              <span class="fr-rank" *ngIf="testRank(panel, 'pullups') as r" [style.--rbc-grad]="r.grad"
+                    [style.color]="r.color" [class.chroma-text]="r.isS">{{ r.glyph }}</span>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.pullups" />
                 <span class="fr-suffix">reps</span>
@@ -255,7 +288,8 @@
           <!-- Cardio -->
           <div class="form-section">
             <div class="fs-title">Cardio</div>
-            <div class="form-row">
+            <div class="form-row" [style.--rbc]="testRank(panel, 'run30')?.color" [style.--rbc-bg]="testRank(panel, 'run30')?.bg"
+                 [style.--rbc-grad]="testRank(panel, 'run30')?.grad" [style.--test-label]="testRank(panel, 'run30')?.label">
               <label class="fr-label">
                 <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'run30')"
                       [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'run30', '30 Min Run')">
@@ -263,6 +297,8 @@
                   <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
                 </span>
               </label>
+              <span class="fr-rank" *ngIf="testRank(panel, 'run30') as r" [style.--rbc-grad]="r.grad"
+                    [style.color]="r.color" [class.chroma-text]="r.isS">{{ r.glyph }}</span>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" step="0.01" placeholder="0.00"
                        [ngModel]="panel.form.run30Display" (ngModelChange)="onSpeedDisplayChanged(panel, 'run30', $event)" />
@@ -273,7 +309,8 @@
                 </select>
               </div>
             </div>
-            <div class="form-row">
+            <div class="form-row" [style.--rbc]="testRank(panel, 'speed2')?.color" [style.--rbc-bg]="testRank(panel, 'speed2')?.bg"
+                 [style.--rbc-grad]="testRank(panel, 'speed2')?.grad" [style.--test-label]="testRank(panel, 'speed2')?.label">
               <label class="fr-label">
                 <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'speed2')"
                       [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'speed2', '2 Min Speed')">
@@ -281,6 +318,8 @@
                   <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
                 </span>
               </label>
+              <span class="fr-rank" *ngIf="testRank(panel, 'speed2') as r" [style.--rbc-grad]="r.grad"
+                    [style.color]="r.color" [class.chroma-text]="r.isS">{{ r.glyph }}</span>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" step="0.001" placeholder="0.000"
                        [ngModel]="panel.form.speed2Display" (ngModelChange)="onSpeedDisplayChanged(panel, 'speed2', $event)" />
@@ -296,7 +335,8 @@
           <!-- Flexibility -->
           <div class="form-section">
             <div class="fs-title">Flexibility</div>
-            <div class="form-row">
+            <div class="form-row" [style.--rbc]="testRank(panel, 'pike')?.color" [style.--rbc-bg]="testRank(panel, 'pike')?.bg"
+                 [style.--rbc-grad]="testRank(panel, 'pike')?.grad" [style.--test-label]="testRank(panel, 'pike')?.label">
               <label class="fr-label">
                 <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'pike')"
                       [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'pike', 'Pike')">
@@ -304,12 +344,15 @@
                   <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
                 </span>
               </label>
+              <span class="fr-rank" *ngIf="testRank(panel, 'pike') as r" [style.--rbc-grad]="r.grad"
+                    [style.color]="r.color" [class.chroma-text]="r.isS">{{ r.glyph }}</span>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.pike" />
                 <span class="fr-suffix">0–10</span>
               </div>
             </div>
-            <div class="form-row">
+            <div class="form-row" [style.--rbc]="testRank(panel, 'backbend')?.color" [style.--rbc-bg]="testRank(panel, 'backbend')?.bg"
+                 [style.--rbc-grad]="testRank(panel, 'backbend')?.grad" [style.--test-label]="testRank(panel, 'backbend')?.label">
               <label class="fr-label">
                 <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'backbend')"
                       [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'backbend', 'Backbend')">
@@ -317,12 +360,15 @@
                   <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
                 </span>
               </label>
+              <span class="fr-rank" *ngIf="testRank(panel, 'backbend') as r" [style.--rbc-grad]="r.grad"
+                    [style.color]="r.color" [class.chroma-text]="r.isS">{{ r.glyph }}</span>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.backbend" />
                 <span class="fr-suffix">0–10</span>
               </div>
             </div>
-            <div class="form-row">
+            <div class="form-row" [style.--rbc]="testRank(panel, 'straddle')?.color" [style.--rbc-bg]="testRank(panel, 'straddle')?.bg"
+                 [style.--rbc-grad]="testRank(panel, 'straddle')?.grad" [style.--test-label]="testRank(panel, 'straddle')?.label">
               <label class="fr-label">
                 <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'straddle')"
                       [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'straddle', 'Straddle')">
@@ -330,6 +376,8 @@
                   <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
                 </span>
               </label>
+              <span class="fr-rank" *ngIf="testRank(panel, 'straddle') as r" [style.--rbc-grad]="r.grad"
+                    [style.color]="r.color" [class.chroma-text]="r.isS">{{ r.glyph }}</span>
               <div class="fr-input-wrap">
                 <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.form.straddle" />
                 <span class="fr-suffix">deg</span>
@@ -339,9 +387,12 @@
 
           <!-- "Modify assessment" test-override editor — one shared popup per
                panel, opened by clicking any test's label above (only shown
-               when this athlete's assessmentCustomizable flag is on). -->
-          <div class="override-overlay" *ngIf="panel.editingTest" (click)="closeTestOverride(panel)">
-            <div class="override-sheet" (click)="$event.stopPropagation()">
+               when this athlete's assessmentCustomizable flag is on).
+               Closes only via the X, Apply, or Revert — no tap-outside
+               backdrop close, since a stray tap near the sheet (e.g.
+               dismissing the keyboard) was closing it unexpectedly. -->
+          <div class="override-overlay" *ngIf="panel.editingTest">
+            <div class="override-sheet">
               <div class="override-sheet-head">
                 <span>Replace Test</span>
                 <button type="button" class="icon-btn" (click)="closeTestOverride(panel)" aria-label="Close">
@@ -351,10 +402,23 @@
               <label class="field-label" for="override-name-input">Test Name</label>
               <input id="override-name-input" class="text-input" type="text" placeholder="e.g. Trap Bar Deadlift"
                      [(ngModel)]="panel.overrideDraftName" />
-              <label class="field-label" for="override-record-input">World Record</label>
+              <label class="field-label" for="override-record-input">{{ isCurveOverride(panel.editingTest) ? 'Record (best time)' : 'World Record' }}</label>
               <input id="override-record-input" class="text-input" type="number" placeholder="e.g. 700"
                      [(ngModel)]="panel.overrideDraftRecord" />
-              <p class="override-hint">The raw result is still typed into this test's usual field — a perfect score at this world record gives 100.</p>
+              <ng-container *ngIf="isCurveOverride(panel.editingTest)">
+                <label class="field-label" for="override-spread-input">Curve Spread</label>
+                <input id="override-spread-input" class="text-input" type="number" step="0.00001" placeholder="e.g. 0.125"
+                       [(ngModel)]="panel.overrideDraftSpread" />
+                <p class="override-hint">Spread controls how fast the score falls off past the record — smaller means it drops faster.</p>
+              </ng-container>
+              <p class="override-hint">The raw result is still typed into this test's usual field — pre-filled with this slot's real, current numbers so you're tweaking from the actual formula, not starting blank.</p>
+              <div class="override-formula">
+                <span class="override-formula-text">{{ overrideFormulaText(panel) }}</span>
+                <span class="override-formula-preview">= <strong>{{ overridePreviewScore(panel) }}</strong></span>
+              </div>
+              <button type="button" class="override-reset" (click)="resetOverrideDraftToDefaults(panel)">
+                <ion-icon name="refresh-outline"></ion-icon> Reset numbers to built-in formula
+              </button>
               <button type="button" class="override-apply" (click)="applyTestOverride(panel)">Apply</button>
               <button type="button" class="override-revert" *ngIf="isTestOverridden(panel, panel.editingTest)" (click)="revertTestOverride(panel, panel.editingTest)">
                 <ion-icon name="refresh-outline"></ion-icon> Revert to standard test
@@ -415,18 +479,146 @@
               Will save as {{ backdateLabel(panel) }}.
             </p>
           </div>
+
+          </ng-container>
+
+          <!-- ============ Resilience ============ -->
+          <ng-container *ngIf="panel.view === 'resilience'">
+            <div class="field" *ngIf="panel.resilience.length">
+              <label class="field-label">Previous Entries</label>
+              <div class="history-controls">
+                <select class="text-input" [(ngModel)]="panel.selectedResilienceId" (change)="selectResilience(panel, panel.selectedResilienceId)">
+                  <option *ngFor="let r of panel.resilience" [value]="r.id">{{ resilienceLabel(r) }}</option>
+                </select>
+                <button type="button" class="goal-tool-btn new-goal" (click)="newResilienceEntry(panel)">New Entry</button>
+              </div>
+            </div>
+
+            <div class="res-score-row" [style.--rbc]="resilienceColor(panel)"
+                 [style.--rbc-bg]="resilienceBg(panel)" [style.--rbc-grad]="resilienceGrad(panel)">
+              <span class="res-score-label">Resilience</span>
+              <span class="res-score-value" [class.chroma-text]="resilienceIsS(panel)">{{ resilienceLevel(panel) }}</span>
+              <span class="res-score-rank" [style.color]="resilienceColor(panel)">{{ rankLetter(resilienceRank(panel)) }}</span>
+              <span class="res-score-sub">{{ resilienceLoggedCount(panel) }} of {{ resilienceTests.length }} logged</span>
+            </div>
+
+            <div class="form-section">
+              <div class="fs-title">Resilience — sets of {{ resilienceReps }}</div>
+              <div class="form-row form-row--res" *ngFor="let t of resilienceTests">
+                <label class="fr-label">
+                  <span class="fr-label-text">{{ t.label }}</span>
+                  <span class="fr-hint">{{ t.note ? t.note + ' · ' : '' }}{{ t.max }} lbs = 100</span>
+                </label>
+                <div class="fr-input-wrap">
+                  <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.resilienceForm[t.key]" />
+                  <span class="fr-suffix">lbs</span>
+                </div>
+                <div class="res-inline-pct">{{ resilienceTestPct(panel, t.key) | number:'1.0-0' }}%</div>
+              </div>
+            </div>
+
+            <button class="calc-btn" (click)="saveResilience(panel)"
+                    [disabled]="panel.resilienceSaving || !panel.athleteName.trim()">
+              {{ panel.resilienceSaving ? 'SAVING…' : 'SAVE RESILIENCE' }}
+            </button>
+            <p class="save-note">
+              Every exercise is {{ resilienceReps }} reps, so only the resistance is recorded.
+              Saves as one entry per day — saving again updates that day's.
+              <ng-container *ngIf="panel.resilienceSaved"> Saved.</ng-container>
+            </p>
+          </ng-container>
         </div>
 
         <!-- ============ Results ============ -->
         <div class="result-pane">
 
-          <div class="result-empty" *ngIf="!(panel.showResult && panel.result)">
+          <!-- Resilience replaces the OMPAR results entirely on its tab:
+               different score, different categories, different chart. -->
+          <div class="result-panel" *ngIf="panel.view === 'resilience'"
+               [style.--rbc]="resilienceColor(panel)" [style.--rbc-bg]="resilienceBg(panel)"
+               [style.--rbc-grad]="resilienceGrad(panel)" [style.--rbc-glare]="resilienceGlare(panel)">
+            <div class="result-hero">
+              <div class="result-hero-top">
+                <div class="result-name">{{ panel.athleteName.trim() || '—' }}</div>
+                <div class="rank-badge" [style.color]="resilienceColor(panel)">
+                  <span class="rank-letter" [class.chroma-text]="resilienceIsS(panel)">{{ rankLetter(resilienceRank(panel)) }}</span>
+                  <span class="rank-caption">{{ rankLabel(resilienceRank(panel)) }}</span>
+                </div>
+              </div>
+              <div class="omni-score-row">
+                <div class="omni-score-label">Resilience</div>
+                <div class="omni-score-value" [style.color]="resilienceColor(panel)" [class.chroma-text]="resilienceIsS(panel)">
+                  {{ resilienceLevel(panel) }}
+                </div>
+                <div class="res-hero-sub">{{ resilienceLoggedCount(panel) }} of {{ resilienceTests.length }} logged</div>
+              </div>
+              <div class="score-bar-wrap">
+                <div class="score-bar-bg">
+                  <div class="score-bar-fill" [style.width.%]="resilienceXp(panel)" [style.background]="resilienceGrad(panel)"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="sub-scores res-sub-scores" resGrid>
+              <div class="sub-card" *ngFor="let g of resilienceGroups"
+                   [style.--rbc]="resilienceGroupColor(panel, g.key)"
+                   [style.--rbc-bg]="resilienceGroupBg(panel, g.key)" [style.--rbc-grad]="resilienceGroupGrad(panel, g.key)">
+                <div class="sub-card-top">
+                  <div class="sub-card-label">{{ g.label }}</div>
+                  <div class="sub-card-rank" [style.color]="resilienceGroupColor(panel, g.key)">
+                    {{ rankLetter(resilienceGroupRank(panel, g.key)) }}
+                  </div>
+                </div>
+                <div class="sub-card-value" [style.color]="resilienceGroupColor(panel, g.key)">
+                  {{ resilienceGroupScore(panel, g.key) | number:'1.0-1' }}
+                </div>
+                <div class="sub-bar-bg">
+                  <div class="sub-bar-fill"
+                       [style.width.%]="resilienceGroupScore(panel, g.key) / 60 * 100"
+                       [style.background]="resilienceGroupColor(panel, g.key)"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="insight-block" *ngIf="resilienceChart(panel) as rc">
+              <div class="insight-title">Resilience Progression</div>
+              <svg class="mini-chart" viewBox="0 0 600 100" preserveAspectRatio="xMidYMid meet">
+                <text *ngFor="let xl of rc.xLabels" [attr.x]="xl.x" [attr.y]="96" class="chart-date">{{ xl.label }}</text>
+                <path [attr.d]="rc.path" fill="none" [attr.stroke]="resilienceColor(panel)" stroke-width="2.5"
+                      stroke-linejoin="round" stroke-linecap="round"></path>
+                <g *ngFor="let pt of rc.points">
+                  <circle [attr.cx]="pt.x" [attr.cy]="pt.y" [attr.r]="pt.current ? 5 : 3.5"
+                          [attr.fill]="pt.current ? resilienceColor(panel) : '#060f1a'"
+                          [attr.stroke]="resilienceColor(panel)" stroke-width="2"></circle>
+                  <text [attr.x]="pt.x" [attr.y]="pt.y - 9" class="chart-lvl" [attr.fill]="resilienceColor(panel)">
+                    {{ pt.value | number:'1.0-0' }}
+                  </text>
+                </g>
+              </svg>
+            </div>
+
+            <div class="insight-block" *ngIf="resilienceRadar(panel) as rr">
+              <div class="insight-title">Joint Balance</div>
+              <svg class="radar-chart" viewBox="0 0 320 232" preserveAspectRatio="xMidYMid meet">
+                <polygon *ngFor="let ring of rr.rings" [attr.points]="ring" class="radar-ring"></polygon>
+                <line *ngFor="let a of rr.axes" x1="160" y1="118" [attr.x2]="a.x2" [attr.y2]="a.y2" class="radar-axis"></line>
+                <polygon [attr.points]="rr.pts" class="radar-current"
+                         [attr.fill]="resilienceColor(panel)" [attr.stroke]="resilienceColor(panel)"></polygon>
+                <circle *ngFor="let d of rr.dots" [attr.cx]="d.x" [attr.cy]="d.y" r="3" [attr.fill]="resilienceColor(panel)"></circle>
+                <text *ngFor="let l of rr.labels" [attr.x]="l.x" [attr.y]="l.y"
+                      [attr.text-anchor]="l.anchor" class="radar-label">{{ l.text }}</text>
+              </svg>
+              <div class="radar-note">Axes run 0-60 — the score an S-RANK battery averages.</div>
+            </div>
+          </div>
+
+          <div class="result-empty" *ngIf="panel.view !== 'resilience' && !(panel.showResult && panel.result)">
             <ion-icon name="trending-up-outline"></ion-icon>
             <h3>No Result Yet</h3>
             <p>Pick a client to see their latest assessment,<br />or enter scores and calculate.</p>
           </div>
 
-          <div class="result-panel" *ngIf="panel.showResult && panel.result" [style.--rbc]="panel.rankColor" [style.--rbc-bg]="panel.rankBgColor" [style.--rbc-grad]="panel.rankGrad" [style.--rbc-glare]="panel.rankGlare">
+          <div class="result-panel" *ngIf="panel.view !== 'resilience' && panel.showResult && panel.result" [style.--rbc]="panel.rankColor" [style.--rbc-bg]="panel.rankBgColor" [style.--rbc-grad]="panel.rankGrad" [style.--rbc-glare]="panel.rankGlare">
             <div class="result-hero">
               <div class="result-hero-top">
                 <div class="result-name">{{ panel.resultName || '—' }}</div>
@@ -452,14 +644,22 @@
             </div>
 
             <div class="sub-scores">
-              <div class="sub-card" *ngFor="let s of panel.subCards">
+              <!-- Each card re-binds the same rank vars the panel sets, so its
+                   own category rank drives the existing .sub-card background,
+                   the bar track, and .chroma-text — no parallel variables. -->
+              <div class="sub-card" *ngFor="let s of panel.subCards"
+                   [style.--rbc]="catColor(s)" [style.--rbc-bg]="s.bg"
+                   [style.--rbc-grad]="catGrad(s)" [style.--rbc-glare]="catGlare(s)">
                 <div class="sub-card-top">
                   <div class="sub-card-label">{{ subCardLabel(s.label) }}</div>
-                  <div class="sub-card-delta" [style.color]="s.deltaColor">{{ s.deltaText }}</div>
+                  <div class="sub-card-rank" [style.color]="catColor(s)" [class.chroma-text]="s.isS">{{ s.rankGlyph }}</div>
                 </div>
-                <div class="sub-card-value" [style.color]="panel.rankColor">{{ s.value | number:'1.1-1' }}</div>
-                <div class="sub-bar-bg">
-                  <div class="sub-bar-fill" [style.width.%]="s.pct" [style.background]="panel.rankColor"></div>
+                <div class="sub-card-value" [style.color]="catColor(s)" [class.chroma-text]="s.isS">{{ s.value | number:'1.1-1' }}</div>
+                <div class="sub-card-delta" [style.color]="s.deltaColor">{{ s.deltaText }}</div>
+                <!-- The bar tracks progress to the NEXT rank, so S-RANK has
+                     nothing left to fill and shows no bar at all. -->
+                <div class="sub-bar-bg" *ngIf="!s.isS">
+                  <div class="sub-bar-fill" [style.width.%]="s.rankPct" [style.background]="catGrad(s)"></div>
                 </div>
               </div>
             </div>

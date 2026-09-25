@@ -32,26 +32,6 @@ ion-content {
   margin-bottom: 22px;
 }
 
-.icon-btn {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  border: 1px solid #133748;
-  background: #070b12;
-  color: #88a6bf;
-  font-size: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-
-  &:hover {
-    color: #00d4ff;
-    border-color: #00d4ff;
-  }
-}
-
 .kiosk-heading {
   h1 {
     margin: 0;
@@ -112,6 +92,21 @@ ion-content {
   cursor: pointer;
   display: flex;
   align-items: center;
+}
+
+// Small, quiet caption above each roster group — not a heading, just enough
+// to say why the gap below it is there.
+.roster-section-label {
+  margin: 0 0 10px 2px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #4a6378;
+}
+
+.client-grid.roster-section-gap {
+  margin-top: 28px;
 }
 
 .client-grid {

@@ -463,6 +463,17 @@ export class SchedulePage implements OnInit, ViewWillEnter {
     };
   }
 
+  // "Mon 6:00 PM, Wed 6:00 PM" for a recurringChange request's before/after
+  // slot — same format as Packages' formatDayTimes, kept in day-of-week
+  // order regardless of the order stored on the request.
+  private static readonly DAY_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  recurringChangeLabel(days: string[] | undefined, times: { [day: string]: string } | undefined): string {
+    if (!days || days.length === 0) return '—';
+    const ordered = SchedulePage.DAY_ORDER.filter(d => days.includes(d));
+    return ordered.map(d => times?.[d] ? `${d} ${formatTime12h(times[d])}` : d).join(', ');
+  }
+
   async respondToSwap(req: SwapRequest, approve: boolean) {
     if (!req.id || this.swapRequestBusy.has(req.id)) return;
     this.swapRequestBusy.add(req.id);

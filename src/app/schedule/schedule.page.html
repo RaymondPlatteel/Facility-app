@@ -53,9 +53,24 @@
       </div>
       <div class="swap-row" *ngFor="let req of swapRequests">
         <div class="swap-info">
-          <span class="swap-name">{{ req.clientName }}</span>
-          <span class="swap-move">
+          <span class="swap-name">
+            {{ req.clientName }}
+            <span class="swap-kind-tag" *ngIf="req.kind === 'singleSession'">Single Session</span>
+            <span class="swap-kind-tag" *ngIf="req.kind === 'openGym'">Open Gym</span>
+            <span class="swap-kind-tag" *ngIf="req.kind === 'recurringChange'">Weekly Schedule</span>
+          </span>
+          <span class="swap-move" *ngIf="req.kind !== 'recurringChange'">
             {{ swapRequestLabel(req).from }} <ion-icon name="chevron-forward-outline"></ion-icon> {{ swapRequestLabel(req).to }}
+          </span>
+          <span class="swap-move" *ngIf="req.kind === 'recurringChange'">
+            {{ recurringChangeLabel(req.currentDaysOfWeek, req.currentDayTimes) }}
+            <ion-icon name="chevron-forward-outline"></ion-icon>
+            {{ recurringChangeLabel(req.requestedDaysOfWeek, req.requestedDayTimes) }}
+            <span class="swap-recurring-note">(all future sessions)</span>
+          </span>
+          <span class="swap-single-details" *ngIf="req.kind === 'singleSession'">
+            {{ req.partySize === 2 ? (req.clientName + ' + ' + (req.secondClientName || '—')) : 'Solo' }}
+            · {{ req.partySize === 2 ? '$70 total ($35/person)' : '$55' }}
           </span>
           <span class="swap-note" *ngIf="req.note">"{{ req.note }}"</span>
         </div>

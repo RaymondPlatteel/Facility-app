@@ -4,8 +4,8 @@ import { Router } from '@angular/router';
 import { IonContent, IonIcon, AlertController, ToastController } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import { arrowBack, checkmarkCircleOutline, closeCircleOutline, chevronDownOutline, swapHorizontalOutline, chevronForwardOutline } from 'ionicons/icons';
-import { FirebaseService, PendingAssessment, AssessmentInputs, LinkRequest, SwapRequest } from '../services/firebase.service';
-import { ASSESSMENT_META } from '../services/omni.util';
+import { FirebaseService, PendingAssessment, AssessmentInputs, LinkRequest, SwapRequest, PendingResilience } from '../services/firebase.service';
+import { ASSESSMENT_META, RESILIENCE_TESTS, RESILIENCE_REPS, resilienceTestPct } from '../services/omni.util';
 
 interface DiffRow {
   label: string;
@@ -52,6 +52,13 @@ export class PendingAssessmentsPage implements OnInit {
   // collection, no diff view, shown here rather than a whole extra route.
   swapRequests: SwapRequest[] = [];
   swapRequestsLoading = true;
+
+  // Athlete-submitted resilience entries, reviewed the same way.
+  readonly resilienceTests = RESILIENCE_TESTS;
+  readonly resilienceReps = RESILIENCE_REPS;
+  pendingRes: PendingResilience[] = [];
+  pendingResLoading = true;
+  expandedResId: string | null = null;
   swapRequestBusy = new Set<string>();
 
   expandedId: string | null = null;
@@ -86,6 +93,14 @@ export class PendingAssessmentsPage implements OnInit {
       console.error('Pending assessments: load failed', err);
     } finally {
       this.loading = false;
+    }
+    try {
+      this.pendingRes = (await this.firebase.listPendingResilience())
+        .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+    } catch (err) {
+      console.error('Pending assessments: resilience load failed', err);
+    } finally {
+      this.pendingResLoading = false;
     }
     try {
       this.linkRequests = (await this.firebase.listPendingLinkRequests())
@@ -209,6 +224,62 @@ export class PendingAssessmentsPage implements OnInit {
     } catch (err) {
       console.error('Pending assessments: approve failed', err);
     }
+  }
+
+  toggleRes(p: PendingResilience) {
+    this.expandedResId = this.expandedResId === p.id ? null : (p.id ?? null);
+  }
+
+  // Floor, not round — same convention as the Level everywhere else.
+  resilienceLevel(p: PendingResilience): number {
+    return Math.floor(p.score);
+  }
+
+  // Rows for the expanded view: every exercise, so a blank one is visibly
+  // blank rather than silently missing from the list.
+  resilienceRows(p: PendingResilience): Array<{ label: string; value: number; max: number; pct: number }> {
+    return this.resilienceTests.map(t => {
+      const value = Number(p.inputs?.[t.key] ?? 0);
+      return { label: t.label, value, max: t.max, pct: resilienceTestPct(t.key, value) };
+    });
+  }
+
+  async approveResilience(p: PendingResilience) {
+    try {
+      await this.firebase.approvePendingResilience(p);
+      this.pendingRes = this.pendingRes.filter(x => x.id !== p.id);
+      if (this.expandedResId === p.id) this.expandedResId = null;
+      const t = await this.toastController.create({ message: 'Approved', duration: 1500, position: 'bottom' });
+      await t.present();
+    } catch (err) {
+      console.error('Pending assessments: resilience approve failed', err);
+    }
+  }
+
+  async rejectResilience(p: PendingResilience) {
+    const alert = await this.alertController.create({
+      header: 'Reject this resilience entry?',
+      message: `${p.clientName} — ${Math.floor(p.score)} · ${p.rank} will be discarded, not saved.`,
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Reject',
+          role: 'destructive',
+          handler: async () => {
+            try {
+              await this.firebase.setPendingResilienceStatus(p.id!, 'rejected');
+              this.pendingRes = this.pendingRes.filter(x => x.id !== p.id);
+              if (this.expandedResId === p.id) this.expandedResId = null;
+              const t = await this.toastController.create({ message: 'Rejected', duration: 1500, position: 'bottom' });
+              await t.present();
+            } catch (err) {
+              console.error('Pending assessments: resilience reject failed', err);
+            }
+          }
+        }
+      ]
+    });
+    await alert.present();
   }
 
   async reject(p: PendingAssessment) {

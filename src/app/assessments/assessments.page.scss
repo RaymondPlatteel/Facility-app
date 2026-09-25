@@ -7,6 +7,19 @@ ion-content {
   --color: #dceaf6;
 }
 
+// Remove the native up/down spinner on every number input on this page —
+// they're easy to bump by accident (a stray scroll or a stuck press nudges
+// the score up with no visual warning) and add nothing a keyboard doesn't.
+.omni-page input[type='number'] {
+  -moz-appearance: textfield;
+
+  &::-webkit-outer-spin-button,
+  &::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
 .omni-page {
   --accent: #00d4ff;
   padding: 20px clamp(16px, 3vw, 40px) 60px;
@@ -444,6 +457,47 @@ ion-content {
   &.overridden { color: #ffc409; }
 }
 
+// Per-test ranks (the "Test Ranks" toggle). A ranked row re-binds the rank
+// vars, so its field takes the test's colour; --test-label is only set once
+// the test has a value, so blank rows keep the default label colour, and an
+// overridden test keeps its yellow.
+.form-row {
+  .fr-label-text:not(.overridden) { color: var(--test-label, inherit); }
+}
+
+// The letter sits in a fixed third column, right of the field. Every row
+// in the form gets that column (body weight/height included, left empty)
+// so the fields stay aligned whether or not a row has a letter yet.
+.editor.ranks-on .form-section .form-row:not(.form-row--res) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 170px) 16px;
+}
+
+.fr-rank {
+  order: 3;
+  justify-self: center;
+  font-family: 'Barlow', sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.test-rank-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.trt-caption {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #4a6378;
+}
+
 .fr-edit-icon {
   font-size: 12px;
   opacity: 0.6;
@@ -856,15 +910,30 @@ $rank-tint-cards: true;
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.18em;
+  // Tighter than the 0.18em the other eyebrow labels use: "FLEXIBILITY"
+  // plus the rank badge has to fit one narrow card, and tracking is the
+  // cheapest thing to give up.
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #88a6bf;
+  white-space: nowrap;
+  min-width: 0;
 }
 
+.sub-card-rank {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+// Sits under the value now that the rank badge has the top-right corner.
 .sub-card-delta {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 10px;
   font-weight: 700;
+  margin-top: 2px;
 }
 
 .sub-card-value {
@@ -877,7 +946,10 @@ $rank-tint-cards: true;
 .sub-bar-bg {
   height: 2px;
   background: if($rank-tint-cards, color-mix(in srgb, var(--rbc, #2a2a2a) 30%, #0a0a0a), #2a2a2a);
-  margin-top: 7px;
+  // Inset from both edges rather than spanning the card — a full-width bar
+  // read as a second border under the card.
+  width: 80%;
+  margin: 7px auto 0;
 }
 .sub-bar-fill { height: 100%; width: 0; transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
 
@@ -1480,6 +1552,58 @@ $rank-tint-cards: true;
   line-height: 1.4;
 }
 
+.override-formula {
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid #22323d;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.override-formula-text {
+  font-family: 'Space Mono', 'Barlow Condensed', monospace;
+  font-size: 11.5px;
+  color: var(--accent);
+  letter-spacing: 0.01em;
+  word-break: break-word;
+}
+
+.override-formula-preview {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+  color: #88a6bf;
+
+  strong {
+    color: #e6ebf1;
+    font-size: 13px;
+  }
+}
+
+.override-reset {
+  margin-top: 10px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px dashed #2a2a2a;
+  background: transparent;
+  color: #6a8aa3;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+  ion-icon { font-size: 13px; }
+}
+
 .override-apply {
   margin-top: 12px;
   width: 100%;
@@ -1530,4 +1654,112 @@ $rank-tint-cards: true;
 // one, doing the same thing, right below the real one.
 @media (max-width: 768px) {
   .icon-btn[aria-label^="Back"] { display: none; }
+}
+
+/* ---- Resilience score readout (coach entry form) ---- */
+.res-score-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background:
+    linear-gradient(var(--rbc-bg, #1a1a1a), var(--rbc-bg, #1a1a1a)) padding-box,
+    var(--rbc-grad, linear-gradient(var(--rbc, #2a2a2a), var(--rbc, #2a2a2a))) border-box;
+}
+
+.res-score-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #88a6bf;
+}
+
+.res-score-value {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 30px;
+  line-height: 1;
+  color: var(--rbc, #e0e0e0);
+  font-variant-numeric: tabular-nums;
+}
+
+.res-score-rank {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+}
+
+.res-score-sub {
+  margin-left: auto;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6d8399;
+}
+
+/* Resilience rows carry a third column for the live percentage. */
+.form-row--res {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 170px) 40px;
+}
+
+/* Per-exercise share of its own max, beside the input. */
+.res-inline-pct {
+  min-width: 38px;
+  text-align: right;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: #6d8399;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Resilience results pane ---- */
+.res-hero-sub {
+  margin-left: auto;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6d8399;
+}
+
+/* Four joints, not five categories. auto-fit/minmax reflowed this on its
+   own, but for exactly 4 fixed items that meant it could land on 3-fit-
+   plus-1-orphan at in-between widths — a broken-looking gap, not a graceful
+   shrink. Fixed item counts want a fixed answer instead: exactly two
+   COMPLETE layouts — a 2x2 that's always full, or a 4-across once there's
+   genuinely room for one — never a partial row. The `.wide` class is set
+   by ResilienceGridDirective off the element's own measured width (see
+   that file for why this isn't a CSS `@container` query — one was tried
+   first and didn't take effect on this element tree). */
+.res-sub-scores {
+  grid-template-columns: repeat(2, 1fr);
+
+  &.wide {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* .editors.compare/.cols-3/.cols-4 each carry their OWN ".sub-scores"
+   override for the 5-wide OMPAR grid (an 84px floor, three classes deep).
+   Resilience's cards share the plain ".sub-scores" class for its other
+   styling, so that 3-class rule out-specifies the plain single-class
+   ".res-sub-scores" rule above and was quietly winning back in every
+   compare/cols-3/cols-4 context — the actual reason the "fit to width"
+   fix above kept not taking effect there. Re-declared at matching
+   specificity so it can't happen again regardless of what else this page
+   adds to ".sub-scores" in the future. */
+.editors.compare .res-sub-scores,
+.editors.cols-3 .res-sub-scores,
+.editors.cols-4 .res-sub-scores {
+  grid-template-columns: repeat(2, 1fr);
+
+  &.wide {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }

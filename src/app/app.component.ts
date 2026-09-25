@@ -121,6 +121,20 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    // A mouse wheel over a focused number input changes its value in
+    // Chrome/Safari instead of scrolling the page — easy to trigger by
+    // accident while scrolling past the Assessments form, and it silently
+    // nudges a score with no visual warning. Blurring the input on wheel
+    // stops that: the same event that would have incremented it instead
+    // drops focus, so the page scrolls normally from then on. Passive
+    // (never blocks the actual scroll) and global (every number input in
+    // the app, not just Assessments — the failure mode is identical
+    // anywhere a number field sits in a scrolling page).
+    document.addEventListener('wheel', () => {
+      const el = document.activeElement;
+      if (el instanceof HTMLInputElement && el.type === 'number') el.blur();
+    }, { passive: true });
+
     this.authService.isAuthenticated$.subscribe(isAuth => {
       this.isAuthenticated = isAuth;
       if (isAuth) this.refreshPendingReviewCount();
@@ -193,7 +207,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
   lockApp() {
     this.authService.logout();
-    this.router.navigate(['/home']);
+    // Back to the check-in screen, not the (now keypad-only) kiosk home —
+    // this device sits on check-in at rest.
+    this.router.navigate(['/signin']);
   }
 
   openKeypad() {

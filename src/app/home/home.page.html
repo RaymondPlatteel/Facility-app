@@ -1,33 +1,9 @@
 <ion-content [fullscreen]="true" class="content-no-header">
 
-  <!-- Kiosk mode: what members see on the iPad -->
-  <div *ngIf="!isAuthenticated" class="kiosk-home">
-    <div class="kiosk-welcome">
-      <div class="kiosk-eyebrow">Welcome to</div>
-      <h1 class="kiosk-title">Project [000]</h1>
-      <p class="kiosk-sub">Tap below to check in for your session</p>
-    </div>
-
-    <a class="kiosk-checkin-btn" [routerLink]="['/signin']">
-      <ion-icon name="log-in-outline"></ion-icon>
-      <span>Check In</span>
-    </a>
-
-    <div class="kiosk-secondary">
-      <a class="home-btn" [routerLink]="['/feedback']">
-        <ion-icon name="chatbubbles-outline"></ion-icon>
-        <div class="btn-label">Feedback</div>
-      </a>
-      <a class="home-btn" [routerLink]="['/waiver']">
-        <ion-icon name="document-text-outline"></ion-icon>
-        <div class="btn-label">Waiver</div>
-      </a>
-      <button class="home-btn home-btn--admin" (click)="openKeypad()">
-        <ion-icon name="keypad-outline"></ion-icon>
-        <div class="btn-label">Admin</div>
-      </button>
-    </div>
-  </div>
+  <!-- Kiosk mode (unauthenticated) no longer lands here — this page
+       redirects straight to /signin (see ngOnInit) so the device sits on
+       the check-in screen itself, not a landing page with a menu of its
+       own. Nothing below ever renders unauthenticated. -->
 
   <!-- Admin dashboard -->
   <div *ngIf="isAuthenticated" class="dash">

@@ -23,7 +23,11 @@ import {
   chevronForward,
   trendingUpOutline,
   documentTextOutline,
-  downloadOutline
+  downloadOutline,
+  phonePortraitOutline,
+  happyOutline,
+  chevronDown,
+  checkmarkCircle
 } from 'ionicons/icons';
 import {
   FirebaseService,
@@ -34,6 +38,9 @@ import {
   WorkoutLog,
   FitnessAssessment,
   WaiverData,
+  MemberWorkoutLog,
+  MemberWorkoutSet,
+  DailyCheckIn,
   localDateString, Sex } from '../services/firebase.service';
 import { rankLetter, rankLabel, levelColor as omniLevelColor } from '../services/omni.util';
 import { isSRank } from '../services/level-color.util';
@@ -82,6 +89,17 @@ export class StudentsPage implements OnInit, OnDestroy {
   groupCell: number | null = null;
   groupGeneration: number | null = null;
   groupCohort: number | null = null;
+
+  // Cell/generation/cohort are each a single 2-digit slot — strip anything
+  // that isn't a digit (blocks letters, and the "e"/"+"/"-"/"." a native
+  // number input otherwise accepts) and cap at 2 characters, then write the
+  // sanitized text back into the field so the input can never show more.
+  onGroupDesigInput(event: Event, field: 'groupCell' | 'groupGeneration' | 'groupCohort') {
+    const input = event.target as HTMLInputElement;
+    const digits = input.value.replace(/\D/g, '').slice(0, 2);
+    input.value = digits;
+    this[field] = digits === '' ? null : Number(digits);
+  }
   // Also on members/{nameKey}. Decides which rank threshold table this
   // athlete is scored against — female floors sit lower (D15/C30/B45/A60/
   // S80 vs D20/C40/B60/A80/S100). Defaults to male for every record written
@@ -90,6 +108,11 @@ export class StudentsPage implements OnInit, OnDestroy {
   clientCheckIns: CheckIn[] = [];
   clientPayments: PaymentRecord[] = [];
   clientWorkouts: WorkoutLog[] = [];
+  // Self-logged from Project-000 — see firebase.service.ts's own comment on
+  // why these are separate types from clientWorkouts/clientCheckIns above.
+  clientMemberWorkouts: MemberWorkoutLog[] = [];
+  clientDailyCheckIns: DailyCheckIn[] = [];
+  expandedMemberWorkoutId: string | null = null;
   clientLatestAssessment: FitnessAssessment | null = null;
   rankLetter = rankLetter;
   rankLabel = rankLabel;
@@ -154,7 +177,11 @@ export class StudentsPage implements OnInit, OnDestroy {
       chevronForward,
       trendingUpOutline,
       documentTextOutline,
-      downloadOutline
+      downloadOutline,
+      phonePortraitOutline,
+      happyOutline,
+      chevronDown,
+      checkmarkCircle
     });
   }
 
@@ -310,6 +337,49 @@ export class StudentsPage implements OnInit, OnDestroy {
     return `${exercises} exercise${exercises === 1 ? '' : 's'} · ${sets} set${sets === 1 ? '' : 's'}`;
   }
 
+  // ---------- Self-logged workouts / daily check-ins (from Project-000) ----------
+  memberWorkoutDate(log: MemberWorkoutLog): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(log.dateLabel || '');
+    if (!m) return log.dateLabel || '';
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+      .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  memberWorkoutTitle(log: MemberWorkoutLog): string {
+    return log.title?.trim() || [log.programName, log.dayName].filter(Boolean).join(' · ') || 'Freeform session';
+  }
+
+  memberWorkoutSummary(log: MemberWorkoutLog): string {
+    const exercises = log.exercises?.length || 0;
+    const sets = (log.exercises || []).reduce(
+      (n, ex) => n + (ex.sets?.filter(s => s.completed).length || 0), 0
+    );
+    const parts = [`${exercises} exercise${exercises === 1 ? '' : 's'}`, `${sets} set${sets === 1 ? '' : 's'}`];
+    if (log.durationMin) parts.push(`${log.durationMin} min`);
+    return parts.join(' · ');
+  }
+
+  toggleMemberWorkout(log: MemberWorkoutLog) {
+    this.expandedMemberWorkoutId = this.expandedMemberWorkoutId === log.id ? null : (log.id ?? null);
+  }
+
+  // A set's own line: "135 lbs x 8" style, skipping any value that was
+  // never filled in rather than showing it as a literal "0".
+  memberSetLine(set: MemberWorkoutSet): string {
+    const parts: string[] = [];
+    if (set.weight != null) parts.push(`${set.weight} lbs`);
+    if (set.reps != null) parts.push(`x ${set.reps}`);
+    if (set.rir != null) parts.push(`(${set.rir} RIR)`);
+    return parts.join(' ') || '—';
+  }
+
+  dailyCheckInDate(entry: DailyCheckIn): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(entry.dateLabel || '');
+    if (!m) return entry.dateLabel || '';
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+      .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
   openWorkoutLog(log: WorkoutLog) {
     this.router.navigate(['/workout-log'], { queryParams: { logId: log.id } });
   }
@@ -329,6 +399,9 @@ export class StudentsPage implements OnInit, OnDestroy {
     this.clientCheckIns = [];
     this.clientPayments = [];
     this.clientWorkouts = [];
+    this.clientMemberWorkouts = [];
+    this.clientDailyCheckIns = [];
+    this.expandedMemberWorkoutId = null;
     this.clientLatestAssessment = null;
     this.clientWaivers = [];
     this.showPaymentForm = false;
@@ -341,7 +414,7 @@ export class StudentsPage implements OnInit, OnDestroy {
 
     this.paymentsLoading = true;
     try {
-      const [checkIns, payments, workouts, assessments, member, waivers] = await Promise.all([
+      const [checkIns, payments, workouts, assessments, member, waivers, memberWorkouts, dailyCheckIns] = await Promise.all([
         this.firebase.getCheckInsForClient({ clientId: row.profile.id, clientName: row.profile.fullName }),
         this.firebase.getPaymentsForClient(row.profile.fullName),
         row.profile.id
@@ -349,11 +422,15 @@ export class StudentsPage implements OnInit, OnDestroy {
           : Promise.resolve([]),
         this.firebase.listAssessmentsForClient({ clientId: row.profile.id, clientName: row.profile.fullName }),
         this.firebase.getMember(row.profile.nameKey),
-        this.firebase.getStudentWaivers(row.profile.fullName).catch(() => [] as WaiverData[])
+        this.firebase.getStudentWaivers(row.profile.fullName).catch(() => [] as WaiverData[]),
+        this.firebase.listMemberWorkoutLogs(row.profile.nameKey).catch(() => [] as MemberWorkoutLog[]),
+        this.firebase.listDailyCheckIns(row.profile.nameKey).catch(() => [] as DailyCheckIn[])
       ]);
       this.clientCheckIns = checkIns.slice(0, 12);
       this.clientPayments = payments;
       this.clientWorkouts = workouts;
+      this.clientMemberWorkouts = memberWorkouts;
+      this.clientDailyCheckIns = dailyCheckIns;
       // listAssessmentsForClient returns oldest → newest, so the last is current.
       this.clientLatestAssessment = assessments.length ? assessments[assessments.length - 1] : null;
       this.groupCell = member?.cell ?? null;
@@ -384,6 +461,9 @@ export class StudentsPage implements OnInit, OnDestroy {
     this.clientCheckIns = [];
     this.clientPayments = [];
     this.clientWorkouts = [];
+    this.clientMemberWorkouts = [];
+    this.clientDailyCheckIns = [];
+    this.expandedMemberWorkoutId = null;
     this.clientLatestAssessment = null;
     this.clientWaivers = [];
     this.showPaymentForm = false;

@@ -4,9 +4,8 @@
     <!-- ============ ROSTER ============ -->
     <div *ngIf="view === 'roster'" class="kiosk-view roster-view">
       <div class="kiosk-header">
-        <button class="icon-btn" (click)="goHome()" aria-label="Back">
-          <ion-icon name="arrow-back"></ion-icon>
-        </button>
+        <!-- No "back" control — this IS the kiosk's resting screen now,
+             nothing to go back to. -->
         <div class="kiosk-heading">
           <h1>Who's checking in?</h1>
           <p>Tap your name to sign in for today's session</p>
@@ -32,24 +31,43 @@
         <button class="ghost-btn" (click)="loadData()">Retry</button>
       </div>
 
-      <div *ngIf="!loading && !loadError" class="client-grid">
-        <button
-          *ngFor="let client of filteredClients"
-          class="client-tile"
-          [class.checked]="isCheckedInToday(client)"
-          (click)="selectClient(client)">
-          <span class="avatar">{{ initials(client.fullName) }}</span>
-          <span class="client-name">{{ client.fullName }}</span>
-          <ion-icon *ngIf="isCheckedInToday(client)" name="checkmark-circle" class="checked-icon"></ion-icon>
-        </button>
+      <ng-container *ngIf="!loading && !loadError">
+        <!-- Only appears as its own labeled group when someone's actually
+             scheduled today — otherwise scheduledTodayClients is empty and
+             otherClients quietly falls back to the full flat list. -->
+        <p class="roster-section-label" *ngIf="scheduledTodayClients.length">On today's schedule</p>
+        <div class="client-grid" *ngIf="scheduledTodayClients.length">
+          <button
+            *ngFor="let client of scheduledTodayClients"
+            class="client-tile"
+            [class.checked]="isCheckedInToday(client)"
+            (click)="selectClient(client)">
+            <span class="avatar">{{ initials(client.fullName) }}</span>
+            <span class="client-name">{{ client.fullName }}</span>
+            <ion-icon *ngIf="isCheckedInToday(client)" name="checkmark-circle" class="checked-icon"></ion-icon>
+          </button>
+        </div>
 
-        <div *ngIf="filteredClients.length === 0 && clients.length > 0" class="state-msg">
-          No matches for “{{ searchQuery }}”
+        <div class="client-grid" *ngIf="!scheduledTodayClients.length || otherClients.length"
+             [class.roster-section-gap]="scheduledTodayClients.length">
+          <button
+            *ngFor="let client of otherClients"
+            class="client-tile"
+            [class.checked]="isCheckedInToday(client)"
+            (click)="selectClient(client)">
+            <span class="avatar">{{ initials(client.fullName) }}</span>
+            <span class="client-name">{{ client.fullName }}</span>
+            <ion-icon *ngIf="isCheckedInToday(client)" name="checkmark-circle" class="checked-icon"></ion-icon>
+          </button>
+
+          <div *ngIf="filteredClients.length === 0 && clients.length > 0" class="state-msg">
+            No matches for “{{ searchQuery }}”
+          </div>
+          <div *ngIf="clients.length === 0" class="state-msg">
+            No clients yet — add clients from the admin Clients page.
+          </div>
         </div>
-        <div *ngIf="clients.length === 0" class="state-msg">
-          No clients yet — add clients from the admin Clients page.
-        </div>
-      </div>
+      </ng-container>
 
       <p class="roster-footnote">Don't see your name? Ask at the front desk.</p>
     </div>

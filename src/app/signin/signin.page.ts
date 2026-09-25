@@ -1,19 +1,16 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { IonContent, IonIcon } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import {
-  arrowBack,
   searchOutline,
   checkmarkCircle,
   closeOutline,
   arrowUndoOutline,
   alertCircleOutline,
   heartOutline,
-  chevronBackOutline,
-  logInOutline
+  chevronBackOutline
 } from 'ionicons/icons';
 import {
   FirebaseService,
@@ -23,6 +20,7 @@ import {
   WellnessData,
   localDateString
 } from '../services/firebase.service';
+import { generateScheduleForRange } from '../services/schedule.util';
 
 type KioskView = 'roster' | 'confirm' | 'success' | 'already' | 'wellness' | 'wellnessDone';
 
@@ -47,6 +45,11 @@ export class SigninPage implements OnInit, OnDestroy {
   clients: ClientProfile[] = [];
   packages: PackageRecord[] = [];
   todayCheckIns: CheckIn[] = [];
+
+  // Client ids/name-keys with a session on today's schedule — drives the
+  // roster split below. A Set, not a list, since it's only ever checked
+  // with .has() per client.
+  private scheduledTodayKeys = new Set<string>();
 
   searchQuery = '';
 
@@ -74,17 +77,15 @@ export class SigninPage implements OnInit, OnDestroy {
   ];
   scaleValues = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-  constructor(private firebase: FirebaseService, private router: Router) {
+  constructor(private firebase: FirebaseService) {
     addIcons({
-      arrowBack,
       searchOutline,
       checkmarkCircle,
       closeOutline,
       arrowUndoOutline,
       alertCircleOutline,
       heartOutline,
-      chevronBackOutline,
-      logInOutline
+      chevronBackOutline
     });
   }
 
@@ -105,16 +106,30 @@ export class SigninPage implements OnInit, OnDestroy {
     if (!silent) this.loading = true;
     this.loadError = false;
     try {
-      const [clients, packages, todayCheckIns] = await Promise.all([
+      const [clients, packages, todayCheckIns, overrides, singleSessions] = await Promise.all([
         this.firebase.listClientProfiles(),
         this.firebase.listPackages(),
-        this.firebase.getCheckInsForDate(localDateString())
+        this.firebase.getCheckInsForDate(localDateString()),
+        this.firebase.listSessionOverrides(),
+        this.firebase.listSingleSessions()
       ]);
       this.clients = clients
         .filter(c => (c.currentStatus || 'active') !== 'inactive')
         .sort((a, b) => a.fullName.localeCompare(b.fullName));
       this.packages = packages;
       this.todayCheckIns = todayCheckIns;
+
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+      const todaySchedule = generateScheduleForRange(packages, start, end, overrides, singleSessions);
+      const keys = new Set<string>();
+      for (const entry of todaySchedule) {
+        for (const id of entry.clientIds) if (id) keys.add(id);
+        for (const name of entry.clientNames) if (name) keys.add(name.trim().toLowerCase());
+      }
+      this.scheduledTodayKeys = keys;
     } catch (err) {
       console.error('Kiosk: failed to load data', err);
       this.loadError = true;
@@ -127,6 +142,24 @@ export class SigninPage implements OnInit, OnDestroy {
     const q = this.searchQuery.trim().toLowerCase();
     if (!q) return this.clients;
     return this.clients.filter(c => c.fullName.toLowerCase().includes(q));
+  }
+
+  isScheduledToday(client: ClientProfile): boolean {
+    return (!!client.id && this.scheduledTodayKeys.has(client.id))
+      || this.scheduledTodayKeys.has(client.fullName.trim().toLowerCase());
+  }
+
+  // Roster split: whoever's actually on today's schedule floats to its own
+  // group up top, so a client doesn't have to hunt through everyone else to
+  // find their name. Falls back to one flat list on a day nobody's
+  // scheduled — no empty "Scheduled Today" section with nothing in it.
+  get scheduledTodayClients(): ClientProfile[] {
+    return this.filteredClients.filter(c => this.isScheduledToday(c));
+  }
+
+  get otherClients(): ClientProfile[] {
+    if (!this.scheduledTodayClients.length) return this.filteredClients;
+    return this.filteredClients.filter(c => !this.isScheduledToday(c));
   }
 
   initials(name: string): string {
@@ -315,10 +348,6 @@ export class SigninPage implements OnInit, OnDestroy {
       this.countdownTimer = null;
     }
     this.countdown = 0;
-  }
-
-  goHome() {
-    this.router.navigate(['/home']);
   }
 
   formatTime(iso: string): string {

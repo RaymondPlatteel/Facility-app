@@ -72,6 +72,40 @@
       </div>
     </div>
 
+    <div class="pending-section" *ngIf="pendingResLoading || pendingRes.length">
+      <h2 class="section-title">Resilience Submissions</h2>
+      <div *ngIf="pendingResLoading" class="empty-state small">Loading…</div>
+      <div class="pending-list" *ngIf="!pendingResLoading">
+        <div class="pending-item" *ngFor="let p of pendingRes">
+          <div class="pending-row" (click)="toggleRes(p)">
+            <div class="pending-info">
+              <div class="pending-name">{{ p.clientName }}</div>
+              <div class="pending-lift">{{ resilienceLevel(p) }} · {{ p.rank }}</div>
+              <div class="pending-meta">{{ p.dateLabel }}</div>
+            </div>
+            <div class="pending-actions">
+              <button class="action-btn reject" (click)="rejectResilience(p); $event.stopPropagation()">
+                <ion-icon name="close-circle-outline"></ion-icon>
+                Reject
+              </button>
+              <button class="action-btn approve" (click)="approveResilience(p); $event.stopPropagation()">
+                <ion-icon name="checkmark-circle-outline"></ion-icon>
+                Approve
+              </button>
+            </div>
+          </div>
+          <div class="res-review" *ngIf="expandedResId === p.id">
+            <div class="res-review-note">Sets of {{ resilienceReps }} — resistance only.</div>
+            <div class="res-review-row" *ngFor="let r of resilienceRows(p)" [class.blank]="!r.value">
+              <span class="res-review-label">{{ r.label }}</span>
+              <span class="res-review-val">{{ r.value ? r.value : '—' }}</span>
+              <span class="res-review-pct">{{ r.pct | number:'1.0-0' }}% of {{ r.max }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <h2 class="section-title" *ngIf="linkRequests.length || swapRequests.length">Assessment Submissions</h2>
 
     <div *ngIf="loading" class="empty-state">Loading…</div>

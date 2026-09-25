@@ -3,8 +3,8 @@ import { Subject } from 'rxjs';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit } from 'firebase/firestore';
 import { environment } from '../../environments/environment';
-import { describeAssessmentChange, computeOmni, getOmniRank } from './omni.util';
-import type { TestOverrides } from './omni.util';
+import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank } from './omni.util';
+import type { TestOverrides, ResilienceInputs } from './omni.util';
 
 // Local calendar date (YYYY-MM-DD). toISOString() would shift evening check-ins to the next UTC day.
 export function localDateString(d: Date = new Date()): string {
@@ -108,16 +108,17 @@ export interface SwapRequest {
   id?: string;
   // 'swap' (default, for older records with no kind stored): move one of
   // the athlete's own existing sessions. 'openGym': not tied to any
-  // existing session — a fresh self-directed slot request. originalDateKey/
-  // originalTime/packageId/isSingle/singleSessionId are all meaningless for
-  // an openGym request and stay blank/false.
-  kind?: 'swap' | 'openGym';
+  // existing session — a fresh self-directed slot request. 'singleSession':
+  // same shape as openGym, but paid — see partySize/price/payment* below.
+  // originalDateKey/originalTime/packageId/isSingle/singleSessionId are all
+  // meaningless for openGym/singleSession and stay blank/false.
+  kind?: 'swap' | 'openGym' | 'singleSession' | 'recurringChange';
   clientId: string;         // best-effort; clientName is the reliable key
   clientName: string;
-  packageId: string;        // '' when isSingle or kind === 'openGym'
+  packageId: string;        // '' when isSingle or kind === 'openGym'/'singleSession'
   isSingle: boolean;
   singleSessionId?: string; // set when isSingle
-  originalDateKey: string;  // YYYY-MM-DD of the occurrence being moved; '' for openGym
+  originalDateKey: string;  // YYYY-MM-DD of the occurrence being moved; '' for openGym/singleSession
   originalTime: string;
   requestedDateKey: string;
   requestedTime: string;
@@ -127,6 +128,20 @@ export interface SwapRequest {
   note?: string;
   createdAt: string;
   respondedAt?: string;
+  // singleSession only. The athlete set on `clientName` above is the
+  // payer; the second person (if any) is just a name on the booking.
+  partySize?: 1 | 2;
+  secondClientId?: string;
+  secondClientName?: string;
+  priceCents?: number;
+  paymentStatus?: 'unpaid' | 'paid';
+  // recurringChange only: the new weekly slot, plus a snapshot of the old
+  // one at request time (display only). Approving copies requested*
+  // straight onto the package's own daysOfWeek/dayTimes.
+  requestedDaysOfWeek?: string[];
+  requestedDayTimes?: { [day: string]: string };
+  currentDaysOfWeek?: string[];
+  currentDayTimes?: { [day: string]: string };
 }
 
 export interface FeedbackData {
@@ -228,6 +243,36 @@ export interface JobAcceptance {
 // athlete sees in Project 000, not a parallel copy. One doc per athlete,
 // which is what enforces "you only have one set of goals": a second save
 // overwrites by construction rather than by convention.
+// An athlete's own resilience submission awaiting review — the resilience
+// twin of PendingAssessment. Approving it writes a real ResilienceEntry.
+export interface PendingResilience {
+  id?: string;
+  nameKey: string;
+  clientName: string;
+  timestamp: string;
+  dateLabel: string;
+  inputs: ResilienceInputs;
+  score: number;
+  rank: OmniRank;
+  createdAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+}
+
+// One dated set of the ten resilience lifts. Deliberately carries no lvl
+// or rank: resilience is tracked on its own and does not feed the OMPAR
+// score. Scoring each lift against a per-exercise max is not built yet.
+export interface ResilienceEntry {
+  id?: string;
+  clientId: string | null;
+  clientName: string;
+  nameKey: string;
+  timestamp: string;    // datetime-local string, unique per client per day
+  dateLabel: string;
+  inputs: ResilienceInputs;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface AssessmentGoal {
   // Doc id: `${nameKey}::${targetDate || '_notarget'}` — one athlete can
   // have several goals now, one per distinct target date (or one dateless
@@ -482,6 +527,60 @@ export interface WorkoutLog {
   completed?: boolean;
   createdAt?: string;
   updatedAt?: string;
+}
+
+// A member's own freeform workout log, self-recorded in Project-000 —
+// mirrors that app's WorkoutLog/WorkoutExercise/WorkoutSet interfaces
+// field-for-field (kept as a duplicate rather than a shared import, same
+// as every other cross-app collection in this file). `MemberWorkout*`
+// prefix to avoid colliding with this app's own WorkoutLog above, which is
+// a different collection with a different shape.
+export interface MemberWorkoutSet {
+  reps: number | null;
+  weight: number | null;
+  rir: number | null;
+  completed: boolean;
+  setType: 'warmup' | 'normal';
+  videoUrl: string | null;
+}
+
+export interface MemberWorkoutExercise {
+  name: string;
+  sets: MemberWorkoutSet[];
+  notes?: string;
+}
+
+export interface MemberWorkoutLog {
+  id?: string;
+  nameKey: string;
+  clientName: string;
+  dateLabel: string; // YYYY-MM-DD
+  timestamp: string;
+  title: string;
+  durationMin: number | null;
+  exercises: MemberWorkoutExercise[];
+  notes: string;
+  createdAt: string;
+  programId?: string | null;
+  programName?: string | null;
+  dayIndex?: number | null;
+  dayName?: string | null;
+}
+
+// A member's own daily self-report — how they're feeling, logged from
+// Project-000. Mirrors that app's DailyCheckIn interface. Not to be
+// confused with this app's `checkins` collection (session attendance).
+export interface DailyCheckIn {
+  id?: string;
+  nameKey: string;
+  clientName: string;
+  dateLabel: string; // YYYY-MM-DD
+  timestamp: string;
+  bodyWeight: number | null;
+  energyLevel: number | null; // 1 depleted -> 10 primed
+  soreness: number | null;    // 1 fresh -> 10 wrecked
+  notes: string;
+  createdAt: string;
 }
 
 // ---------- Omni Method fitness assessments (ported from the OMPAR tool) ----------
@@ -1203,7 +1302,7 @@ export class FirebaseService {
   private mapSwapRequest(id: string, data: any): SwapRequest {
     return {
       id,
-      kind: data['kind'] === 'openGym' ? 'openGym' : 'swap',
+      kind: data['kind'] === 'openGym' ? 'openGym' : data['kind'] === 'singleSession' ? 'singleSession' : data['kind'] === 'recurringChange' ? 'recurringChange' : 'swap',
       clientId: data['clientId'] ?? '',
       clientName: data['clientName'] ?? '',
       packageId: data['packageId'] ?? '',
@@ -1218,7 +1317,16 @@ export class FirebaseService {
       status: data['status'] ?? 'pending',
       note: data['note'] ?? '',
       createdAt: data['createdAt'],
-      respondedAt: data['respondedAt'] ?? undefined
+      respondedAt: data['respondedAt'] ?? undefined,
+      partySize: data['partySize'] ?? undefined,
+      secondClientId: data['secondClientId'] ?? undefined,
+      secondClientName: data['secondClientName'] ?? undefined,
+      priceCents: data['priceCents'] ?? undefined,
+      paymentStatus: data['paymentStatus'] ?? undefined,
+      requestedDaysOfWeek: data['requestedDaysOfWeek'] ?? undefined,
+      requestedDayTimes: data['requestedDayTimes'] ?? undefined,
+      currentDaysOfWeek: data['currentDaysOfWeek'] ?? undefined,
+      currentDayTimes: data['currentDayTimes'] ?? undefined
     };
   }
 
@@ -1249,6 +1357,34 @@ export class FirebaseService {
           clientIds: req.clientId ? [req.clientId] : [],
           clientNames: [req.clientName]
         });
+      } else if (req.kind === 'singleSession') {
+        // The booking exists on the schedule the moment it's approved —
+        // payment is a follow-up the athlete completes afterward (see
+        // paymentStatus below), not a precondition for the slot existing.
+        const clientNames = req.partySize === 2 && req.secondClientName
+          ? [req.clientName, req.secondClientName]
+          : [req.clientName];
+        const clientIds = req.partySize === 2 && req.secondClientId
+          ? [req.clientId, req.secondClientId].filter(Boolean)
+          : (req.clientId ? [req.clientId] : []);
+        await this.saveSingleSession({
+          date: req.requestedDateKey,
+          time: req.requestedTime || '',
+          durationMinutes: req.durationMinutes || 60,
+          sessionType: req.partySize === 2 ? 'Semi' : 'Private',
+          title: 'Single Session',
+          clientIds,
+          clientNames
+        });
+      } else if (req.kind === 'recurringChange' && req.packageId) {
+        // Not an occurrence override — the package's own weekly slot
+        // changes going forward, same as a coach editing it directly on
+        // the Packages page.
+        await updateDoc(doc(this.db, 'packages', req.packageId), {
+          daysOfWeek: req.requestedDaysOfWeek || [],
+          dayTimes: req.requestedDayTimes || {},
+          updatedAt: new Date().toISOString()
+        } as any);
       } else if (req.isSingle && req.singleSessionId) {
         await updateDoc(doc(this.db, 'singleSessions', req.singleSessionId), {
           date: req.requestedDateKey,
@@ -1948,6 +2084,29 @@ export class FirebaseService {
     return opts.max ? logs.slice(0, opts.max) : logs;
   }
 
+  // ---------- Self-logged data from Project-000 (read-only here) ----------
+  // Both collections are written exclusively by Project-000 — a member
+  // logging their own workout or how they're feeling from their phone,
+  // joined by nameKey since that's the only key Project-000 ever has (no
+  // clientId there). Distinct from this app's OWN `workoutLogs` above
+  // (coach-authored, clientId-joined) and `checkins` (session attendance,
+  // schedule.page.ts) — similar names, unrelated collections.
+  async listMemberWorkoutLogs(nameKey: string, max = 25): Promise<MemberWorkoutLog[]> {
+    const q = query(collection(this.db, 'memberWorkoutLogs'), where('nameKey', '==', nameKey));
+    const snap = await getDocs(q);
+    const logs = snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<MemberWorkoutLog, 'id'>) }));
+    logs.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+    return logs.slice(0, max);
+  }
+
+  async listDailyCheckIns(nameKey: string, max = 25): Promise<DailyCheckIn[]> {
+    const q = query(collection(this.db, 'dailyCheckIns'), where('nameKey', '==', nameKey));
+    const snap = await getDocs(q);
+    const logs = snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<DailyCheckIn, 'id'>) }));
+    logs.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+    return logs.slice(0, max);
+  }
+
   async saveWorkoutLog(log: WorkoutLog): Promise<string> {
     const now = new Date().toISOString();
     const { id, ...data } = log;
@@ -2195,6 +2354,87 @@ export class FirebaseService {
   }
 
   // ---------- Omni Method fitness assessments ----------
+  // ---------- Resilience ----------
+  // Its own collection rather than fields on an assessment: the ten
+  // resilience lifts are recorded on their own schedule and none of them
+  // feeds the OMPAR score, so tying them to an assessment document would
+  // force a coach to run a full assessment just to log a calf raise.
+  private resilienceCollection() { return collection(this.db, 'resilienceEntries'); }
+
+  async listResilienceForClient(nameKey: string): Promise<ResilienceEntry[]> {
+    const snap = await getDocs(query(this.resilienceCollection(), where('nameKey', '==', nameKey)));
+    return snap.docs
+      .map(d => {
+        const data = d.data() as ResilienceEntry;
+        return {
+          ...data,
+          id: d.id,
+          inputs: { ...blankResilienceInputs(), ...(data.inputs || {}) }
+        };
+      })
+      .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+  }
+
+  // Same one-per-day upsert the assessments collection uses, so re-saving
+  // after a typo corrects that day's entry instead of stacking a second one.
+  async saveResilienceEntry(e: Omit<ResilienceEntry, 'id'>): Promise<string> {
+    const now = new Date().toISOString();
+    const nameKey = this.normalizeNameKey(e.clientName);
+    const dayKey = (e.timestamp || '').slice(0, 10);
+    const existing = await getDocs(query(this.resilienceCollection(), where('nameKey', '==', nameKey)));
+    const sameDay = existing.docs.find(
+      d => ((d.data() as { timestamp?: string }).timestamp || '').slice(0, 10) === dayKey
+    );
+    const payload = this.cleanForFirestore({
+      clientId: e.clientId ?? null,
+      clientName: e.clientName,
+      nameKey,
+      timestamp: e.timestamp,
+      dateLabel: e.dateLabel,
+      inputs: e.inputs,
+      createdAt: sameDay
+        ? ((sameDay.data() as { createdAt?: string }).createdAt ?? now)
+        : (e.createdAt ?? now),
+      updatedAt: now
+    });
+    if (sameDay) {
+      await setDoc(sameDay.ref, payload);
+      return sameDay.id;
+    }
+    return (await addDoc(this.resilienceCollection(), payload)).id;
+  }
+
+  async listPendingResilience(): Promise<PendingResilience[]> {
+    const snap = await getDocs(query(collection(this.db, 'pendingResilience'), where('status', '==', 'pending')));
+    return snap.docs.map(d => {
+      const data = d.data() as Omit<PendingResilience, 'id'>;
+      return { ...data, id: d.id, inputs: { ...blankResilienceInputs(), ...(data.inputs || {}) } };
+    });
+  }
+
+  async setPendingResilienceStatus(id: string, status: 'approved' | 'rejected'): Promise<void> {
+    await updateDoc(doc(this.db, 'pendingResilience', id), { status, reviewedAt: new Date().toISOString() });
+  }
+
+  // Approving a submission: write the real entry, then mark the queue item.
+  // Score and rank are recomputed here rather than trusted from the
+  // submission, so an edited client payload can't inflate what gets stored.
+  async approvePendingResilience(p: PendingResilience): Promise<void> {
+    await this.saveResilienceEntry({
+      clientId: null,
+      clientName: p.clientName,
+      nameKey: p.nameKey,
+      timestamp: p.timestamp,
+      dateLabel: p.dateLabel,
+      inputs: p.inputs
+    });
+    await this.setPendingResilienceStatus(p.id!, 'approved');
+  }
+
+  async deleteResilienceEntry(id: string): Promise<void> {
+    await deleteDoc(doc(this.db, 'resilienceEntries', id));
+  }
+
   private assessmentsCollection() { return collection(this.db, 'assessments'); }
 
   private mapAssessment(id: string, data: any): FitnessAssessment {
@@ -2321,9 +2561,18 @@ export class FirebaseService {
 
   // Approving is the only path that ever writes clientLinks/{uid} from this
   // app's side — Project-000 no longer writes it directly at all.
+  //
+  // The `uid` field matters for a request beyond someone's first profile:
+  // that request's own doc id is a random auto-id (see Project-000's
+  // createAdditionalLinkRequest), not the requesting account's uid, so this
+  // write lands the new link at that same random id too — fine, since
+  // Project-000 now finds every one of an account's links by querying this
+  // `uid` field rather than assuming the doc id always equals it. Harmless
+  // extra field on a first-profile request, where the id already is the uid.
   async approveLinkRequest(req: LinkRequest): Promise<void> {
     if (!req.id) return;
     await setDoc(doc(this.db, 'clientLinks', req.id), {
+      uid: req.uid,
       nameKey: req.nameKey,
       clientName: req.requestedName,
       linkedAt: new Date().toISOString()

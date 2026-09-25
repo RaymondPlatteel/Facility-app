@@ -1,14 +1,10 @@
 import { Component, OnInit } from '@angular/core';
 import { IonContent, IonIcon } from '@ionic/angular/standalone';
-import { RouterModule } from '@angular/router';
+import { RouterModule, Router } from '@angular/router';
 import { addIcons } from 'ionicons';
 import {
-  logInOutline,
-  chatbubblesOutline,
-  documentTextOutline,
   calendarOutline,
   peopleOutline,
-  keypadOutline,
   barbellOutline,
   fitnessOutline,
   cubeOutline,
@@ -80,14 +76,10 @@ export class HomePage implements OnInit {
   scoreUpdates: ScoreUpdate[] = [];
   loadingScores = true;
 
-  constructor(private authService: AuthService, private firebase: FirebaseService) {
+  constructor(private authService: AuthService, private firebase: FirebaseService, private router: Router) {
     addIcons({
-      logInOutline,
-      chatbubblesOutline,
-      documentTextOutline,
       calendarOutline,
       peopleOutline,
-      keypadOutline,
       barbellOutline,
       fitnessOutline,
       cubeOutline,
@@ -105,7 +97,14 @@ export class HomePage implements OnInit {
   ngOnInit() {
     this.authService.isAuthenticated$.subscribe(isAuth => {
       this.isAuthenticated = isAuth;
-      if (isAuth) this.loadDashboard();
+      if (isAuth) {
+        this.loadDashboard();
+      } else {
+        // Kiosk mode has no landing page of its own anymore — this device
+        // sits on the check-in screen, not a menu. Covers both a fresh
+        // unauthenticated load and locking back out while already here.
+        this.router.navigate(['/signin'], { replaceUrl: true });
+      }
     });
     this.authService.currentTrainer$.subscribe(t => {
       this.trainerName = t?.name || '';
@@ -280,9 +279,5 @@ export class HomePage implements OnInit {
     } finally {
       this.loadingScores = false;
     }
-  }
-
-  openKeypad() {
-    this.authService.requestKeypad();
   }
 }
