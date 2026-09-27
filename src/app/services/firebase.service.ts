@@ -14,6 +14,20 @@ export function localDateString(d: Date = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+// Firestore's updateDoc()/setDoc() throw outright if any field is a literal
+// `undefined` (rather than just omitting it) — easy to hit when an object
+// read back off an older doc (missing some optional field) gets spread into
+// a later write, e.g. an edit form seeded from `{ ...existingProfile }`.
+// Strip those keys before writing so a doc missing an optional field can
+// still be saved instead of failing every time.
+function stripUndefined<T extends object>(obj: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const key of Object.keys(obj) as (keyof T)[]) {
+    if (obj[key] !== undefined) out[key] = obj[key];
+  }
+  return out;
+}
+
 export interface Student {
   id?: string;
   name: string;
@@ -807,11 +821,11 @@ export class FirebaseService {
     const existing = await this.getClientProfileByName(partial.fullName);
     if (existing?.id) {
       const ref = doc(this.db, 'clientProfiles', existing.id);
-      await updateDoc(ref, {
+      await updateDoc(ref, stripUndefined({
         ...partial,
         nameKey,
         updatedAt: now
-      } as any);
+      }) as any);
       return existing.id;
     }
     // Create new
@@ -1042,7 +1056,7 @@ export class FirebaseService {
     if (partial.fullName) {
       data.nameKey = this.normalizeNameKey(partial.fullName);
     }
-    await updateDoc(ref, data);
+    await updateDoc(ref, stripUndefined(data));
   }
 
   async deleteClientProfile(id: string): Promise<void> {
@@ -2569,12 +2583,30 @@ export class FirebaseService {
   // Project-000 now finds every one of an account's links by querying this
   // `uid` field rather than assuming the doc id always equals it. Harmless
   // extra field on a first-profile request, where the id already is the uid.
+  // Approving used to trust req.requestedName blindly — an athlete's typed
+  // name (see Project-000's NameSearchComponent) doesn't have to match any
+  // real client, so "Linked as X" could succeed while X.nameKey matched
+  // nothing, leaving the athlete's Assessments/Trends permanently empty
+  // with no error anywhere. Requiring an exact clientProfiles match here
+  // is the last checkpoint before access is granted, regardless of what
+  // the request-side UI allowed through.
   async approveLinkRequest(req: LinkRequest): Promise<void> {
     if (!req.id) return;
+    const match = await this.getClientProfileByName(req.requestedName);
+    if (!match) {
+      throw new Error(
+        `No client on file matches "${req.requestedName}" exactly. ` +
+        `Check the spelling, or rename the client profile to match, then try again.`
+      );
+    }
     await setDoc(doc(this.db, 'clientLinks', req.id), {
       uid: req.uid,
-      nameKey: req.nameKey,
-      clientName: req.requestedName,
+      // Use the client profile's own name/nameKey rather than req's — they
+      // should already agree (that's what we just checked), but this keeps
+      // the link tied to whatever the profile is actually named if the two
+      // ever diverge in casing/whitespace that normalizeNameKey tolerates.
+      nameKey: match.nameKey,
+      clientName: match.fullName,
       linkedAt: new Date().toISOString()
     });
     await updateDoc(doc(this.db, 'linkRequests', req.id), { status: 'approved', reviewedAt: new Date().toISOString() });

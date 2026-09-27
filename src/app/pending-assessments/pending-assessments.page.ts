@@ -324,6 +324,13 @@ export class PendingAssessmentsPage implements OnInit {
               await t.present();
             } catch (err) {
               console.error('Pending assessments: link approve failed', err);
+              // A mismatched name (see FirebaseService.approveLinkRequest) used
+              // to fail silently here — the request just sat there with no
+              // feedback, and the coach had no way to tell "nothing happened"
+              // from "it worked." Surface whatever reason it was rejected for.
+              const message = err instanceof Error ? err.message : 'Could not approve this link request.';
+              const t = await this.toastController.create({ message, duration: 4000, position: 'bottom', color: 'danger' });
+              await t.present();
             }
           }
         }
