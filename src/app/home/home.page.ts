@@ -15,11 +15,13 @@ import {
   warningOutline,
   cashOutline,
   checkmarkCircleOutline,
-  refreshOutline
+  refreshOutline,
+  flagOutline
 } from 'ionicons/icons';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth.service';
-import { FirebaseService, PackageRecord } from '../services/firebase.service';
+import { FirebaseService, PackageRecord, DailyQuestCompletion } from '../services/firebase.service';
 import { generateScheduleForRange, ScheduleEntry, formatTime12h } from '../services/schedule.util';
 
 // One row in the "Needs Attention" panel — the things that actually cost
@@ -58,7 +60,7 @@ function parseWhen(value?: string): number {
   selector: 'app-home',
   templateUrl: 'home.page.html',
   styleUrls: ['home.page.scss'],
-  imports: [IonContent, IonIcon, RouterModule, CommonModule],
+  imports: [IonContent, IonIcon, RouterModule, CommonModule, FormsModule],
 })
 export class HomePage implements OnInit {
   isAuthenticated = false;
@@ -90,8 +92,78 @@ export class HomePage implements OnInit {
       warningOutline,
       cashOutline,
       checkmarkCircleOutline,
-      refreshOutline
+      refreshOutline, flagOutline
     });
+  }
+
+  // ---- Daily Quest ----
+  // Local date, same 'YYYY-MM-DD' key Project 000 reads for "today".
+  questDate = new Date().toLocaleDateString('en-CA');
+  questTitle = '';
+  questDescription = '';
+  questSaved = false;
+  questBusy = false;
+  questStatus = '';
+  questCompletions: DailyQuestCompletion[] = [];
+
+  get questCompletionNames(): string {
+    return this.questCompletions.map(c => c.clientName).join(', ');
+  }
+
+  setQuestDate(dateKey: string) {
+    if (!dateKey) return;
+    this.questDate = dateKey;
+    this.loadQuest();
+  }
+
+  private async loadQuest() {
+    const dateKey = this.questDate;
+    this.questStatus = '';
+    try {
+      const [quest, completions] = await Promise.all([
+        this.firebase.getDailyQuest(dateKey),
+        this.firebase.listDailyQuestCompletions(dateKey)
+      ]);
+      if (dateKey !== this.questDate) return; // a newer date was picked meanwhile
+      this.questTitle = quest?.title || '';
+      this.questDescription = quest?.description || '';
+      this.questSaved = !!quest;
+      this.questCompletions = completions;
+    } catch (err) {
+      console.error('Home: failed to load daily quest', err);
+      this.questStatus = "Couldn't load the quest";
+    }
+  }
+
+  async saveQuest() {
+    if (!this.questTitle.trim()) return;
+    this.questBusy = true;
+    try {
+      await this.firebase.saveDailyQuest(this.questDate, this.questTitle, this.questDescription);
+      this.questSaved = true;
+      this.questStatus = 'Posted';
+    } catch (err) {
+      console.error('Home: failed to save daily quest', err);
+      this.questStatus = "Couldn't save — try again";
+    } finally {
+      this.questBusy = false;
+    }
+  }
+
+  async removeQuest() {
+    this.questBusy = true;
+    try {
+      await this.firebase.deleteDailyQuest(this.questDate);
+      this.questSaved = false;
+      this.questTitle = '';
+      this.questDescription = '';
+      this.questStatus = 'Removed';
+    } catch (err) {
+      console.error('Home: failed to remove daily quest', err);
+      this.questStatus = "Couldn't remove — try again";
+    } finally {
+      this.questBusy = false;
+    }
   }
 
   ngOnInit() {
@@ -99,6 +171,7 @@ export class HomePage implements OnInit {
       this.isAuthenticated = isAuth;
       if (isAuth) {
         this.loadDashboard();
+        this.loadQuest();
       } else {
         // Kiosk mode has no landing page of its own anymore — this device
         // sits on the check-in screen, not a menu. Covers both a fresh

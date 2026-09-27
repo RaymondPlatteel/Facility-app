@@ -743,11 +743,11 @@ export const RESILIENCE_TESTS: ReadonlyArray<{
   { key: 'hipFlexorGluteBridge', label: 'Hip Flexor Glute Bridge', max: 135 },
   { key: 'abduction', label: 'Abduction', max: 30 },
   { key: 'benchAdduction', label: 'Bench Adduction', max: 100 },
-  { key: 'cubanRotation', label: 'Cuban Rotation', max: 60 },
-  { key: 'supineInternalRotation', label: 'Supine Internal Rotation', max: 50 },
+  { key: 'cubanRotation', label: 'Cuban Rotation', max: 50 },
+  { key: 'supineInternalRotation', label: 'Supine Internal Rotation', max: 60 },
   { key: 'proneAroundTheWorlds', label: 'Prone Around the Worlds', max: 30 },
-  { key: 'wristExtensions', label: 'Wrist Extensions', max: 115, note: 'Straight bar' },
-  { key: 'radialDeviations', label: 'Radial Deviations', max: 30, note: 'Dumbbell held at the back end' }
+  { key: 'wristExtensions', label: 'Wrist Extensions', max: 115 },
+  { key: 'radialDeviations', label: 'Radial Deviations', max: 30 }
 ];
 
 // Per-exercise percentage of its own max, clamped — the same ratio shape

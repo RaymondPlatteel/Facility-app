@@ -751,6 +751,25 @@ function jobPeriodKeyFor(date: Date, cadence: 'weekly' | 'monthly'): string {
   return cadence === 'weekly' ? jobWeekKeyFor(date) : jobMonthKeyFor(date);
 }
 
+// Daily Quest — one coach-written challenge per calendar day, shared by
+// every athlete. Doc id is the local date ('YYYY-MM-DD'). Completions are
+// one doc per athlete per day in dailyQuestCompletions, id
+// `${dateKey}_${nameKey}`, so marking it twice is a no-op and the coach
+// app can list who's done it.
+export interface DailyQuest {
+  dateKey: string;
+  title: string;
+  description?: string;
+  updatedAt?: string;
+}
+
+export interface DailyQuestCompletion {
+  dateKey: string;
+  clientName: string;
+  nameKey: string;
+  completedAt: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -2721,4 +2740,27 @@ export class FirebaseService {
     ));
     return snap.docs.map(d => d.data() as Member).sort((a, b) => (a.latestLvl ?? 0) - (b.latestLvl ?? 0));
   }
-} 
+
+  // ---------- Daily Quest ----------
+  async getDailyQuest(dateKey: string): Promise<DailyQuest | null> {
+    const snap = await getDoc(doc(this.db, 'dailyQuests', dateKey));
+    return snap.exists() ? { ...(snap.data() as DailyQuest), dateKey } : null;
+  }
+
+  async saveDailyQuest(dateKey: string, title: string, description: string): Promise<void> {
+    const quest: DailyQuest = { dateKey, title: title.trim(), updatedAt: new Date().toISOString() };
+    if (description.trim()) quest.description = description.trim();
+    await setDoc(doc(this.db, 'dailyQuests', dateKey), quest);
+  }
+
+  async deleteDailyQuest(dateKey: string): Promise<void> {
+    await deleteDoc(doc(this.db, 'dailyQuests', dateKey));
+  }
+
+  async listDailyQuestCompletions(dateKey: string): Promise<DailyQuestCompletion[]> {
+    const snap = await getDocs(query(collection(this.db, 'dailyQuestCompletions'), where('dateKey', '==', dateKey)));
+    return snap.docs
+      .map(d => d.data() as DailyQuestCompletion)
+      .sort((a, b) => (a.completedAt || '').localeCompare(b.completedAt || ''));
+  }
+}

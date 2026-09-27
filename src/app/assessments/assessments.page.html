@@ -507,7 +507,7 @@
               <div class="form-row form-row--res" *ngFor="let t of resilienceTests">
                 <label class="fr-label">
                   <span class="fr-label-text">{{ t.label }}</span>
-                  <span class="fr-hint">{{ t.note ? t.note + ' · ' : '' }}{{ t.max }} lbs = 100</span>
+                  <span class="fr-hint" *ngIf="t.note">{{ t.note }}</span>
                 </label>
                 <div class="fr-input-wrap">
                   <input class="fr-input" type="number" placeholder="0" [(ngModel)]="panel.resilienceForm[t.key]" />

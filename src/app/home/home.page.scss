@@ -433,3 +433,99 @@ ion-content {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+// ---- Daily Quest ----
+.card--quest {
+  margin-top: 16px;
+}
+
+.quest-date {
+  background: #0d1520;
+  border: 1px solid #133748;
+  border-radius: 8px;
+  color: #dceaf6;
+  font-size: 13px;
+  padding: 5px 8px;
+  color-scheme: dark;
+}
+
+.quest-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+}
+
+.quest-input {
+  width: 100%;
+  background: #0d1520;
+  border: 1px solid #133748;
+  border-radius: 8px;
+  color: #dceaf6;
+  font-size: 14px;
+  padding: 10px 12px;
+  outline: none;
+  font-family: inherit;
+
+  &:focus { border-color: #00d4ff; }
+  &::placeholder { color: #4a6378; }
+}
+
+.quest-desc {
+  resize: vertical;
+  min-height: 56px;
+}
+
+.quest-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quest-status {
+  flex: 1;
+  font-size: 12px;
+  color: #88a6bf;
+}
+
+.quest-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: #00d4ff;
+  color: #04121a;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+
+  &:disabled { opacity: 0.45; cursor: default; }
+
+  &--ghost {
+    background: none;
+    color: #88a6bf;
+    box-shadow: inset 0 0 0 1px #133748;
+  }
+}
+
+.quest-done {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 11px 18px 14px;
+  border-top: 1px solid #133748;
+}
+
+.quest-done-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #06d6a0;
+}
+
+.quest-done-names {
+  font-size: 13px;
+  color: #dceaf6;
+}

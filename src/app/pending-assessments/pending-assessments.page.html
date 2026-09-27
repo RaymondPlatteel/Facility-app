@@ -99,7 +99,7 @@
             <div class="res-review-row" *ngFor="let r of resilienceRows(p)" [class.blank]="!r.value">
               <span class="res-review-label">{{ r.label }}</span>
               <span class="res-review-val">{{ r.value ? r.value : '—' }}</span>
-              <span class="res-review-pct">{{ r.pct | number:'1.0-0' }}% of {{ r.max }}</span>
+              <span class="res-review-pct">{{ r.pct | number:'1.0-0' }}%</span>
             </div>
           </div>
         </div>

@@ -81,6 +81,36 @@
       </section>
     </div>
 
+    <!-- Daily Quest: one challenge per day for every athlete. Shows up in
+         Project 000's Dailies board on that date; completions list below. -->
+    <section class="card card--quest">
+      <div class="card-head">
+        <span class="card-title">
+          <ion-icon name="flag-outline"></ion-icon>
+          Daily Quest
+        </span>
+        <input class="quest-date" type="date" [ngModel]="questDate" (ngModelChange)="setQuestDate($event)" aria-label="Quest date" />
+      </div>
+      <div class="quest-form">
+        <input class="quest-input" type="text" maxlength="80" placeholder="Quest, e.g. 100 jump rope skips"
+               [(ngModel)]="questTitle" />
+        <textarea class="quest-input quest-desc" rows="2" maxlength="400"
+                  placeholder="Details athletes see when they open it (optional)"
+                  [(ngModel)]="questDescription"></textarea>
+        <div class="quest-actions">
+          <span class="quest-status">{{ questStatus }}</span>
+          <button type="button" class="quest-btn quest-btn--ghost" *ngIf="questSaved" [disabled]="questBusy" (click)="removeQuest()">Remove</button>
+          <button type="button" class="quest-btn" [disabled]="questBusy || !questTitle.trim()" (click)="saveQuest()">
+            {{ questBusy ? 'Saving…' : (questSaved ? 'Update' : 'Post Quest') }}
+          </button>
+        </div>
+      </div>
+      <div class="quest-done" *ngIf="questSaved">
+        <span class="quest-done-label">Completed · {{ questCompletions.length }}</span>
+        <span class="quest-done-names">{{ questCompletionNames || 'Nobody yet' }}</span>
+      </div>
+    </section>
+
     <!-- Score movement only — assessments, not check-ins or logged workouts -->
     <section class="card card--activity">
       <div class="card-head">
