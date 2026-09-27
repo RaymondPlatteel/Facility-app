@@ -10,7 +10,7 @@ export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 export PATH="/opt/homebrew/bin:$PATH"
 
 XCODE_UDID="00008130-001629EC0A62001C"          # xcodebuild destination id
-DEVICECTL_UDID="B31F79AD-E46B-50B5-AC98-455E33FF44EA"  # devicectl device id
+DEVICECTL_UDID="B117811B-AD20-4D20-8A10-3893012A8CB0"  # devicectl device id
 # Must match PRODUCT_BUNDLE_IDENTIFIER in ios/App/App.xcodeproj, which is
 # NOT capacitor.config.ts's appId (com.raymondplatteel.facilityapp) — the
 # install step succeeds either way, but the launch step looks the app up by
