@@ -121,7 +121,13 @@
         <tbody>
           <tr *ngFor="let pkg of filteredPackages; let i = index; trackBy: trackByPkg">
             <td [style.width.px]="columnWidths.packageName">
-              <ion-input class="table-input" [(ngModel)]="pkg.packageName" (ionBlur)="saveRow(pkg)" placeholder="Standard Training"></ion-input>
+              <div class="name-cell">
+                <button type="button" class="pkg-cal-btn" *ngIf="pkg.id" (click)="openPackageCalendar(pkg)"
+                        aria-label="Session calendar" title="Session calendar">
+                  <ion-icon name="calendar-outline"></ion-icon>
+                </button>
+                <ion-input class="table-input" [(ngModel)]="pkg.packageName" (ionBlur)="saveRow(pkg)" placeholder="Standard Training"></ion-input>
+              </div>
             </td>
             <td [style.width.px]="columnWidths.linkedClients">
               <ion-select class="table-input" [(ngModel)]="pkg.linkedClientIds" multiple="true" interface="popover" placeholder="Select clients" (ionChange)="saveRow(pkg)">
@@ -317,4 +323,63 @@
   </div>
 </div>
 
+<!-- Per-package session calendar: every date this package was scheduled or
+     used, colored by what happened. Outside ion-content for the same
+     position:fixed reason as the PDF modal above. -->
+<div class="pkgcal-modal" [class.open]="calOpen">
+  <div class="pkgcal-backdrop" (click)="closePackageCalendar()"></div>
+  <div class="pkgcal-sheet" *ngIf="calPkg">
+    <div class="pkgcal-head">
+      <div>
+        <div class="pkgcal-title">{{ calPkg.packageName }}</div>
+        <div class="pkgcal-sub">
+          {{ (calPkg.linkedClientNames || []).join(', ') || 'No clients' }}
+          · {{ calPkg.purchaseDate || '—' }} → {{ calPkg.expirationDate || '—' }}
+        </div>
+      </div>
+      <button class="pkgcal-close" (click)="closePackageCalendar()" aria-label="Close">
+        <ion-icon name="close-outline"></ion-icon>
+      </button>
+    </div>
 
+    <div class="pkgcal-loading" *ngIf="calLoading">Loading sessions…</div>
+
+    <ng-container *ngIf="!calLoading">
+      <div class="pkgcal-summary">
+        <span class="pkgcal-stat" *ngFor="let s of calSummary" [class]="'pkgcal-stat st-' + s.status">
+          <strong>{{ s.count }}</strong> {{ s.label }}
+        </span>
+        <span class="pkgcal-stat st-left"><strong>{{ calPkg.sessionsRemaining ?? '—' }}</strong> left</span>
+      </div>
+
+      <div class="pkgcal-body">
+        <div class="pkgcal-cal-col">
+          <ion-datetime class="pkgcal-cal" presentation="date" [firstDayOfWeek]="0"
+                        [value]="calSelected" [highlightedDates]="calHighlights"
+                        (ionChange)="onCalDayChange($event)"></ion-datetime>
+          <div class="pkgcal-legend">
+            <span *ngFor="let l of calLegend"><i [class]="'dot st-' + l.status"></i>{{ l.label }}</span>
+          </div>
+        </div>
+
+        <div class="pkgcal-list">
+          <div class="pkgcal-day" *ngFor="let d of calDays" [class.selected]="d.dateKey === calSelected"
+               (click)="calSelected = d.dateKey">
+            <span class="pkgcal-day-date">
+              <strong>{{ d.label }}</strong>
+              <span *ngIf="d.time">{{ formatTime12h(d.time) }}</span>
+            </span>
+            <span class="pkgcal-day-body">
+              <span class="pkgcal-chip" [class]="'pkgcal-chip st-' + d.status">{{ statusLabel(d.status) }}</span>
+              <span class="pkgcal-clients" *ngIf="d.clients.length">
+                <span *ngFor="let c of d.clients">{{ c.name }} — {{ c.status }}</span>
+              </span>
+              <span class="pkgcal-note" *ngIf="d.note">{{ d.note }}</span>
+            </span>
+          </div>
+          <div class="pkgcal-empty" *ngIf="!calDays.length">No sessions scheduled or recorded for this package.</div>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+</div>

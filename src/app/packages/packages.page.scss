@@ -656,3 +656,242 @@ ion-popover.cost-pop-wrap {
 @media (max-width: 768px) {
   .grey-btn { display: none; }
 }
+
+// ---------- Per-package session calendar ----------
+.name-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  ion-input { flex: 1; min-width: 0; }
+}
+
+.pkg-cal-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #133748;
+  border-radius: 7px;
+  background: #0d1520;
+  color: #00d4ff;
+  font-size: 15px;
+  cursor: pointer;
+
+  &:hover { border-color: #00d4ff; }
+}
+
+// Status colors, shared by the summary, legend, chips and list.
+$cal-status: (
+  attended: #06d6a0,
+  missed: #ff5d6c,
+  excused: #f5b942,
+  upcoming: #00d4ff,
+  unrecorded: #6b8499,
+  unlinked: #a78bfa,
+  left: #dceaf6
+);
+
+.pkgcal-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+
+  &.open { display: flex; }
+}
+
+.pkgcal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.pkgcal-sheet {
+  position: relative;
+  z-index: 1;
+  width: min(880px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #070b12;
+  border: 1px solid #133748;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.pkgcal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #133748;
+}
+
+.pkgcal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #dceaf6;
+}
+
+.pkgcal-sub {
+  margin-top: 3px;
+  font-size: 13px;
+  color: #88a6bf;
+}
+
+.pkgcal-close {
+  display: flex;
+  padding: 6px;
+  border: none;
+  background: none;
+  color: #88a6bf;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.pkgcal-loading,
+.pkgcal-empty {
+  padding: 28px 18px;
+  text-align: center;
+  font-size: 13px;
+  color: #88a6bf;
+}
+
+.pkgcal-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 18px;
+  border-bottom: 1px solid #133748;
+}
+
+.pkgcal-stat {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: #0d1520;
+  color: #88a6bf;
+
+  strong { font-variant-numeric: tabular-nums; }
+}
+
+@each $name, $color in $cal-status {
+  .pkgcal-stat.st-#{$name} strong { color: $color; }
+  .pkgcal-legend .dot.st-#{$name} { background: $color; }
+  .pkgcal-chip.st-#{$name} {
+    color: $color;
+    background: rgba($color, 0.14);
+  }
+}
+
+.pkgcal-body {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+
+  @media (max-width: 720px) {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+}
+
+.pkgcal-cal-col {
+  flex-shrink: 0;
+  padding: 12px;
+  border-right: 1px solid #133748;
+
+  @media (max-width: 720px) { border-right: none; border-bottom: 1px solid #133748; }
+}
+
+.pkgcal-cal {
+  --background: #070b12;
+  --background-rgb: 7, 11, 18;
+  color: #dceaf6;
+  border-radius: 12px;
+}
+
+.pkgcal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  max-width: 330px;
+  padding: 8px 6px 2px;
+  font-size: 11.5px;
+  color: #88a6bf;
+
+  span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+}
+
+.pkgcal-list {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  max-height: 520px;
+  padding: 6px 0;
+
+  @media (max-width: 720px) { max-height: none; overflow: visible; }
+}
+
+.pkgcal-day {
+  display: flex;
+  gap: 14px;
+  padding: 10px 18px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+
+  &:hover { background: #0b1119; }
+  &.selected {
+    background: #0d1520;
+    border-left-color: #00d4ff;
+  }
+}
+
+.pkgcal-day-date {
+  flex-shrink: 0;
+  width: 108px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  color: #dceaf6;
+
+  span { font-size: 12px; color: #88a6bf; }
+}
+
+.pkgcal-day-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pkgcal-chip {
+  padding: 2px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pkgcal-clients {
+  display: flex;
+  flex-direction: column;
+  font-size: 12.5px;
+  color: #88a6bf;
+}
+
+.pkgcal-note {
+  font-size: 12px;
+  color: #a78bfa;
+}

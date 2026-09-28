@@ -15,13 +15,14 @@ import {
   IonItem,
   IonList,
   IonPopover,
+  IonDatetime,
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import { arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline, refreshOutline } from 'ionicons/icons';
 import { Router } from '@angular/router';
-import { FirebaseService, ClientProfile, PackageRecord, ClientPayment, SessionOverride, localDateString } from '../services/firebase.service';
+import { FirebaseService, ClientProfile, PackageRecord, ClientPayment, SessionOverride, localDateString, CheckIn } from '../services/firebase.service';
 import { ToastController } from '@ionic/angular/standalone';
-import { generateScheduleForRange, startOfWeek, addDays, countScheduledOccurrences, projectPackageEnd, usesStoredSessions, planMigration } from '../services/schedule.util';
+import { generateScheduleForRange, startOfWeek, addDays, countScheduledOccurrences, projectPackageEnd, usesStoredSessions, planMigration, formatTime12h } from '../services/schedule.util';
 import { TRAINERS } from '../services/auth.service';
 import { TopBarActionService } from '../services/top-bar-action.service';
 import html2canvas from 'html2canvas';
@@ -82,12 +83,46 @@ interface PackageForm {
   status: PackageStatus;
 }
 
+// One date on a package's session calendar. attended/missed/excused come
+// from attendance records; upcoming/unrecorded are scheduled dates with no
+// record yet (future / past); unlinked is a client of this package checking
+// in that day with no package attached, so it counted toward nothing.
+type CalStatus = 'attended' | 'missed' | 'excused' | 'upcoming' | 'unrecorded' | 'unlinked';
+
+interface CalDay {
+  dateKey: string;
+  label: string;
+  time: string;
+  status: CalStatus;
+  clients: { name: string; status: string }[];
+  note?: string;
+}
+
+const CAL_COLORS: Record<CalStatus, string> = {
+  attended: '#06d6a0',
+  missed: '#ff5d6c',
+  excused: '#f5b942',
+  upcoming: '#00d4ff',
+  unrecorded: '#6b8499',
+  unlinked: '#a78bfa'
+};
+
+const CAL_LABELS: Record<CalStatus, string> = {
+  attended: 'Attended',
+  missed: 'Missed',
+  excused: 'Excused',
+  upcoming: 'Upcoming',
+  unrecorded: 'No record',
+  unlinked: 'Not counted'
+};
+
 @Component({
   selector: 'app-packages',
   templateUrl: './packages.page.html',
   styleUrls: ['./packages.page.scss'],
   standalone: true,
   imports: [
+    IonDatetime,
     IonContent,
     IonHeader,
     IonTitle,
@@ -722,6 +757,134 @@ export class PackagesPage implements OnInit, OnDestroy {
     }
     await this.saveRow(pkg);
     if (pkg.id && pkg.purchaseDate) this.savedStart.set(pkg.id, pkg.purchaseDate);
+  }
+
+  // ---------- Per-package session calendar ----------
+  calOpen = false;
+  calLoading = false;
+  calPkg: PackageRecord | null = null;
+  calDays: CalDay[] = [];
+  calHighlights: { date: string; textColor: string; backgroundColor: string }[] = [];
+  calSummary: { status: CalStatus; label: string; count: number }[] = [];
+  calSelected = '';
+  formatTime12h = formatTime12h;
+  readonly calLegend = (Object.keys(CAL_LABELS) as CalStatus[]).map(status => ({ status, label: CAL_LABELS[status] }));
+
+  statusLabel(status: CalStatus): string {
+    return CAL_LABELS[status];
+  }
+
+  closePackageCalendar() {
+    this.calOpen = false;
+  }
+
+  onCalDayChange(ev: CustomEvent) {
+    const v = ev.detail?.value;
+    if (typeof v === 'string') this.calSelected = v.slice(0, 10);
+  }
+
+  async openPackageCalendar(pkg: PackageRecord) {
+    if (!pkg.id) return;
+    this.calPkg = pkg;
+    this.calOpen = true;
+    this.calLoading = true;
+    this.calDays = [];
+    try {
+      const clientIds = pkg.linkedClientIds || [];
+      const clientNames = pkg.linkedClientNames || [];
+      const [records, ...perClient] = await Promise.all([
+        this.firebase.listCheckInsForPackage(pkg.id),
+        ...clientIds.map((id, i) => this.firebase.getCheckInsForClient({ clientId: id, clientName: clientNames[i] }))
+      ]);
+      this.calDays = this.buildCalendarDays(pkg, records, ([] as CheckIn[]).concat(...perClient));
+    } catch (err) {
+      console.error('Packages: failed to load session calendar', err);
+    } finally {
+      this.calLoading = false;
+    }
+    this.calHighlights = this.calDays.map(d => ({
+      date: d.dateKey,
+      textColor: CAL_COLORS[d.status],
+      backgroundColor: CAL_COLORS[d.status] + '2e'
+    }));
+    const counts = new Map<CalStatus, number>();
+    this.calDays.forEach(d => counts.set(d.status, (counts.get(d.status) || 0) + 1));
+    this.calSummary = this.calLegend
+      .filter(l => counts.get(l.status))
+      .map(l => ({ ...l, count: counts.get(l.status)! }));
+    // Open on the most recent session that's already happened.
+    const today = localDateString();
+    const past = this.calDays.filter(d => d.dateKey <= today);
+    this.calSelected = (past[past.length - 1] || this.calDays[0])?.dateKey || today;
+  }
+
+  private buildCalendarDays(pkg: PackageRecord, records: CheckIn[], clientRecords: CheckIn[]): CalDay[] {
+    const today = localDateString();
+    const start = pkg.purchaseDate ? new Date(`${pkg.purchaseDate.slice(0, 10)}T00:00:00`) : new Date();
+    const endKey = (pkg.expirationDate || '').slice(0, 10);
+    const end = endKey && endKey > today ? new Date(`${endKey}T00:00:00`) : new Date();
+    const scheduled = generateScheduleForRange([pkg], start, end, this.overrides, [], ['active', 'completed', 'prospect'])
+      .filter(e => !e.isSingle);
+
+    const days = new Map<string, CalDay>();
+    const label = (key: string) => new Date(`${key}T00:00:00`)
+      .toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const clientStatus = (c: CheckIn) =>
+      c.status === 'excused' ? 'excused' : c.status === 'unexcused' ? 'no-show' : 'present';
+
+    // Attendance recorded against this package. One status per date:
+    // anyone present makes it attended, else a no-show makes it missed.
+    const byDate = new Map<string, CheckIn[]>();
+    for (const r of records) {
+      if (!byDate.has(r.date)) byDate.set(r.date, []);
+      byDate.get(r.date)!.push(r);
+    }
+    byDate.forEach((recs, dateKey) => {
+      const clients = new Map<string, string>();
+      recs.forEach(r => clients.set(r.clientName, clientStatus(r)));
+      const statuses = [...clients.values()];
+      const status: CalStatus = statuses.includes('present') ? 'attended'
+        : statuses.includes('no-show') ? 'missed' : 'excused';
+      days.set(dateKey, {
+        dateKey, label: label(dateKey), time: '', status,
+        clients: [...clients.entries()].map(([name, st]) => ({ name, status: st }))
+      });
+    });
+
+    // Scheduled dates with no record. A session moved to another day may
+    // have its attendance filed under either date, so either one counts.
+    for (const e of scheduled) {
+      const recorded = days.get(e.dateKey) || days.get(e.originalDateKey);
+      if (recorded) {
+        if (!recorded.time) recorded.time = e.time;
+        continue;
+      }
+      const moved = e.dateKey !== e.originalDateKey ? `Moved from ${label(e.originalDateKey)}` : undefined;
+      days.set(e.dateKey, {
+        dateKey: e.dateKey, label: label(e.dateKey), time: e.time,
+        status: e.dateKey < today ? 'unrecorded' : 'upcoming',
+        clients: [], note: moved
+      });
+    }
+
+    // A client of this package checking in with no package attached, inside
+    // the package's dates — it happened, but it didn't count toward anything.
+    const startKey = localDateString(start);
+    const endKeyAll = localDateString(end);
+    for (const r of clientRecords) {
+      if (r.packageId || r.date < startKey || r.date > endKeyAll) continue;
+      const existing = days.get(r.date);
+      if (existing && existing.status !== 'unrecorded' && existing.status !== 'unlinked') continue;
+      const day = existing ?? {
+        dateKey: r.date, label: label(r.date), time: '', status: 'unlinked' as CalStatus, clients: []
+      };
+      day.status = 'unlinked';
+      day.note = 'Checked in without a package — not counted toward this one';
+      if (!day.clients.some(c => c.name === r.clientName)) day.clients.push({ name: r.clientName, status: clientStatus(r) });
+      days.set(r.date, day);
+    }
+
+    return [...days.values()].sort((a, b) => a.dateKey.localeCompare(b.dateKey));
   }
 
   // ---------- Stored sessions ----------

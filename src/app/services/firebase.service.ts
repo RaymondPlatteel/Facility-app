@@ -1651,6 +1651,12 @@ export class FirebaseService {
     return snap.docs.map(d => this.mapCheckIn(d.id, d.data()));
   }
 
+  // Every attendance record deducted from (or excused against) one package.
+  async listCheckInsForPackage(packageId: string): Promise<CheckIn[]> {
+    const snap = await getDocs(query(this.checkInsCollection(), where('packageId', '==', packageId)));
+    return snap.docs.map(d => this.mapCheckIn(d.id, d.data()));
+  }
+
   async getCheckInsForClient(opts: { clientId?: string | null; clientName?: string }): Promise<CheckIn[]> {
     const byId = new Map<string, CheckIn>();
     if (opts.clientId) {
