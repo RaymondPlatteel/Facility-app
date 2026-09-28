@@ -51,9 +51,11 @@ npm run build
 npx cap sync ios
 
 cd ios/App
+# -allowProvisioningDeviceRegistration: a phone the signing team hasn't
+# seen yet (someone else's) gets registered, as Xcode's Run button does.
 xcodebuild -workspace App.xcworkspace -scheme App \
   -destination "platform=iOS,id=$XCODE_UDID" \
-  -allowProvisioningUpdates build
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
 
 APP_PATH="$(xcodebuild -workspace App.xcworkspace -scheme App \
   -destination "platform=iOS,id=$XCODE_UDID" -showBuildSettings 2>/dev/null \
