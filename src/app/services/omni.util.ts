@@ -541,6 +541,21 @@ export function testScore(key: ScoredTestKey, i: AssessmentInputs, overrides?: T
 // C 172, B 237, A 301, S 365. Female keeps the strength ladder's own D
 // (13.5 → 81 lb) and scales S by the same ratio the category tables use
 // between the sexes (56.6 / 63.2), landing at 326 lb.
+//
+// Pull-up 1RM, because on the plain strength ladder it ranked people a full
+// rank above where they belong. Same ladder moved up exactly one rank — D
+// sits where C was, and so on, with S one step past the old S. In total
+// load (bodyweight + added, scored against 500 lb): D 147, C 203, B 260,
+// A 316, S 373 lb for men; D 121, C 175, B 229, A 283, S 337 lb for women.
+// Derived rather than typed in, so it keeps following the strength ladder.
+function oneRankStricter(cat: OmniCategory, sex: Sex): { d: number; s: number } {
+  const key = sex === 'female' ? 'female' : 'male';
+  const d = CATEGORY_FLOOR[cat][key];
+  const s = CATEGORY_S_FLOOR_OVERRIDE[cat]?.[key] ?? evenSFloor(sex);
+  const step = (s - d) / 4;
+  return { d: d + step, s: s + step };
+}
+
 const INCHES_TO_LJ_SCORE = 100 / 147;
 const LBS_TO_BENCH_SCORE = 100 / 600;
 const TEST_LADDER_OVERRIDE: Partial<Record<ScoredTestKey, { male: { d: number; s: number }; female: { d: number; s: number } }>> = {
@@ -551,6 +566,10 @@ const TEST_LADDER_OVERRIDE: Partial<Record<ScoredTestKey, { male: { d: number; s
   bench: {
     male: { d: 18, s: 365 * LBS_TO_BENCH_SCORE },
     female: { d: 13.5, s: 326 * LBS_TO_BENCH_SCORE }
+  },
+  pullup1rm: {
+    male: oneRankStricter('strength', 'male'),
+    female: oneRankStricter('strength', 'female')
   }
 };
 
