@@ -105,10 +105,17 @@ export function isCurveTest(key: TestKey): boolean {
   return key in CURVE_TEST_DEFAULTS;
 }
 
+// Pull-up 1RM's record. Was 500 lb until the test moved to chin over the
+// bar (stricter technique), which costs everyone roughly 10 lb. 484 keeps
+// the 999 group's scores where they were across the switch — Abram
+// 309 -> 299, Roy 302 -> 292, Raymond 299 -> 289 each move by under a
+// tenth of a point.
+export const PULLUP_1RM_RECORD = 484;
+
 // Ratio-type slots' real, current built-in "world record" constants —
 // same pre-fill purpose as CURVE_TEST_DEFAULTS above.
 export const RATIO_TEST_DEFAULTS: Partial<Record<TestKey, number>> = {
-  deadlift: 939, squat: 800, bench: 600, pullup1rm: 500, longjump: 147,
+  deadlift: 939, squat: 800, bench: 600, pullup1rm: PULLUP_1RM_RECORD, longjump: 147,
 };
 
 export function overrideScore(raw: number, worldRecord: number, key: TestKey, spread?: number): number {
@@ -139,7 +146,7 @@ export function calcStrength(dl: number, sq: number, bn: number, pu: number, ove
   const dlScore = slotScore(dl, 'deadlift', overrides, () => dl / 939 * 100);
   const sqScore = slotScore(sq, 'squat', overrides, () => sq / 800 * 100);
   const bnScore = slotScore(bn, 'bench', overrides, () => bn / 600 * 100);
-  const puScore = slotScore(pu, 'pullup1rm', overrides, () => pu / 500 * 100);
+  const puScore = slotScore(pu, 'pullup1rm', overrides, () => pu / PULLUP_1RM_RECORD * 100);
   return (dlScore + sqScore + bnScore + puScore) / 4;
 }
 export function calcPower(lj: number, sp: number, overrides?: TestOverrides): number {
@@ -508,7 +515,7 @@ export function testScore(key: ScoredTestKey, i: AssessmentInputs, overrides?: T
     case 'deadlift': return slotScore(v, key, overrides, () => v / 939 * 100);
     case 'squat': return slotScore(v, key, overrides, () => v / 800 * 100);
     case 'bench': return slotScore(v, key, overrides, () => v / 600 * 100);
-    case 'pullup1rm': return slotScore(v, key, overrides, () => v / 500 * 100);
+    case 'pullup1rm': return slotScore(v, key, overrides, () => v / PULLUP_1RM_RECORD * 100);
     case 'longjump': return slotScore(v, key, overrides, () => v / 147 * 100);
     case 'sprint': return slotScore(v, key, overrides, () => (Math.sqrt((v - 10) / 0.125) * -1 + 10) * 10);
     case 'pushups': return slotScore(v, key, overrides, () => (v / 150) * 100);
@@ -545,8 +552,9 @@ export function testScore(key: ScoredTestKey, i: AssessmentInputs, overrides?: T
 // Pull-up 1RM, because on the plain strength ladder it ranked people a full
 // rank above where they belong. Same ladder moved up exactly one rank — D
 // sits where C was, and so on, with S one step past the old S. In total
-// load (bodyweight + added, scored against 500 lb): D 147, C 203, B 260,
-// A 316, S 373 lb for men; D 121, C 175, B 229, A 283, S 337 lb for women.
+// load (bodyweight + added, scored against PULLUP_1RM_RECORD): D 142,
+// C 197, B 251, A 306, S 361 lb for men; D 117, C 170, B 222, A 274,
+// S 326 lb for women.
 // Derived rather than typed in, so it keeps following the strength ladder.
 function oneRankStricter(cat: OmniCategory, sex: Sex): { d: number; s: number } {
   const key = sex === 'female' ? 'female' : 'male';
