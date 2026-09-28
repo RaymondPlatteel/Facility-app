@@ -50,5 +50,80 @@
       </ng-template>
     </div>
 
+    <!-- Stored sessions: preview -> create -> switch on. Nothing here deletes
+         anything; the switch can be turned back off at any time. -->
+    <div class="settings-section">
+      <h2 class="section-heading">Scheduling</h2>
+
+      <div class="setting-row">
+        <div class="setting-row-text">
+          <ion-icon name="layers-outline"></ion-icon>
+          <div>
+            <div class="setting-row-title">Use stored sessions</div>
+            <div class="setting-row-detail">
+              Every session is a real booking, and each package keeps exactly as many upcoming sessions as it has
+              sessions left — excused and unrecorded ones get a makeup booked automatically. Off = the original
+              weekly-pattern calendar. Switching back and forth changes nothing that's saved.
+            </div>
+          </div>
+        </div>
+        <button class="toggle-switch" [class.on]="storedSessionsOn" [disabled]="schedulingBusy || !sessionsExist"
+                (click)="toggleStoredSessions()"
+                [attr.aria-label]="storedSessionsOn ? 'Switch to the weekly-pattern calendar' : 'Switch to stored sessions'">
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+
+      <div class="migrate-card">
+        <div class="migrate-head">
+          <div>
+            <div class="setting-row-title">Move packages onto stored sessions</div>
+            <div class="setting-row-detail">
+              Copies each active weekly package's current calendar (past and upcoming, reschedules included) into
+              stored sessions, then books any owed session that has no date. Only adds — packages, attendance and
+              reschedules are left exactly as they are. Packages already moved are skipped.
+            </div>
+          </div>
+          <button class="migrate-btn migrate-btn--ghost" [disabled]="schedulingBusy" (click)="previewMigration()">
+            {{ migrationPreview ? 'Refresh preview' : 'Preview' }}
+          </button>
+        </div>
+
+        <p class="migrate-status" *ngIf="schedulingStatus">{{ schedulingStatus }}</p>
+
+        <div class="migrate-table-wrap" *ngIf="migrationPreview?.length">
+          <table class="migrate-table">
+            <thead>
+              <tr>
+                <th>Package</th>
+                <th class="num">Left</th>
+                <th class="num">Upcoming now</th>
+                <th class="num">Upcoming after</th>
+                <th>Last session</th>
+                <th class="num">Sessions to create</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let m of migrationPreview" [class.changed]="m.futureFromCalendar !== m.futureAfter">
+                <td><strong>{{ m.packageName }}</strong><span class="migrate-clients">{{ m.clients }}</span></td>
+                <td class="num">{{ m.remaining }}</td>
+                <td class="num">{{ m.futureFromCalendar }}</td>
+                <td class="num">{{ m.futureAfter }}</td>
+                <td>{{ m.oldEnd || '—' }}<ng-container *ngIf="m.newEnd && m.newEnd !== m.oldEnd"> → <strong>{{ m.newEnd }}</strong></ng-container></td>
+                <td class="num">{{ m.toCreate.length }}</td>
+                <td class="migrate-note">{{ m.note || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="migrate-actions" *ngIf="migrationPreview?.length">
+          <span class="migrate-total">{{ migrationSessionCount }} sessions across {{ migrationPreview?.length }} packages</span>
+          <button class="migrate-btn" [disabled]="schedulingBusy" (click)="applyMigration()">Create sessions</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </ion-content>

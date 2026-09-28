@@ -187,7 +187,7 @@ export class SchedulePage implements OnInit, ViewWillEnter {
       // After the sweep, so its new no-shows are counted: push out (or pull
       // in) any package end date that no longer leaves room for exactly the
       // sessions still owed. Patches this.packages in place.
-      await this.firebase.reprojectPackageEnds(this.packages, this.overrides);
+      await this.firebase.reprojectPackageEnds(this.packages.filter(p => !p.bookedSessions), this.overrides);
     } catch (err) {
       console.error('Schedule: failed to load schedule data', err);
     }
@@ -503,13 +503,18 @@ export class SchedulePage implements OnInit, ViewWillEnter {
     }
     this.reschedBusy = true;
     try {
-      await this.firebase.setSessionOverride({
-        id: entry.overrideId,
-        packageId: entry.packageId,
-        originalDate: entry.originalDateKey,
-        newDate: this.reschedDate,
-        newTime: this.reschedTime || ''
-      });
+      if (entry.sessionId) {
+        // Stored sessions: the session itself moves; nothing else to track.
+        await this.firebase.moveBookedSession(entry.sessionId, this.reschedDate, this.reschedTime || '');
+      } else {
+        await this.firebase.setSessionOverride({
+          id: entry.overrideId,
+          packageId: entry.packageId,
+          originalDate: entry.originalDateKey,
+          newDate: this.reschedDate,
+          newTime: this.reschedTime || ''
+        });
+      }
       this.closeSession();
       await this.loadSchedule(false);
       await this.presentToast('Session rescheduled');
@@ -524,10 +529,14 @@ export class SchedulePage implements OnInit, ViewWillEnter {
   // Restore a rescheduled occurrence back to its original recurring slot.
   async revertReschedule() {
     const entry = this.selectedEntry;
-    if (!entry || !entry.overrideId || this.reschedBusy) return;
+    if (!entry || (!entry.overrideId && !entry.sessionId) || this.reschedBusy) return;
     this.reschedBusy = true;
     try {
-      await this.firebase.deleteSessionOverride(entry.overrideId);
+      if (entry.sessionId) {
+        await this.firebase.moveBookedSession(entry.sessionId, entry.originalDateKey, entry.originalTime);
+      } else {
+        await this.firebase.deleteSessionOverride(entry.overrideId!);
+      }
       this.closeSession();
       await this.loadSchedule(false);
       await this.presentToast('Reschedule reverted');

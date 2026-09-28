@@ -1,4 +1,4 @@
-import type { PackageRecord, SessionOverride, SingleSession } from './firebase.service';
+import type { PackageRecord, SessionOverride, SingleSession, BookedSession } from './firebase.service';
 
 // A package with NO clientPayments at all isn't being tracked through
 // online payment — that's a coach scheduling someone by hand and
@@ -51,6 +51,7 @@ export interface ScheduleEntry {
   overrideId?: string;
   isSingle?: boolean;       // true for a one-off SingleSession, not a package occurrence
   singleSessionId?: string; // the SingleSession doc id, when isSingle
+  sessionId?: string;       // the stored BookedSession doc id, in stored-sessions mode
   trainerId?: string;       // which trainer runs it; '' / undefined = unassigned
 }
 
@@ -250,8 +251,36 @@ export function generateScheduleForRange(
   const entries: ScheduleEntry[] = [];
   const seen = new Set<string>();
 
+  // 0) Packages on stored sessions: their booked sessions ARE the schedule —
+  // no weekly formula, no overrides, no end-date cutoff.
+  for (const pkg of active) {
+    if (!pkg.bookedSessions) continue;
+    for (const bs of pkg.bookedSessions) {
+      if (bs.status !== 'booked' || !inRange(bs.date)) continue;
+      const date = parseLocalDate(bs.date);
+      if (!date) continue;
+      entries.push({
+        date,
+        dateKey: bs.date,
+        time: bs.time || '',
+        packageId: pkg.id || pkg.packageId,
+        packageName: pkg.packageName,
+        sessionType: pkg.sessionType,
+        durationMinutes: pkg.sessionDurationMinutes || 60,
+        clientNames: pkg.linkedClientNames || [],
+        clientIds: pkg.linkedClientIds || [],
+        originalDateKey: bs.originalDate || bs.date,
+        originalTime: bs.originalTime || '',
+        rescheduled: bs.date !== (bs.originalDate || bs.date) || (bs.time || '') !== (bs.originalTime || ''),
+        sessionId: bs.id,
+        trainerId: pkg.trainerId || ''
+      });
+    }
+  }
+
   // 1) Walk recurring occurrences over the range, applying any override.
   for (const pkg of active) {
+    if (pkg.bookedSessions) continue;
     const pkgStart = parseLocalDate(pkg.purchaseDate || undefined);
     const pkgEnd = parseLocalDate(pkg.expirationDate || undefined);
     const days = new Set(pkg.daysOfWeek);
@@ -276,7 +305,7 @@ export function generateScheduleForRange(
     const key = overrideKey(o.packageId, o.originalDate);
     if (seen.has(key)) continue;            // already handled above
     const pkg = pkgById.get(o.packageId);
-    if (!pkg) continue;
+    if (!pkg || pkg.bookedSessions) continue;
     const origDate = parseLocalDate(o.originalDate);
     if (!origDate) continue;
     entries.push(buildEntry(pkg, origDate));
@@ -310,6 +339,173 @@ export function generateScheduleForRange(
   return entries.sort((a, b) =>
     a.dateKey.localeCompare(b.dateKey) || (a.time || '99').localeCompare(b.time || '99')
   );
+}
+
+// ---------------------------------------------------------------------
+// Stored sessions
+//
+// How dedicated booking apps (Mindbody, Acuity, Glofox, Pike13) run class
+// packs: a package is credits, every session is a real booking, and the
+// system keeps the bookings and the credits in step — rather than deriving
+// the calendar from a start date and a formula, where any gap between
+// "sessions left" and "dates left" strands a session.
+// ---------------------------------------------------------------------
+
+// Packages that run on a weekly pattern and can hold stored sessions. Per-
+// session packs have no pattern; daily group programs use every scheduled
+// day as a credit by design — both keep their existing rules.
+export function usesStoredSessions(pkg: PackageRecord): boolean {
+  return !pkg.perSessionPack && !pkg.dailyGroupProgram && (pkg.daysOfWeek?.length ?? 0) > 0 && (pkg.totalSessions ?? 0) > 0;
+}
+
+export type NewSession = Omit<BookedSession, 'id'>;
+
+export interface TopUpPlan {
+  create: NewSession[];       // sessions to add at the end of the pattern
+  cancel: { id: string; reason: string }[]; // extras beyond credits left
+  remaining: number;          // credits left (from attendance)
+  futureBooked: number;       // future sessions after the plan is applied
+  lastDate: string;           // last booked session after the plan
+}
+
+// Keeps a package's future bookings equal to its credits left.
+//
+// Credits left = total − distinct dates that used a session (same count as
+// sessionsRemaining). "Future" = booked sessions from today on that don't
+// already have attendance on them. Too few → book the next open weekly
+// slots after the last session (makeups for excused/unrecorded ones land
+// here automatically). Too many → cancel the latest extras. Past sessions
+// are never touched: the no-show sweep and the coach own those.
+export function planTopUp(
+  pkg: PackageRecord,
+  sessions: BookedSession[],
+  marks: AttendanceMark[],
+  today: Date = new Date(),
+  source: BookedSession['source'] = 'topup'
+): TopUpPlan {
+  const total = pkg.totalSessions ?? 0;
+  const used = new Set(marks.filter(m => m.decremented).map(m => m.date));
+  const marked = new Set(marks.map(m => m.date));
+  const remaining = Math.max(0, total - used.size);
+  const todayKey = toDateKey(dateOnly(today));
+  const now = new Date().toISOString();
+
+  const live = sessions.filter(s => s.status === 'booked');
+  const future = live
+    .filter(s => s.date >= todayKey && !marked.has(s.date))
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
+
+  const plan: TopUpPlan = { create: [], cancel: [], remaining, futureBooked: future.length, lastDate: '' };
+
+  if (future.length > remaining) {
+    for (const s of future.slice(remaining)) {
+      if (s.id) plan.cancel.push({ id: s.id, reason: 'over-credits' });
+    }
+    plan.futureBooked = remaining;
+  } else if (future.length < remaining && usesStoredSessions(pkg)) {
+    const days = new Set(pkg.daysOfWeek || []);
+    const taken = new Set(live.map(s => s.originalDate));
+    const start = parseLocalDate(pkg.purchaseDate);
+    const lastLive = live.map(s => s.originalDate).sort().pop();
+    // Start from the day after the last booked slot, but never in the past
+    // and never before the package starts.
+    let d = dateOnly(today);
+    const afterLast = lastLive ? addDays(parseLocalDate(lastLive)!, 1) : null;
+    if (afterLast && afterLast > d) d = afterLast;
+    if (start && start > d) d = dateOnly(start);
+    let need = remaining - future.length;
+    for (let guard = 0; need > 0 && guard < 3000; d = addDays(d, 1), guard++) {
+      const label = DAY_LABELS[d.getDay()];
+      if (!days.has(label)) continue;
+      const key = toDateKey(d);
+      if (taken.has(key)) continue;
+      const time = pkg.dayTimes?.[label] || '';
+      plan.create.push({
+        packageId: pkg.id || pkg.packageId,
+        date: key, time, originalDate: key, originalTime: time,
+        status: 'booked', source, createdAt: now, updatedAt: now
+      });
+      taken.add(key);
+      need--;
+    }
+    plan.futureBooked = remaining - need;
+  }
+
+  const cancelled = new Set(plan.cancel.map(c => c.id));
+  plan.lastDate = [...live.filter(s => !s.id || !cancelled.has(s.id)).map(s => s.date), ...plan.create.map(s => s.date)]
+    .sort().pop() || '';
+  return plan;
+}
+
+export interface MigrationPlan {
+  packageId: string;
+  packageName: string;
+  clients: string;
+  total: number;
+  remaining: number;           // credits left from attendance
+  pastSessions: number;        // copied from the current calendar
+  futureFromCalendar: number;  // future dates the current calendar shows
+  toCreate: NewSession[];      // everything the migration would write
+  futureAfter: number;         // future sessions after migration (= remaining)
+  oldEnd: string;
+  newEnd: string;
+  note: string;                // why the numbers moved, if they did
+}
+
+// What moving one package onto stored sessions would write: every session
+// the current calendar shows for it (past and future, reschedules applied),
+// then the top-up so future bookings match credits left. Pure — the caller
+// shows it as a preview and writes toCreate only when the coach confirms.
+export function planMigration(
+  pkg: PackageRecord,
+  overrides: SessionOverride[],
+  marks: AttendanceMark[],
+  today: Date = new Date()
+): MigrationPlan {
+  const todayKey = toDateKey(dateOnly(today));
+  const start = parseLocalDate(pkg.purchaseDate) || dateOnly(today);
+  const endStored = parseLocalDate(pkg.expirationDate);
+  const end = endStored && endStored > dateOnly(today) ? endStored : dateOnly(today);
+  const formulaPkg: PackageRecord = { ...pkg, bookedSessions: undefined, status: 'active' };
+  const entries = generateScheduleForRange([formulaPkg], start, addDays(end, 0), overrides, [], ['active'])
+    .filter(e => !e.isSingle);
+
+  const now = new Date().toISOString();
+  const fromCalendar: NewSession[] = entries.map(e => ({
+    packageId: pkg.id || pkg.packageId,
+    date: e.dateKey, time: e.time, originalDate: e.originalDateKey, originalTime: e.originalTime,
+    status: 'booked', source: 'migration', createdAt: now, updatedAt: now
+  }));
+
+  // Top up against the copied calendar; extras it would cancel are simply
+  // not written in the first place.
+  const virtual: BookedSession[] = fromCalendar.map((s, i) => ({ ...s, id: `v${i}` }));
+  const plan = planTopUp(pkg, virtual, marks, today, 'makeup');
+  const drop = new Set(plan.cancel.map(c => c.id));
+  const kept = virtual.filter(s => !drop.has(s.id!)).map(({ id, ...rest }) => rest);
+  const toCreate = [...kept, ...plan.create];
+
+  // Same definition planTopUp uses: upcoming and not already attended/excused.
+  const markedDates = new Set(marks.map(m => m.date));
+  const futureFromCalendar = fromCalendar.filter(s => s.date >= todayKey && !markedDates.has(s.date)).length;
+  const notes: string[] = [];
+  if (plan.create.length) notes.push(`${plan.create.length} owed session${plan.create.length === 1 ? '' : 's'} had no date — booked on the next open slot${plan.create.length === 1 ? '' : 's'}`);
+  if (drop.size) notes.push(`${drop.size} future date${drop.size === 1 ? '' : 's'} beyond credits left not booked`);
+
+  return {
+    packageId: pkg.id || pkg.packageId,
+    packageName: pkg.packageName,
+    clients: (pkg.linkedClientNames || []).join(', '),
+    total: pkg.totalSessions ?? 0,
+    remaining: plan.remaining,
+    pastSessions: fromCalendar.length - futureFromCalendar,
+    futureFromCalendar,
+    toCreate,
+    futureAfter: plan.futureBooked,
+    oldEnd: (pkg.expirationDate || '').slice(0, 10),
+    newEnd: plan.lastDate,
+    note: notes.join('; ')
+  };
 }
 
 export function formatTime12h(time: string): string {

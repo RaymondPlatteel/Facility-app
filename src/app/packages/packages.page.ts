@@ -21,7 +21,7 @@ import { arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutli
 import { Router } from '@angular/router';
 import { FirebaseService, ClientProfile, PackageRecord, ClientPayment, SessionOverride, localDateString } from '../services/firebase.service';
 import { ToastController } from '@ionic/angular/standalone';
-import { generateScheduleForRange, startOfWeek, addDays, countScheduledOccurrences, projectPackageEnd } from '../services/schedule.util';
+import { generateScheduleForRange, startOfWeek, addDays, countScheduledOccurrences, projectPackageEnd, usesStoredSessions, planMigration } from '../services/schedule.util';
 import { TRAINERS } from '../services/auth.service';
 import { TopBarActionService } from '../services/top-bar-action.service';
 import html2canvas from 'html2canvas';
@@ -340,10 +340,15 @@ export class PackagesPage implements OnInit, OnDestroy {
       const beforeExpiration = p.expirationDate;
       const beforeSkips = (p.skipDates || []).join();
       this.recalcRow(p, used, excused);
+      if (p.id) this.patternSig.set(p.id, this.patternSignature(p));
+      if (p.id && p.purchaseDate) this.savedStart.set(p.id, p.purchaseDate);
+      // Stored sessions own their end date (the last booked session) —
+      // neither projection below applies to them.
+      if (p.bookedSessions) p.expirationDate = beforeExpiration;
       // Weekly packages: the end date comes from attendance (see
       // projectPackageEnd), so an owed session always has a calendar slot.
       // recalcRow's slot-count projection only stands for the rest.
-      const projected = p.id ? projectPackageEnd({ ...p, expirationDate: beforeExpiration }, marksByPackage.get(p.id) || [], overrides) : null;
+      const projected = p.id && !p.bookedSessions ? projectPackageEnd({ ...p, expirationDate: beforeExpiration }, marksByPackage.get(p.id) || [], overrides) : null;
       if (projected) {
         p.expirationDate = projected.expirationDate;
         p.skipDates = projected.skipDates;
@@ -616,9 +621,10 @@ export class PackagesPage implements OnInit, OnDestroy {
     const sessionsUsed = pkg.dailyGroupProgram ? countScheduledOccurrences(pkg) : checkedInCount;
     const beforeExpiration = pkg.expirationDate;
     this.recalcRow(pkg, sessionsUsed, excusedCount);
+    if (pkg.bookedSessions) pkg.expirationDate = beforeExpiration;
     // Same attendance-driven end date as loadData, so editing a weekly
     // package (days, duration, start date) can't strand an owed session.
-    if (pkg.id) {
+    if (pkg.id && !pkg.bookedSessions) {
       const [marks, overrides] = await Promise.all([
         this.firebase.getAttendanceMarks(pkg.id),
         this.firebase.listSessionOverrides()
@@ -683,6 +689,7 @@ export class PackagesPage implements OnInit, OnDestroy {
     // which is exactly the "have to click it twice" bug this fixes.
     pkg.id = pkg.id || savedId;
     pkg.linkedClientNames = names;
+    await this.syncStoredSessions(pkg);
     this.buildLegend();
     this.buildCalendar();
     // No explicit calendar sync here: FirebaseService emits on every
@@ -690,6 +697,69 @@ export class PackagesPage implements OnInit, OnDestroy {
     // (and every other package write in the app) is covered automatically.
     const toast = await this.toastController.create({ message: toastMessage, duration: 1500, position: 'bottom', color: 'success' });
     await toast.present();
+  }
+
+  // The start date saves on change like every other cell, but on an
+  // existing package it asks first: it moves the whole package, and a stray
+  // flick of the iPad's date wheel once turned The Dads' 8/19 into 9/19
+  // with no sign anything had happened.
+  private savedStart = new Map<string, string>();
+
+  async onStartDateChange(pkg: PackageRecord) {
+    const before = pkg.id ? this.savedStart.get(pkg.id) : undefined;
+    if (pkg.id && before && pkg.purchaseDate !== before) {
+      const ok = confirm(`Change the start date of "${pkg.packageName}" from ${before} to ${pkg.purchaseDate}?`);
+      if (!ok) {
+        pkg.purchaseDate = before;
+        return;
+      }
+    }
+    await this.saveRow(pkg);
+    if (pkg.id && pkg.purchaseDate) this.savedStart.set(pkg.id, pkg.purchaseDate);
+  }
+
+  // ---------- Stored sessions ----------
+  // Last-saved weekly pattern per package, so a save that only renames a
+  // package or edits a payment doesn't re-book anyone's upcoming sessions.
+  private patternSig = new Map<string, string>();
+
+  private patternSignature(pkg: PackageRecord): string {
+    const times = Object.entries(pkg.dayTimes || {}).sort().map(([d, t]) => `${d}${t}`).join(',');
+    return [[...(pkg.daysOfWeek || [])].sort().join(','), times, pkg.purchaseDate || '', pkg.totalSessions ?? 0].join('|');
+  }
+
+  // Once the facility runs on stored sessions, every save keeps this
+  // package's bookings right: a changed weekly pattern re-books what's still
+  // upcoming, any other save just tops up to credits left, and a package
+  // with no sessions yet (new, renewed, duplicated) gets them booked.
+  private async syncStoredSessions(pkg: PackageRecord) {
+    if (!pkg.id || !usesStoredSessions(pkg) || pkg.status !== 'active') return;
+    if (await this.firebase.getSchedulingMode() !== 'sessions') return;
+    const sig = this.patternSignature(pkg);
+    const changed = this.patternSig.get(pkg.id) !== sig;
+    this.patternSig.set(pkg.id, sig);
+    try {
+      const existing = await this.firebase.listBookedSessionsFor(pkg.id);
+      if (!existing.length) {
+        const [overrides, marks] = await Promise.all([
+          this.firebase.listSessionOverrides(),
+          this.firebase.getAttendanceMarks(pkg.id)
+        ]);
+        await this.firebase.applyStoredSessionsMigration([planMigration(pkg, overrides, marks)]);
+      } else if (changed) {
+        await this.firebase.rebookFuture(pkg);
+      } else {
+        await this.firebase.topUpPackage(pkg, existing);
+      }
+      const booked = await this.firebase.listBookedSessionsFor(pkg.id);
+      pkg.bookedSessions = booked.length ? booked : undefined;
+      const last = booked.filter(b => b.status === 'booked').map(b => b.date).sort().pop();
+      if (last) pkg.expirationDate = last;
+      this.buildLegend();
+      this.buildCalendar();
+    } catch (err) {
+      console.error('Packages: failed to sync stored sessions', err);
+    }
   }
 
   // ---------- Duplicate / Renew ----------

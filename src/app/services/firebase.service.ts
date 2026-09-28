@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit } from 'firebase/firestore';
-import { projectPackageEnd, AttendanceMark } from './schedule.util';
+import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationPlan, usesStoredSessions } from './schedule.util';
 import { environment } from '../../environments/environment';
 import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank } from './omni.util';
 import type { TestOverrides, ResilienceInputs } from './omni.util';
@@ -83,6 +83,28 @@ export type AttendanceStatus = 'present' | 'excused' | 'unexcused';
 
 // A per-occurrence reschedule of a recurring session. Identified by the package
 // plus the ORIGINAL recurring date, so editing a package never loses overrides.
+// A stored, bookable session — the schedule's source of truth once the
+// facility switches to stored sessions (appSettings/scheduling.mode ===
+// 'sessions'). One doc per package occurrence. Attendance still lives in
+// checkins; a session is never deleted, only marked 'cancelled' (with a
+// reason) when it's no longer needed, so history can't be lost by an edit.
+export interface BookedSession {
+  id?: string;
+  packageId: string;
+  date: string;          // YYYY-MM-DD it happens on (after any move)
+  time: string;          // 'HH:mm' or ''
+  originalDate: string;  // the weekly slot it was booked for
+  originalTime: string;
+  status: 'booked' | 'cancelled';
+  // migration: created from the old formula schedule; topup: added to keep
+  // future sessions equal to credits left; makeup: added because an
+  // earlier session didn't use a credit (excused / never recorded)
+  source: 'migration' | 'topup' | 'makeup' | 'manual';
+  cancelledReason?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface SessionOverride {
   id?: string;
   packageId: string;
@@ -387,6 +409,10 @@ export interface PackageRecord {
   // than showing (and no-show-charging) them once the end date is pushed
   // out for sessions still owed. Maintained by projectPackageEnd.
   skipDates?: string[];
+  // Runtime only — never saved on the package doc. Attached by listPackages
+  // when the facility is on stored sessions and this package has any, so
+  // generateScheduleForRange reads them instead of the weekly formula.
+  bookedSessions?: BookedSession[];
   status: 'active' | 'completed' | 'prospect';
   // Set by the payments Worker when an athlete starts an auto-renewing
   // monthly membership; cleared (and subscriptionCanceledAt stamped) when
@@ -907,7 +933,10 @@ export class FirebaseService {
   }
 
   async listPackages(): Promise<PackageRecord[]> {
-    const snap = await getDocs(this.packagesCollection());
+    const [snap, sessionsByPackage] = await Promise.all([
+      getDocs(this.packagesCollection()),
+      this.sessionsByPackageIfEnabled()
+    ]);
     const packages: PackageRecord[] = [];
     for (const d of snap.docs) {
       const pkg = { id: d.id, ...(d.data() as any) } as PackageRecord;
@@ -939,6 +968,10 @@ export class FirebaseService {
       if (typeof pkg.sessionDurationMinutes !== 'number' || !isFinite(pkg.sessionDurationMinutes)) {
         pkg.sessionDurationMinutes = 60;
       }
+      // Stored sessions (once the facility has switched): the schedule
+      // reads these instead of the weekly formula.
+      const booked = sessionsByPackage?.get(d.id);
+      if (booked?.length) pkg.bookedSessions = booked;
       // A prospect can hold a tentative day/time without becoming a
       // confirmed, billing client — this used to force-promote any
       // prospect with days assigned to 'active' on every single read,
@@ -958,7 +991,7 @@ export class FirebaseService {
       // let one silently-failed field kill every other change (like status).
       const clean: Record<string, unknown> = { updatedAt: now };
       for (const [key, value] of Object.entries(pkg)) {
-        if (value !== undefined) clean[key] = value;
+        if (value !== undefined && key !== 'bookedSessions') clean[key] = value;
       }
       await updateDoc(ref, clean as any);
       this.emitScheduleDataChanged();
@@ -1148,6 +1181,18 @@ export class FirebaseService {
     const update: Record<string, unknown> = { sessionsRemaining: remaining, updatedAt: new Date().toISOString() };
 
     const pkg = { id: packageId, ...(snap.data() as any), sessionsRemaining: remaining } as PackageRecord;
+
+    // Stored sessions: keep future bookings equal to credits left instead
+    // of re-projecting a formula end date.
+    if (await this.getSchedulingMode() === 'sessions') {
+      const sessions = await this.listBookedSessionsFor(packageId);
+      if (sessions.length) {
+        await updateDoc(ref, update as any);
+        await this.topUpPackage(pkg, sessions);
+        return remaining;
+      }
+    }
+
     const [marks, overrides] = await Promise.all([this.getAttendanceMarks(packageId), this.listSessionOverrides()]);
     const projected = projectPackageEnd(pkg, marks, overrides);
     if (projected) {
@@ -1495,6 +1540,14 @@ export class FirebaseService {
           dayTimes: req.requestedDayTimes || {},
           updatedAt: new Date().toISOString()
         } as any);
+        // Stored sessions: re-book what's still upcoming on the new days.
+        if (await this.getSchedulingMode() === 'sessions') {
+          const snap = await getDoc(doc(this.db, 'packages', req.packageId));
+          const sessions = await this.listBookedSessionsFor(req.packageId);
+          if (snap.exists() && sessions.length) {
+            await this.rebookFuture({ id: snap.id, ...(snap.data() as any) } as PackageRecord, 'athlete-schedule-change');
+          }
+        }
       } else if (req.isSingle && req.singleSessionId) {
         await updateDoc(doc(this.db, 'singleSessions', req.singleSessionId), {
           date: req.requestedDateKey,
@@ -1502,12 +1555,23 @@ export class FirebaseService {
           updatedAt: new Date().toISOString()
         } as any);
       } else if (req.packageId) {
-        await this.setSessionOverride({
-          packageId: req.packageId,
-          originalDate: req.originalDateKey,
-          newDate: req.requestedDateKey,
-          newTime: req.requestedTime || ''
-        });
+        // Stored sessions: move the booked session itself. The athlete app
+        // sends the slot's originalDateKey, so match on that (or the date
+        // it currently sits on, for one that was already moved once).
+        const sessions = await this.getSchedulingMode() === 'sessions'
+          ? await this.listBookedSessionsFor(req.packageId) : [];
+        const target = sessions.find(bs => bs.status === 'booked' &&
+          (bs.originalDate === req.originalDateKey || bs.date === req.originalDateKey));
+        if (target?.id) {
+          await this.moveBookedSession(target.id, req.requestedDateKey, req.requestedTime || '');
+        } else {
+          await this.setSessionOverride({
+            packageId: req.packageId,
+            originalDate: req.originalDateKey,
+            newDate: req.requestedDateKey,
+            newTime: req.requestedTime || ''
+          });
+        }
       }
     }
     await updateDoc(doc(this.db, 'swapRequests', req.id), {
@@ -2839,5 +2903,166 @@ export class FirebaseService {
     return snap.docs
       .map(d => d.data() as DailyQuestCompletion)
       .sort((a, b) => (a.completedAt || '').localeCompare(b.completedAt || ''));
+  }
+
+  // ---------- Stored sessions (bookedSessions) ----------
+  // See BookedSession and schedule.util's planTopUp / planMigration. Nothing
+  // here deletes a document: sessions that stop being needed are marked
+  // 'cancelled' with a reason, and packages are only ever updated.
+  private bookedSessionsCollection() { return collection(this.db, 'bookedSessions'); }
+  private schedulingModeCache: Promise<'formula' | 'sessions'> | null = null;
+
+  // 'formula' (the original weekly-pattern calendar) until the coach switches
+  // the facility over in Settings. Cached per app run; setSchedulingMode
+  // refreshes it.
+  getSchedulingMode(): Promise<'formula' | 'sessions'> {
+    if (!this.schedulingModeCache) {
+      this.schedulingModeCache = getDoc(doc(this.db, 'appSettings', 'scheduling'))
+        .then(snap => (snap.exists() && snap.data()['mode'] === 'sessions' ? 'sessions' : 'formula') as 'formula' | 'sessions')
+        .catch(() => 'formula' as const);
+    }
+    return this.schedulingModeCache;
+  }
+
+  async setSchedulingMode(mode: 'formula' | 'sessions'): Promise<void> {
+    await setDoc(doc(this.db, 'appSettings', 'scheduling'), { mode, updatedAt: new Date().toISOString() }, { merge: true });
+    this.schedulingModeCache = Promise.resolve(mode);
+    this.emitScheduleDataChanged();
+  }
+
+  private mapBookedSession(id: string, data: any): BookedSession {
+    return {
+      id,
+      packageId: data['packageId'],
+      date: data['date'],
+      time: data['time'] ?? '',
+      originalDate: data['originalDate'] ?? data['date'],
+      originalTime: data['originalTime'] ?? data['time'] ?? '',
+      status: data['status'] === 'cancelled' ? 'cancelled' : 'booked',
+      source: data['source'] ?? 'manual',
+      cancelledReason: data['cancelledReason'],
+      createdAt: data['createdAt'],
+      updatedAt: data['updatedAt']
+    };
+  }
+
+  async listBookedSessions(): Promise<BookedSession[]> {
+    const snap = await getDocs(this.bookedSessionsCollection());
+    return snap.docs.map(d => this.mapBookedSession(d.id, d.data()));
+  }
+
+  async listBookedSessionsFor(packageId: string): Promise<BookedSession[]> {
+    const snap = await getDocs(query(this.bookedSessionsCollection(), where('packageId', '==', packageId)));
+    return snap.docs.map(d => this.mapBookedSession(d.id, d.data()));
+  }
+
+  // Grouped by package, or null while the facility is still on the formula.
+  private async sessionsByPackageIfEnabled(): Promise<Map<string, BookedSession[]> | null> {
+    if (await this.getSchedulingMode() !== 'sessions') return null;
+    const byPackage = new Map<string, BookedSession[]>();
+    for (const bs of await this.listBookedSessions()) {
+      if (!byPackage.has(bs.packageId)) byPackage.set(bs.packageId, []);
+      byPackage.get(bs.packageId)!.push(bs);
+    }
+    return byPackage;
+  }
+
+  private async writeNewSessions(sessions: Omit<BookedSession, 'id'>[]): Promise<void> {
+    for (let i = 0; i < sessions.length; i += 400) {
+      const batch = writeBatch(this.db);
+      for (const s of sessions.slice(i, i + 400)) {
+        const clean: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(s)) if (v !== undefined) clean[k] = v;
+        batch.set(doc(this.bookedSessionsCollection()), clean);
+      }
+      await batch.commit();
+    }
+  }
+
+  async cancelBookedSession(id: string, reason: string): Promise<void> {
+    await updateDoc(doc(this.db, 'bookedSessions', id), {
+      status: 'cancelled', cancelledReason: reason, updatedAt: new Date().toISOString()
+    });
+    this.emitScheduleDataChanged();
+  }
+
+  // Reschedule one session. Pass the session's own originalDate/Time back
+  // to undo a move.
+  async moveBookedSession(id: string, date: string, time: string): Promise<void> {
+    await updateDoc(doc(this.db, 'bookedSessions', id), { date, time, updatedAt: new Date().toISOString() });
+    this.emitScheduleDataChanged();
+  }
+
+  // Applies planTopUp for one package and keeps its expirationDate equal to
+  // the last booked session, so everything that reads the end date (kiosk,
+  // renewals, Needs Attention) stays right.
+  async topUpPackage(pkg: PackageRecord, sessions?: BookedSession[]): Promise<void> {
+    if (!pkg.id) return;
+    const [booked, marks] = await Promise.all([
+      sessions ? Promise.resolve(sessions) : this.listBookedSessionsFor(pkg.id),
+      this.getAttendanceMarks(pkg.id)
+    ]);
+    const plan = planTopUp(pkg, booked, marks);
+    if (plan.create.length) await this.writeNewSessions(plan.create);
+    for (const c of plan.cancel) {
+      await updateDoc(doc(this.db, 'bookedSessions', c.id), {
+        status: 'cancelled', cancelledReason: c.reason, updatedAt: new Date().toISOString()
+      });
+    }
+    if (plan.lastDate && plan.lastDate !== (pkg.expirationDate || '').slice(0, 10)) {
+      await updateDoc(doc(this.db, 'packages', pkg.id), { expirationDate: plan.lastDate, updatedAt: new Date().toISOString() });
+    }
+    if (plan.create.length || plan.cancel.length) this.emitScheduleDataChanged();
+  }
+
+  // The package's weekly pattern changed (days, times, start date): future
+  // bookings that haven't happened yet are cancelled (reason recorded, never
+  // deleted) and re-booked on the new pattern. Past sessions and anything
+  // with attendance on it are left exactly as they are.
+  async rebookFuture(pkg: PackageRecord, reason = 'schedule-change'): Promise<void> {
+    if (!pkg.id) return;
+    const [booked, marks] = await Promise.all([this.listBookedSessionsFor(pkg.id), this.getAttendanceMarks(pkg.id)]);
+    const marked = new Set(marks.map(m => m.date));
+    const todayKey = localDateString();
+    const now = new Date().toISOString();
+    const keep: BookedSession[] = [];
+    for (const bs of booked) {
+      if (bs.status === 'booked' && bs.date >= todayKey && !marked.has(bs.date) && bs.id) {
+        await updateDoc(doc(this.db, 'bookedSessions', bs.id), { status: 'cancelled', cancelledReason: reason, updatedAt: now });
+      } else {
+        keep.push(bs);
+      }
+    }
+    await this.topUpPackage(pkg, keep);
+    this.emitScheduleDataChanged();
+  }
+
+  // Preview of moving every eligible package onto stored sessions. Packages
+  // that already have sessions are left out, so this is safe to run again.
+  async planStoredSessionsMigration(): Promise<MigrationPlan[]> {
+    const [packages, overrides, marks, existing] = await Promise.all([
+      getDocs(this.packagesCollection()).then(snap => snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }) as PackageRecord)),
+      this.listSessionOverrides(),
+      this.getAttendanceMarksByPackage(),
+      this.listBookedSessions()
+    ]);
+    const hasSessions = new Set(existing.map(s => s.packageId));
+    return packages
+      .filter(p => p.status === 'active' && p.id && !hasSessions.has(p.id) && usesStoredSessions(p))
+      .map(p => planMigration(p, overrides, marks.get(p.id!) || []))
+      .sort((a, b) => a.packageName.localeCompare(b.packageName));
+  }
+
+  // Writes the previewed sessions. Only creates documents — nothing on the
+  // packages, overrides or attendance is changed or removed.
+  async applyStoredSessionsMigration(plans: MigrationPlan[]): Promise<number> {
+    const existing = new Set((await this.listBookedSessions()).map(s => s.packageId));
+    let written = 0;
+    for (const plan of plans) {
+      if (existing.has(plan.packageId) || !plan.toCreate.length) continue;
+      await this.writeNewSessions(plan.toCreate);
+      written += plan.toCreate.length;
+    }
+    return written;
   }
 }

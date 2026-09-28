@@ -157,7 +157,7 @@
               {{ pkg.sessionsRemaining ?? 0 }}
             </td>
             <td [style.width.px]="columnWidths.purchaseDate">
-              <ion-input class="table-input" type="date" [(ngModel)]="pkg.purchaseDate" (ionChange)="saveRow(pkg)"></ion-input>
+              <ion-input class="table-input" type="date" [(ngModel)]="pkg.purchaseDate" (ionChange)="onStartDateChange(pkg)"></ion-input>
             </td>
             <td [style.width.px]="columnWidths.finalSession">
               <ion-input class="table-input" type="date" [(ngModel)]="pkg.expirationDate" readonly="true"></ion-input>
