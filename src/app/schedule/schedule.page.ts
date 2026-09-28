@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { AfterViewInit, Component, NgZone, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
@@ -34,7 +34,8 @@ import {
   addDays,
   formatTime12h
 } from '../services/schedule.util';
-import { PAYMENTS_WORKER_URL, COACH_API_SECRET, paymentsConfigured } from '../services/payments.config';
+import { postponeBillingForExcuse } from '../services/payments.config';
+import { SessionDrag } from '../services/session-drag';
 
 type ViewMode = 'week' | 'month';
 
@@ -61,7 +62,8 @@ interface SessionClient {
   standalone: true,
   imports: [IonContent, IonIcon, IonModal, CommonModule, FormsModule, RouterModule]
 })
-export class SchedulePage implements OnInit, ViewWillEnter {
+export class SchedulePage implements OnInit, AfterViewInit, OnDestroy, ViewWillEnter {
+  @ViewChild(IonContent) private content?: IonContent;
   loading = true;
   packages: PackageRecord[] = [];
   overrides: SessionOverride[] = [];
@@ -115,12 +117,21 @@ export class SchedulePage implements OnInit, ViewWillEnter {
   swapRequests: SwapRequest[] = [];
   swapRequestBusy = new Set<string>();
 
+  // Press-and-drag rescheduling. dropTarget is the day (or 'prev'/'next'
+  // week flip) under the finger; dropOk says whether letting go there moves it.
+  draggingEntry: ScheduleEntry | null = null;
+  dropTarget: string | null = null;
+  dropOk = false;
+  private drag = new SessionDrag();
+  private scrollEl: HTMLElement | null = null;
+
   constructor(
     private firebase: FirebaseService,
     private router: Router,
     private toastController: ToastController,
     private calendarSync: CalendarSyncService,
-    private auth: AuthService
+    private auth: AuthService,
+    private zone: NgZone
   ) {
     addIcons({
       arrowBack,
@@ -159,6 +170,14 @@ export class SchedulePage implements OnInit, ViewWillEnter {
 
   async ionViewWillEnter() {
     await this.loadSchedule(false);
+  }
+
+  ngAfterViewInit() {
+    this.content?.getScrollElement().then(el => (this.scrollEl = el)).catch(() => {});
+  }
+
+  ngOnDestroy() {
+    this.drag.cancel();
   }
 
   // Loaded once, separately from loadSchedule — the client list doesn't
@@ -503,21 +522,10 @@ export class SchedulePage implements OnInit, ViewWillEnter {
     }
     this.reschedBusy = true;
     try {
-      if (entry.sessionId) {
-        // Stored sessions: the session itself moves; nothing else to track.
-        await this.firebase.moveBookedSession(entry.sessionId, this.reschedDate, this.reschedTime || '');
-      } else {
-        await this.firebase.setSessionOverride({
-          id: entry.overrideId,
-          packageId: entry.packageId,
-          originalDate: entry.originalDateKey,
-          newDate: this.reschedDate,
-          newTime: this.reschedTime || ''
-        });
-      }
+      const undo = await this.applyMove(entry, this.reschedDate, this.reschedTime || '');
       this.closeSession();
       await this.loadSchedule(false);
-      await this.presentToast('Session rescheduled');
+      await this.presentUndoToast(`Moved to ${this.moveLabel(this.reschedDate, this.reschedTime)}`, undo);
     } catch (err) {
       console.error('Schedule: failed to reschedule', err);
       await this.presentToast('Could not reschedule', 'danger');
@@ -532,19 +540,123 @@ export class SchedulePage implements OnInit, ViewWillEnter {
     if (!entry || (!entry.overrideId && !entry.sessionId) || this.reschedBusy) return;
     this.reschedBusy = true;
     try {
-      if (entry.sessionId) {
-        await this.firebase.moveBookedSession(entry.sessionId, entry.originalDateKey, entry.originalTime);
-      } else {
-        await this.firebase.deleteSessionOverride(entry.overrideId!);
-      }
+      const undo = await this.applyMove(entry, entry.originalDateKey, entry.originalTime);
       this.closeSession();
       await this.loadSchedule(false);
-      await this.presentToast('Reschedule reverted');
+      await this.presentUndoToast('Back on its original day', undo);
     } catch (err) {
       console.error('Schedule: failed to revert reschedule', err);
       await this.presentToast('Could not revert', 'danger');
     } finally {
       this.reschedBusy = false;
+    }
+  }
+
+  // Moves one session to a new date/time and returns how to put it back
+  // (for the toast's Undo). A one-off session's own record changes; a
+  // package session goes through movePackageSession.
+  private async applyMove(entry: ScheduleEntry, date: string, time: string): Promise<() => Promise<void>> {
+    if (entry.isSingle && entry.singleSessionId) {
+      const session = this.singleSessions.find(s => s.id === entry.singleSessionId);
+      if (!session) throw new Error('One-off session not found');
+      const before = { ...session };
+      await this.firebase.saveSingleSession({ ...session, date, time });
+      return async () => { await this.firebase.saveSingleSession(before); };
+    }
+    return this.firebase.movePackageSession(entry, date, time);
+  }
+
+  // "Thu, Oct 2 · 5:00 PM"
+  private moveLabel(dateKey: string, time: string): string {
+    const t = formatTime12h(time);
+    return t ? `${this.dateKeyLabel(dateKey)} · ${t}` : this.dateKeyLabel(dateKey);
+  }
+
+  // ----- Drag to reschedule -----
+  // Hold a session card (tap-and-hold on touch, click-and-drag with a
+  // mouse) and drop it on another day; it keeps its time. Hovering the
+  // week/month arrows flips the calendar mid-drag.
+  onCardPointerDown(ev: PointerEvent, entry: ScheduleEntry) {
+    this.drag.begin(ev, {
+      zone: this.zone,
+      source: ev.currentTarget as HTMLElement,
+      scrollEl: this.scrollEl,
+      canStart: () => this.canDragEntry(entry),
+      targetAt: (x, y) => {
+        const el = document.elementFromPoint(x, y) as HTMLElement | null;
+        return el?.closest<HTMLElement>('[data-drop]')?.dataset['drop'] ?? null;
+      },
+      canDrop: key => key !== entry.dateKey && key >= localDateString(),
+      onOver: (key, ok) => {
+        this.dropTarget = key;
+        this.dropOk = ok;
+      },
+      onEnd: () => (this.draggingEntry = null),
+      onDrop: key => this.dropEntry(entry, key),
+      onFlip: dir => (dir === 'prev' ? this.prev() : this.next())
+    });
+  }
+
+  // Attendance is filed by date, so a session that already has some would
+  // leave it behind on the old day — clear it first (or use the sheet).
+  private canDragEntry(entry: ScheduleEntry): boolean {
+    const marked = this.sessionClients(entry).some(c => this.clientStatus(entry, c) !== 'none');
+    if (marked) {
+      this.presentToast('Attendance is already taken for this session — clear it to move it', 'danger');
+      return false;
+    }
+    this.draggingEntry = entry;
+    return true;
+  }
+
+  // Past days can't take a drop (they'd be auto-marked no-show), so a red
+  // outline there explains why letting go does nothing.
+  isDropBlocked(dateKey: string): boolean {
+    return !!this.draggingEntry && this.dropTarget === dateKey && !this.dropOk && dateKey !== this.draggingEntry.dateKey;
+  }
+
+  private async dropEntry(entry: ScheduleEntry, dateKey: string) {
+    this.moveLocally(entry, dateKey);
+    try {
+      const undo = await this.applyMove(entry, dateKey, entry.time);
+      this.presentUndoToast(`Moved to ${this.moveLabel(dateKey, entry.time)}`, undo);
+    } catch (err) {
+      console.error('Schedule: failed to move session', err);
+      this.presentToast('Could not move the session', 'danger');
+    }
+    await this.loadSchedule(false);
+  }
+
+  // Shows the card on its new day right away; the reload that follows the
+  // save replaces this with the real data.
+  private moveLocally(entry: ScheduleEntry, dateKey: string) {
+    const from = this.days.find(d => d.entries.includes(entry));
+    if (from) from.entries = from.entries.filter(e => e !== entry);
+    const to = this.days.find(d => d.dateKey === dateKey);
+    if (!to) return;
+    const moved: ScheduleEntry = { ...entry, dateKey, date: to.date, rescheduled: true };
+    to.entries = [...to.entries, moved].sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
+  }
+
+  private async presentUndoToast(message: string, undo: () => Promise<void>) {
+    const toast = await this.toastController.create({
+      message,
+      duration: 6000,
+      position: 'bottom',
+      color: 'success',
+      buttons: [{ text: 'Undo', handler: () => { this.runUndo(undo); } }]
+    });
+    await toast.present();
+  }
+
+  private async runUndo(undo: () => Promise<void>) {
+    try {
+      await undo();
+      await this.loadSchedule(false);
+      await this.presentToast('Move undone');
+    } catch (err) {
+      console.error('Schedule: failed to undo move', err);
+      await this.presentToast('Could not undo', 'danger');
     }
   }
 
@@ -758,28 +870,12 @@ export class SchedulePage implements OnInit, ViewWillEnter {
   }
 
   // Fire-and-forget: attendance is already saved and the coach has been
-  // told. A billing delay failing (Worker down, package not on a
-  // subscription) must never roll back or error-toast the check-in itself
-  // — the Worker no-ops quietly for non-subscription packages, which is
-  // the common case for anyone paying per-package.
+  // told. The Worker no-ops quietly for packages not on a subscription,
+  // which is the common case for anyone paying per-package.
   private postponeBillingFor(packageId: string, clientName: string): void {
-    if (!paymentsConfigured()) return;
-    fetch(`${PAYMENTS_WORKER_URL}/postpone-billing`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Coach-Secret': COACH_API_SECRET },
-      body: JSON.stringify({ packageId, sessions: 1 })
-    })
-      .then(async res => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          console.error('Schedule: postpone-billing failed', res.status, data);
-          return;
-        }
-        if (data.postponedDays) {
-          this.presentToast(`${clientName} — next charge pushed back ${Math.round(data.postponedDays * 10) / 10} days`);
-        }
-      })
-      .catch(err => console.error('Schedule: postpone-billing request failed', err));
+    postponeBillingForExcuse(packageId).then(days => {
+      if (days) this.presentToast(`${clientName} — next charge pushed back ${Math.round(days * 10) / 10} days`);
+    });
   }
 
   statusLabel(status: AttendanceStatus | 'none'): string {

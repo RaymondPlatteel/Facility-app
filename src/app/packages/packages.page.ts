@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -18,11 +18,13 @@ import {
   IonDatetime,
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline, refreshOutline } from 'ionicons/icons';
+import { arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline, refreshOutline, reorderTwoOutline, arrowUndoOutline } from 'ionicons/icons';
 import { Router } from '@angular/router';
-import { FirebaseService, ClientProfile, PackageRecord, ClientPayment, SessionOverride, localDateString, CheckIn } from '../services/firebase.service';
+import { FirebaseService, ClientProfile, PackageRecord, ClientPayment, SessionOverride, localDateString, CheckIn, AttendanceStatus } from '../services/firebase.service';
 import { ToastController } from '@ionic/angular/standalone';
-import { generateScheduleForRange, startOfWeek, addDays, countScheduledOccurrences, projectPackageEnd, usesStoredSessions, planMigration, formatTime12h } from '../services/schedule.util';
+import { generateScheduleForRange, startOfWeek, addDays, countScheduledOccurrences, projectPackageEnd, usesStoredSessions, planMigration, formatTime12h, ScheduleEntry } from '../services/schedule.util';
+import { SessionDrag } from '../services/session-drag';
+import { postponeBillingForExcuse } from '../services/payments.config';
 import { TRAINERS } from '../services/auth.service';
 import { TopBarActionService } from '../services/top-bar-action.service';
 import html2canvas from 'html2canvas';
@@ -96,6 +98,22 @@ interface CalDay {
   status: CalStatus;
   clients: { name: string; status: string }[];
   note?: string;
+  entry?: ScheduleEntry;  // the scheduled session on this date, if there is one
+  movable?: boolean;      // scheduled, with no attendance filed on it yet
+}
+
+// One client's attendance row in the selected date's editor.
+interface CalClientRow {
+  key: string;
+  id: string | null;
+  name: string;
+  status: AttendanceStatus | 'none';
+  unlinked: boolean;      // checked in that day, but with no package attached
+}
+
+function sameClient(r: CheckIn, c: { id: string | null; name: string }): boolean {
+  return (!!r.clientId && !!c.id && r.clientId === c.id) ||
+    r.clientName.trim().toLowerCase() === c.name.trim().toLowerCase();
 }
 
 const CAL_COLORS: Record<CalStatus, string> = {
@@ -231,9 +249,10 @@ export class PackagesPage implements OnInit, OnDestroy {
     private router: Router,
     private firebase: FirebaseService,
     private toastController: ToastController,
-    private topBarAction: TopBarActionService
+    private topBarAction: TopBarActionService,
+    private zone: NgZone
   ) {
-    addIcons({ arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline, refreshOutline });
+    addIcons({ arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutline, pricetagOutline, timeOutline, ellipsisVertical, chevronBackOutline, chevronForwardOutline, chevronDownOutline, alertCircle, closeOutline, downloadOutline, refreshOutline, reorderTwoOutline, arrowUndoOutline });
   }
 
   ngOnInit(): void {
@@ -244,6 +263,7 @@ export class PackagesPage implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.topBarAction.clear();
+    this.calDrag.cancel();
   }
 
   // Only worth showing in table view — a calendar has no "add a row" to
@@ -760,6 +780,10 @@ export class PackagesPage implements OnInit, OnDestroy {
   }
 
   // ---------- Per-package session calendar ----------
+  // Every date the package was scheduled or used, colored by what happened.
+  // Tapping a date opens its editor below it in the list: attendance for
+  // past dates, and moving a session that has no attendance yet — by date
+  // and time fields, or by pressing and dragging it on the calendar.
   calOpen = false;
   calLoading = false;
   calPkg: PackageRecord | null = null;
@@ -770,18 +794,54 @@ export class PackagesPage implements OnInit, OnDestroy {
   formatTime12h = formatTime12h;
   readonly calLegend = (Object.keys(CAL_LABELS) as CalStatus[]).map(status => ({ status, label: CAL_LABELS[status] }));
 
+  // Selected date's editor.
+  calEdit: { day: CalDay; canMark: boolean; canMove: boolean; clients: CalClientRow[] } | null = null;
+  calBusy = new Set<string>();
+  calMoveDate = '';
+  calMoveTime = '';
+  calMoving = false;
+  private calRecords: CheckIn[] = [];        // this package's attendance
+  private calClientRecords: CheckIn[] = [];  // its clients' check-ins, any package or none
+  private calChanged = false;
+
+  // Drag on the calendar. calDropRect is the hovered day's box, for the
+  // ring drawn over it (the day itself lives in ion-datetime's shadow DOM),
+  // relative to the modal: ion-page's `contain: layout` makes it, not the
+  // screen, the frame for anything position: fixed inside the page.
+  @ViewChild('pkgCal', { read: ElementRef }) private pkgCalEl?: ElementRef<HTMLElement>;
+  @ViewChild('pkgCalModal') private pkgCalModal?: ElementRef<HTMLElement>;
+  @ViewChild('pkgCalBody') private pkgCalBody?: ElementRef<HTMLElement>;
+  calDragDay: CalDay | null = null;
+  calDropKey: string | null = null;
+  calDropOk = false;
+  calDropRect: { left: number; top: number; width: number; height: number } | null = null;
+  private calDrag = new SessionDrag();
+
   statusLabel(status: CalStatus): string {
     return CAL_LABELS[status];
   }
 
   closePackageCalendar() {
     this.calOpen = false;
+    this.calEdit = null;
+    if (this.calChanged) {
+      this.calChanged = false;
+      this.buildCalendar();
+    }
   }
 
   onCalDayChange(ev: CustomEvent) {
     const v = ev.detail?.value;
-    if (typeof v === 'string') this.calSelected = v.slice(0, 10);
+    if (typeof v === 'string') this.selectCalDay(v.slice(0, 10));
   }
+
+  selectCalDay(dateKey: string) {
+    this.calSelected = dateKey;
+    this.syncCalEditor();
+  }
+
+  trackCalDay = (_: number, d: CalDay) => d.dateKey;
+  trackCalClient = (_: number, c: CalClientRow) => c.key;
 
   async openPackageCalendar(pkg: PackageRecord) {
     if (!pkg.id) return;
@@ -789,6 +849,18 @@ export class PackagesPage implements OnInit, OnDestroy {
     this.calOpen = true;
     this.calLoading = true;
     this.calDays = [];
+    this.calEdit = null;
+    await this.loadPackageCalendar();
+    this.calLoading = false;
+    // Open on the most recent session that's already happened.
+    const today = localDateString();
+    const past = this.calDays.filter(d => d.dateKey <= today);
+    this.selectCalDay((past[past.length - 1] || this.calDays[0])?.dateKey || today);
+  }
+
+  private async loadPackageCalendar() {
+    const pkg = this.calPkg;
+    if (!pkg?.id) return;
     try {
       const clientIds = pkg.linkedClientIds || [];
       const clientNames = pkg.linkedClientNames || [];
@@ -796,11 +868,11 @@ export class PackagesPage implements OnInit, OnDestroy {
         this.firebase.listCheckInsForPackage(pkg.id),
         ...clientIds.map((id, i) => this.firebase.getCheckInsForClient({ clientId: id, clientName: clientNames[i] }))
       ]);
-      this.calDays = this.buildCalendarDays(pkg, records, ([] as CheckIn[]).concat(...perClient));
+      this.calRecords = records;
+      this.calClientRecords = ([] as CheckIn[]).concat(...perClient);
+      this.calDays = this.buildCalendarDays(pkg, records, this.calClientRecords);
     } catch (err) {
       console.error('Packages: failed to load session calendar', err);
-    } finally {
-      this.calLoading = false;
     }
     this.calHighlights = this.calDays.map(d => ({
       date: d.dateKey,
@@ -812,23 +884,265 @@ export class PackagesPage implements OnInit, OnDestroy {
     this.calSummary = this.calLegend
       .filter(l => counts.get(l.status))
       .map(l => ({ ...l, count: counts.get(l.status)! }));
-    // Open on the most recent session that's already happened.
-    const today = localDateString();
-    const past = this.calDays.filter(d => d.dateKey <= today);
-    this.calSelected = (past[past.length - 1] || this.calDays[0])?.dateKey || today;
+  }
+
+  // After an edit: the package's end date and sessions left may have
+  // moved, so re-read those (patching the table row too), then rebuild.
+  private async refreshPackageCalendar() {
+    const pkg = this.calPkg;
+    if (!pkg?.id) return;
+    const [fresh, overrides, booked] = await Promise.all([
+      this.firebase.getPackageSchedule(pkg.id),
+      this.firebase.listSessionOverrides(),
+      pkg.bookedSessions ? this.firebase.listBookedSessionsFor(pkg.id) : Promise.resolve(null)
+    ]);
+    if (fresh) Object.assign(pkg, fresh);
+    if (booked) pkg.bookedSessions = booked;
+    this.overrides = overrides;
+    await this.loadPackageCalendar();
+    this.syncCalEditor();
+  }
+
+  private syncCalEditor() {
+    const pkg = this.calPkg;
+    const day = this.calDays.find(d => d.dateKey === this.calSelected) || null;
+    if (!pkg || !day) {
+      this.calEdit = null;
+      return;
+    }
+    const people: { id: string | null; name: string }[] = (pkg.linkedClientNames || [])
+      .map((name, i) => ({ id: pkg.linkedClientIds?.[i] ?? null, name }));
+    // Someone with attendance here who's since been taken off the package.
+    for (const r of this.calRecords) {
+      if (r.date === day.dateKey && !people.some(c => sameClient(r, c))) people.push({ id: r.clientId, name: r.clientName });
+    }
+    const clients = people.map(c => {
+      const rec = this.calRecords.find(r => r.date === day.dateKey && sameClient(r, c));
+      const loose = this.calClientRecords.find(r => !r.packageId && r.date === day.dateKey && sameClient(r, c));
+      return { key: `${day.dateKey}|${c.id || c.name}`, id: c.id, name: c.name, status: rec?.status ?? 'none', unlinked: !rec && !!loose } as CalClientRow;
+    });
+    this.calEdit = {
+      day,
+      canMark: day.dateKey <= localDateString(),
+      canMove: !!day.movable,
+      clients
+    };
+    this.calMoveDate = day.dateKey;
+    this.calMoveTime = day.entry?.time || day.time || '';
+  }
+
+  // Same rules as the Schedule page: Present and No-show use a session,
+  // Excused doesn't, tapping the active one clears it. A check-in with no
+  // package (the kiosk on a moved day) is linked to this package instead of
+  // adding a second record.
+  async setCalAttendance(row: CalClientRow, status: AttendanceStatus) {
+    const pkg = this.calPkg;
+    const day = this.calEdit?.day;
+    if (!pkg?.id || !day || this.calBusy.has(row.key)) return;
+    this.calBusy.add(row.key);
+    try {
+      const existing = this.calRecords.find(r => r.date === day.dateKey && sameClient(r, row)) || null;
+      if (existing && existing.status === status) {
+        await this.firebase.undoCheckIn(existing);
+      } else {
+        const loose = existing ? null : this.calClientRecords.find(r => !r.packageId && r.date === day.dateKey && sameClient(r, row)) || null;
+        await this.firebase.setAttendance({
+          existing: existing ?? loose,
+          client: { id: row.id, fullName: row.name },
+          pkg,
+          date: day.dateKey,
+          status
+        });
+        if (status === 'excused' && existing?.status !== 'excused') {
+          postponeBillingForExcuse(pkg.id).then(days => {
+            if (days) this.presentCalToast(`${row.name} — next charge pushed back ${Math.round(days * 10) / 10} days`);
+          });
+        }
+      }
+      this.calChanged = true;
+      await this.refreshPackageCalendar();
+    } catch (err) {
+      console.error('Packages: failed to set attendance', err);
+      this.presentCalToast('Could not save attendance', 'danger');
+    } finally {
+      this.calBusy.delete(row.key);
+    }
+  }
+
+  saveCalMove() {
+    const day = this.calEdit?.day;
+    if (!day) return;
+    if (!this.calMoveDate) {
+      this.presentCalToast('Pick a date', 'danger');
+      return;
+    }
+    this.moveCalSession(day, this.calMoveDate, this.calMoveTime || '');
+  }
+
+  revertCalMove() {
+    const entry = this.calEdit?.day.entry;
+    if (entry) this.moveCalSession(this.calEdit!.day, entry.originalDateKey, entry.originalTime);
+  }
+
+  private async moveCalSession(day: CalDay, date: string, time: string) {
+    const pkg = this.calPkg;
+    const entry = day.entry;
+    if (!pkg?.id || !entry || this.calMoving) return;
+    if (date === entry.dateKey && time === entry.time) return;
+    this.calMoving = true;
+    try {
+      const undo = await this.firebase.movePackageSession(entry, date, time);
+      await this.firebase.recomputePackageSessions(pkg.id);
+      this.calChanged = true;
+      this.calSelected = date;
+      await this.refreshPackageCalendar();
+      const t = formatTime12h(time);
+      this.presentCalToast(`Moved to ${this.calDateLabel(date)}${t ? ' · ' + t : ''}`, 'success', async () => {
+        await undo();
+        await this.firebase.recomputePackageSessions(pkg.id!);
+        this.calSelected = entry.dateKey;
+        await this.refreshPackageCalendar();
+      });
+    } catch (err) {
+      console.error('Packages: failed to move session', err);
+      this.presentCalToast('Could not move the session', 'danger');
+    } finally {
+      this.calMoving = false;
+    }
+  }
+
+  calDateLabel(key: string): string {
+    return new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  private async presentCalToast(message: string, color: 'success' | 'danger' = 'success', undo?: () => Promise<void>) {
+    const toast = await this.toastController.create({
+      message,
+      duration: undo ? 6000 : 1600,
+      position: 'bottom',
+      color,
+      buttons: undo ? [{
+        text: 'Undo',
+        handler: () => {
+          undo().catch(err => {
+            console.error('Packages: undo failed', err);
+            this.presentCalToast('Could not undo', 'danger');
+          });
+        }
+      }] : undefined
+    });
+    await toast.present();
+  }
+
+  // ----- Drag a session to a new date -----
+  // From its row in the list, or straight off the calendar.
+  onCalRowPointerDown(ev: PointerEvent, day: CalDay) {
+    if (!day.movable) return;
+    this.startCalDrag(ev, day, ev.currentTarget as HTMLElement);
+  }
+
+  onCalGridPointerDown(ev: PointerEvent) {
+    const btn = ev.composedPath().find(el => el instanceof HTMLElement && el.classList.contains('calendar-day')) as HTMLElement | undefined;
+    const key = btn ? this.calDayKey(btn) : null;
+    const day = key ? this.calDays.find(d => d.dateKey === key) : undefined;
+    if (btn && day?.movable) this.startCalDrag(ev, day, btn);
+  }
+
+  private startCalDrag(ev: PointerEvent, day: CalDay, source: HTMLElement) {
+    this.calDrag.begin(ev, {
+      zone: this.zone,
+      source,
+      ghost: this.calGhost(day),
+      scrollEl: this.pkgCalBody?.nativeElement,
+      canStart: () => {
+        this.calDragDay = day;
+        return true;
+      },
+      targetAt: (x, y) => this.calTargetAt(x, y),
+      canDrop: key => key !== day.dateKey && key >= localDateString(),
+      onOver: (key, ok) => {
+        this.calDropKey = key && key !== 'prev' && key !== 'next' ? key : null;
+        this.calDropOk = ok;
+      },
+      onEnd: () => {
+        this.calDragDay = null;
+        this.calDropRect = null;
+      },
+      onDrop: key => this.moveCalSession(day, key, day.entry?.time || day.time || ''),
+      onFlip: dir => {
+        // The native button inside ion-button — clicking the host doesn't
+        // always turn the month.
+        const nav = this.calNavButtons()[dir === 'prev' ? 0 : 1];
+        (nav?.shadowRoot?.querySelector('button') ?? nav)?.click();
+      }
+    });
+  }
+
+  private calNavButtons(): HTMLElement[] {
+    const sr = this.pkgCalEl?.nativeElement.shadowRoot;
+    return sr ? Array.from(sr.querySelectorAll<HTMLElement>('.calendar-next-prev ion-button')) : [];
+  }
+
+  // YYYY-MM-DD for one of ion-datetime's day buttons (data-month is 1-based).
+  private calDayKey(btn: HTMLElement): string | null {
+    const { year, month, day } = btn.dataset;
+    return year && month && day ? `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}` : null;
+  }
+
+  private calTargetAt(x: number, y: number): string | null {
+    this.calDropRect = null;
+    const sr = this.pkgCalEl?.nativeElement.shadowRoot;
+    const el = sr?.elementFromPoint(x, y) as HTMLElement | null;
+    if (!el) return null;
+    const nav = el.closest('.calendar-next-prev ion-button');
+    if (nav) return this.calNavButtons().indexOf(nav as HTMLElement) === 0 ? 'prev' : 'next';
+    const btn = el.closest<HTMLElement>('.calendar-day[data-day]');
+    const key = btn ? this.calDayKey(btn) : null;
+    if (btn && key) {
+      const box = btn.getBoundingClientRect();
+      const frame = this.pkgCalModal?.nativeElement.getBoundingClientRect();
+      this.calDropRect = {
+        left: box.left - (frame?.left ?? 0),
+        top: box.top - (frame?.top ?? 0),
+        width: box.width,
+        height: box.height
+      };
+    }
+    return key;
+  }
+
+  // What floats under the finger: the session's date and time as a chip.
+  private calGhost(day: CalDay): HTMLElement {
+    const color = CAL_COLORS[day.status];
+    const el = document.createElement('div');
+    const t = formatTime12h(day.entry?.time || day.time);
+    el.textContent = `${day.label}${t ? ' · ' + t : ''}`;
+    Object.assign(el.style, {
+      padding: '8px 14px',
+      borderRadius: '999px',
+      background: '#0d1520',
+      border: `1px solid ${color}`,
+      color,
+      font: '600 13px/1.2 -apple-system, BlinkMacSystemFont, sans-serif',
+      whiteSpace: 'nowrap'
+    } as Partial<CSSStyleDeclaration>);
+    return el;
   }
 
   private buildCalendarDays(pkg: PackageRecord, records: CheckIn[], clientRecords: CheckIn[]): CalDay[] {
     const today = localDateString();
     const start = pkg.purchaseDate ? new Date(`${pkg.purchaseDate.slice(0, 10)}T00:00:00`) : new Date();
-    const endKey = (pkg.expirationDate || '').slice(0, 10);
-    const end = endKey && endKey > today ? new Date(`${endKey}T00:00:00`) : new Date();
+    // Through the end date, today, or the latest session moved or booked
+    // past both — a session dragged beyond the end date still shows.
+    const moved = this.overrides.filter(o => o.packageId === pkg.id).map(o => o.newDate);
+    const booked = (pkg.bookedSessions || []).filter(b => b.status === 'booked').map(b => b.date);
+    const endKey = [(pkg.expirationDate || '').slice(0, 10), today, ...moved, ...booked].sort().pop()!;
+    const end = new Date(`${endKey}T00:00:00`);
     const scheduled = generateScheduleForRange([pkg], start, end, this.overrides, [], ['active', 'completed', 'prospect'])
       .filter(e => !e.isSingle);
 
     const days = new Map<string, CalDay>();
-    const label = (key: string) => new Date(`${key}T00:00:00`)
-      .toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const label = (key: string) => this.calDateLabel(key);
     const clientStatus = (c: CheckIn) =>
       c.status === 'excused' ? 'excused' : c.status === 'unexcused' ? 'no-show' : 'present';
 
@@ -857,22 +1171,22 @@ export class PackagesPage implements OnInit, OnDestroy {
       const recorded = days.get(e.dateKey) || days.get(e.originalDateKey);
       if (recorded) {
         if (!recorded.time) recorded.time = e.time;
+        if (!recorded.entry) recorded.entry = e;
         continue;
       }
-      const moved = e.dateKey !== e.originalDateKey ? `Moved from ${label(e.originalDateKey)}` : undefined;
+      const movedNote = e.dateKey !== e.originalDateKey ? `Moved from ${label(e.originalDateKey)}` : undefined;
       days.set(e.dateKey, {
         dateKey: e.dateKey, label: label(e.dateKey), time: e.time,
         status: e.dateKey < today ? 'unrecorded' : 'upcoming',
-        clients: [], note: moved
+        clients: [], note: movedNote, entry: e, movable: true
       });
     }
 
     // A client of this package checking in with no package attached, inside
     // the package's dates — it happened, but it didn't count toward anything.
     const startKey = localDateString(start);
-    const endKeyAll = localDateString(end);
     for (const r of clientRecords) {
-      if (r.packageId || r.date < startKey || r.date > endKeyAll) continue;
+      if (r.packageId || r.date < startKey || r.date > endKey) continue;
       const existing = days.get(r.date);
       if (existing && existing.status !== 'unrecorded' && existing.status !== 'unlinked') continue;
       const day = existing ?? {

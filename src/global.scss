@@ -190,3 +190,13 @@ ion-datetime {
 ion-app.has-sidebar .app-content ion-content.content-no-header {
   --padding-top: env(safe-area-inset-top);
 }
+
+// Press-and-drag rescheduling (see services/session-drag.ts). While a
+// session is being dragged nothing on the page selects, and the cursor
+// shows the grab for the whole move, not only over the card.
+body.session-dragging,
+body.session-dragging * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  cursor: grabbing !important;
+}

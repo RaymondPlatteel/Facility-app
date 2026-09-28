@@ -23,3 +23,28 @@ export const COACH_API_SECRET = 'REPLACE_ME';
 export function paymentsConfigured(): boolean {
   return !PAYMENTS_WORKER_URL.includes('REPLACE_ME');
 }
+
+// "They weren't here and they don't get charged for it" — an excused
+// absence slides the package's next subscription charge by one session's
+// worth. Resolves to the days postponed, or null when nothing moved (not
+// configured, not on a subscription, or the Worker failed — none of which
+// should ever undo or error the attendance that triggered it).
+export async function postponeBillingForExcuse(packageId: string): Promise<number | null> {
+  if (!paymentsConfigured()) return null;
+  try {
+    const res = await fetch(`${PAYMENTS_WORKER_URL}/postpone-billing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Coach-Secret': COACH_API_SECRET },
+      body: JSON.stringify({ packageId, sessions: 1 })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('postpone-billing failed', res.status, data);
+      return null;
+    }
+    return data.postponedDays || null;
+  } catch (err) {
+    console.error('postpone-billing request failed', err);
+    return null;
+  }
+}

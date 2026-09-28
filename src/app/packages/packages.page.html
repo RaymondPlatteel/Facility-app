@@ -326,8 +326,12 @@
 <!-- Per-package session calendar: every date this package was scheduled or
      used, colored by what happened. Outside ion-content for the same
      position:fixed reason as the PDF modal above. -->
-<div class="pkgcal-modal" [class.open]="calOpen">
+<div class="pkgcal-modal" #pkgCalModal [class.open]="calOpen">
   <div class="pkgcal-backdrop" (click)="closePackageCalendar()"></div>
+  <!-- Ring over the calendar day a dragged session would land on. -->
+  <div class="pkgcal-drop-ring" *ngIf="calDragDay && calDropRect" [class.bad]="!calDropOk"
+       [style.left.px]="calDropRect.left" [style.top.px]="calDropRect.top"
+       [style.width.px]="calDropRect.width" [style.height.px]="calDropRect.height"></div>
   <div class="pkgcal-sheet" *ngIf="calPkg">
     <div class="pkgcal-head">
       <div>
@@ -352,31 +356,77 @@
         <span class="pkgcal-stat st-left"><strong>{{ calPkg.sessionsRemaining ?? '—' }}</strong> left</span>
       </div>
 
-      <div class="pkgcal-body">
+      <div class="pkgcal-body" #pkgCalBody>
         <div class="pkgcal-cal-col">
-          <ion-datetime class="pkgcal-cal" presentation="date" [firstDayOfWeek]="0"
+          <ion-datetime #pkgCal class="pkgcal-cal" presentation="date" [firstDayOfWeek]="0"
                         [value]="calSelected" [highlightedDates]="calHighlights"
-                        (ionChange)="onCalDayChange($event)"></ion-datetime>
+                        (ionChange)="onCalDayChange($event)"
+                        (pointerdown)="onCalGridPointerDown($event)"></ion-datetime>
           <div class="pkgcal-legend">
             <span *ngFor="let l of calLegend"><i [class]="'dot st-' + l.status"></i>{{ l.label }}</span>
           </div>
+          <p class="pkgcal-tip">Tap a date to edit it. Press and hold a session, then drag it to a new date to move it.</p>
         </div>
 
         <div class="pkgcal-list">
-          <div class="pkgcal-day" *ngFor="let d of calDays" [class.selected]="d.dateKey === calSelected"
-               (click)="calSelected = d.dateKey">
-            <span class="pkgcal-day-date">
-              <strong>{{ d.label }}</strong>
-              <span *ngIf="d.time">{{ formatTime12h(d.time) }}</span>
-            </span>
-            <span class="pkgcal-day-body">
-              <span class="pkgcal-chip" [class]="'pkgcal-chip st-' + d.status">{{ statusLabel(d.status) }}</span>
-              <span class="pkgcal-clients" *ngIf="d.clients.length">
-                <span *ngFor="let c of d.clients">{{ c.name }} — {{ c.status }}</span>
+          <ng-container *ngFor="let d of calDays; trackBy: trackCalDay">
+            <div class="pkgcal-day" [class.selected]="d.dateKey === calSelected" [class.movable]="d.movable"
+                 [class.dragging]="calDragDay === d"
+                 (click)="selectCalDay(d.dateKey)" (pointerdown)="onCalRowPointerDown($event, d)">
+              <span class="pkgcal-day-date">
+                <strong>{{ d.label }}</strong>
+                <span *ngIf="d.time">{{ formatTime12h(d.time) }}</span>
               </span>
-              <span class="pkgcal-note" *ngIf="d.note">{{ d.note }}</span>
-            </span>
-          </div>
+              <span class="pkgcal-day-body">
+                <span class="pkgcal-chip" [class]="'pkgcal-chip st-' + d.status">{{ statusLabel(d.status) }}</span>
+                <span class="pkgcal-clients" *ngIf="d.clients.length">
+                  <span *ngFor="let c of d.clients">{{ c.name }} — {{ c.status }}</span>
+                </span>
+                <span class="pkgcal-note" *ngIf="d.note">{{ d.note }}</span>
+              </span>
+              <ion-icon class="pkgcal-grip" name="reorder-two-outline" *ngIf="d.movable" aria-hidden="true"></ion-icon>
+            </div>
+
+            <!-- The selected date's editor -->
+            <div class="pkgcal-editor" *ngIf="calEdit && calEdit.day.dateKey === d.dateKey">
+              <div class="pkgcal-ed-section" *ngIf="calEdit.canMark">
+                <div class="pkgcal-ed-title">Attendance</div>
+                <div class="pkgcal-att-empty" *ngIf="!calEdit.clients.length">No clients on this package.</div>
+                <div class="pkgcal-att-row" *ngFor="let c of calEdit.clients; trackBy: trackCalClient">
+                  <span class="pkgcal-att-name">
+                    {{ c.name }}
+                    <small *ngIf="c.unlinked">Checked in, not counted</small>
+                  </span>
+                  <span class="pkgcal-att-btns">
+                    <button type="button" class="att present" [class.active]="c.status === 'present'"
+                            [disabled]="calBusy.has(c.key)" (click)="setCalAttendance(c, 'present')">Present</button>
+                    <button type="button" class="att excused" [class.active]="c.status === 'excused'"
+                            [disabled]="calBusy.has(c.key)" (click)="setCalAttendance(c, 'excused')">Excused</button>
+                    <button type="button" class="att unexcused" [class.active]="c.status === 'unexcused'"
+                            [disabled]="calBusy.has(c.key)" (click)="setCalAttendance(c, 'unexcused')">No-show</button>
+                  </span>
+                </div>
+                <p class="pkgcal-ed-hint">Present and No-show use a session, Excused doesn't. Tap the lit one again to clear it.</p>
+              </div>
+
+              <div class="pkgcal-ed-section" *ngIf="calEdit.canMove">
+                <div class="pkgcal-ed-title">Reschedule</div>
+                <div class="pkgcal-move">
+                  <label><span>Date</span><input type="date" [(ngModel)]="calMoveDate" /></label>
+                  <label><span>Time</span><input type="time" [(ngModel)]="calMoveTime" /></label>
+                  <button type="button" class="pkgcal-move-btn" [disabled]="calMoving" (click)="saveCalMove()">Move</button>
+                </div>
+                <button type="button" class="pkgcal-revert" *ngIf="d.entry?.rescheduled" [disabled]="calMoving" (click)="revertCalMove()">
+                  <ion-icon name="arrow-undo-outline"></ion-icon>
+                  Put back on {{ calDateLabel(d.entry!.originalDateKey) }}<span *ngIf="d.entry!.originalTime"> · {{ formatTime12h(d.entry!.originalTime) }}</span>
+                </button>
+              </div>
+
+              <p class="pkgcal-ed-hint" *ngIf="!calEdit.canMove && d.entry && calEdit.canMark">
+                Attendance is filed on this date, so the session stays here. Clear it to move the session.
+              </p>
+            </div>
+          </ng-container>
           <div class="pkgcal-empty" *ngIf="!calDays.length">No sessions scheduled or recorded for this package.</div>
         </div>
       </div>

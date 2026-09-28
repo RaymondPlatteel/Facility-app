@@ -895,3 +895,204 @@ $cal-status: (
   font-size: 12px;
   color: #a78bfa;
 }
+
+// ----- Editing and moving sessions -----
+.pkgcal-tip {
+  max-width: 330px;
+  margin: 8px 6px 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #4a6378;
+}
+
+.pkgcal-day {
+  position: relative;
+
+  &.movable {
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  &.dragging,
+  &.drag-source {
+    opacity: 0.4;
+  }
+}
+
+.pkgcal-grip {
+  align-self: center;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 18px;
+  color: #33475a;
+  cursor: grab;
+}
+
+.pkgcal-day.selected .pkgcal-grip { color: #00d4ff; }
+
+// Holding a day on the calendar mustn't select text or open a callout.
+.pkgcal-cal {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.pkgcal-drop-ring {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #00d4ff, 0 0 18px rgba(0, 212, 255, 0.55);
+  background: rgba(0, 212, 255, 0.14);
+  transition: left 0.08s ease, top 0.08s ease;
+
+  &.bad {
+    box-shadow: 0 0 0 2px rgba(255, 93, 108, 0.8);
+    background: rgba(255, 93, 108, 0.1);
+  }
+}
+
+.pkgcal-editor {
+  margin: 0 12px 8px 18px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #0a1018;
+  border: 1px solid #133748;
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+}
+
+.pkgcal-ed-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pkgcal-ed-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #88a6bf;
+}
+
+.pkgcal-ed-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #4a6378;
+}
+
+.pkgcal-att-empty {
+  font-size: 12.5px;
+  color: #4a6378;
+}
+
+.pkgcal-att-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pkgcal-att-name {
+  display: flex;
+  flex-direction: column;
+  font-size: 13.5px;
+  color: #dceaf6;
+
+  small {
+    font-size: 11px;
+    color: #a78bfa;
+  }
+}
+
+.pkgcal-att-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.att {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #133748;
+  background: #070b12;
+  color: #88a6bf;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+
+  &:disabled { opacity: 0.5; cursor: default; }
+}
+
+@each $name, $color in (present: #06d6a0, excused: #f5b942, unexcused: #ff5d6c) {
+  .att.#{$name}:hover:not(:disabled) { border-color: rgba($color, 0.6); }
+  .att.#{$name}.active {
+    color: $color;
+    border-color: $color;
+    background: rgba($color, 0.14);
+  }
+}
+
+.pkgcal-move {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    color: #88a6bf;
+  }
+
+  input {
+    padding: 7px 9px;
+    border-radius: 8px;
+    border: 1px solid #133748;
+    background: #070b12;
+    color: #dceaf6;
+    font: inherit;
+    font-size: 13px;
+    color-scheme: dark;
+
+    &:focus { outline: none; border-color: #00d4ff; }
+  }
+}
+
+.pkgcal-move-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #00d4ff;
+  background: rgba(0, 212, 255, 0.14);
+  color: #00d4ff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:disabled { opacity: 0.5; cursor: default; }
+}
+
+.pkgcal-revert {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #88a6bf;
+  font-size: 12.5px;
+  cursor: pointer;
+
+  &:hover { color: #dceaf6; }
+  &:disabled { opacity: 0.5; }
+}

@@ -3,6 +3,7 @@ import { Subject } from 'rxjs';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit } from 'firebase/firestore';
 import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationPlan, usesStoredSessions } from './schedule.util';
+import type { ScheduleEntry } from './schedule.util';
 import { environment } from '../../environments/environment';
 import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank } from './omni.util';
 import type { TestOverrides, ResilienceInputs } from './omni.util';
@@ -1394,6 +1395,45 @@ export class FirebaseService {
   async deleteSessionOverride(id: string): Promise<void> {
     await deleteDoc(doc(this.db, 'sessionOverrides', id));
     this.emitScheduleDataChanged();
+  }
+
+  // Moves one package session to a new date/time and returns how to put it
+  // back (for an Undo):
+  //   stored session   the booked session itself moves (see BookedSession)
+  //   weekly package   an override on the slot's original date; landing
+  //                    back on the original date and time removes it
+  async movePackageSession(entry: ScheduleEntry, date: string, time: string): Promise<() => Promise<void>> {
+    if (entry.sessionId) {
+      const id = entry.sessionId;
+      await this.moveBookedSession(id, date, time);
+      return () => this.moveBookedSession(id, entry.dateKey, entry.time);
+    }
+    const slot = { packageId: entry.packageId, originalDate: entry.originalDateKey };
+    if (date === entry.originalDateKey && time === entry.originalTime) {
+      if (entry.overrideId) await this.deleteSessionOverride(entry.overrideId);
+      return async () => {
+        if (entry.overrideId) await this.setSessionOverride({ ...slot, newDate: entry.dateKey, newTime: entry.time });
+      };
+    }
+    const saved = await this.setSessionOverride({ ...slot, id: entry.overrideId, newDate: date, newTime: time });
+    return async () => {
+      if (entry.overrideId) await this.setSessionOverride({ ...saved, newDate: entry.dateKey, newTime: entry.time });
+      else await this.deleteSessionOverride(saved.id!);
+    };
+  }
+
+  // The fields a session edit can change on a package (attendance moves
+  // sessionsRemaining and the end date), fresh from Firestore, for patching
+  // an already-loaded package in place.
+  async getPackageSchedule(id: string): Promise<Pick<PackageRecord, 'expirationDate' | 'sessionsRemaining' | 'skipDates'> | null> {
+    const snap = await getDoc(doc(this.db, 'packages', id));
+    if (!snap.exists()) return null;
+    const data = snap.data();
+    return {
+      expirationDate: data['expirationDate'],
+      sessionsRemaining: data['sessionsRemaining'],
+      skipDates: data['skipDates']
+    };
   }
 
   private singleSessionsCollection() { return collection(this.db, 'singleSessions'); }

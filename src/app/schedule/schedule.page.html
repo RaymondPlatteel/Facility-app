@@ -28,11 +28,11 @@
          and they got tapped by mistake. -->
     <div class="week-nav-row">
       <div class="week-nav">
-        <button class="icon-btn" (click)="prev()" aria-label="Previous">
+        <button class="icon-btn" data-drop="prev" [class.drop-flip]="dropTarget === 'prev'" (click)="prev()" aria-label="Previous">
           <ion-icon name="chevron-back-outline"></ion-icon>
         </button>
         <button class="today-btn" (click)="goToday()">Today</button>
-        <button class="icon-btn" (click)="next()" aria-label="Next">
+        <button class="icon-btn" data-drop="next" [class.drop-flip]="dropTarget === 'next'" (click)="next()" aria-label="Next">
           <ion-icon name="chevron-forward-outline"></ion-icon>
         </button>
       </div>
@@ -92,8 +92,11 @@
       <div
         *ngFor="let day of days"
         class="day-col"
+        [attr.data-drop]="day.dateKey"
         [class.today]="day.isToday"
-        [class.past]="day.isPast">
+        [class.past]="day.isPast"
+        [class.drop-ok]="dropOk && dropTarget === day.dateKey"
+        [class.drop-blocked]="isDropBlocked(day.dateKey)">
         <div class="day-head">
           <span class="day-label">{{ day.label }}</span>
           <span class="day-num">{{ day.dayNum }}</span>
@@ -109,6 +112,7 @@
             *ngFor="let entry of day.entries"
             class="session-card clickable"
             [class]="'session-card clickable ' + typeClass(entry.sessionType)"
+            (pointerdown)="onCardPointerDown($event, entry)"
             (click)="openSession(entry, day)">
             <div class="session-time">
               <ion-icon name="time-outline"></ion-icon>
@@ -150,9 +154,12 @@
         <div
           *ngFor="let day of week"
           class="month-day"
+          [attr.data-drop]="day.dateKey"
           [class.today]="day.isToday"
           [class.past]="day.isPast"
-          [class.dim]="!day.inMonth">
+          [class.dim]="!day.inMonth"
+          [class.drop-ok]="dropOk && dropTarget === day.dateKey"
+          [class.drop-blocked]="isDropBlocked(day.dateKey)">
           <div class="month-day-head">
             <span class="month-day-num">{{ day.dayNum }}</span>
             <button class="month-add-btn" (click)="openAddSession(day.dateKey)" [attr.aria-label]="'Add session on ' + day.dateKey">
@@ -164,6 +171,7 @@
               *ngFor="let entry of day.entries"
               class="month-chip clickable"
               [class]="'month-chip clickable ' + typeClass(entry.sessionType)"
+              (pointerdown)="onCardPointerDown($event, entry)"
               (click)="openSession(entry, day)">
               <span class="chip-time">{{ formatTime(entry.time) }}</span>
               <span class="chip-name">{{ entry.packageName }}</span>
@@ -191,8 +199,22 @@
 
     <p *ngIf="!loading && hasAnySessions" class="sched-footnote">
       <ion-icon name="cube-outline"></ion-icon>
-      Sessions come from active packages (days &amp; times). Tap a session to take attendance.
+      Sessions come from active packages (days &amp; times). Tap a session to take attendance or edit it;
+      press and hold one to drag it to another day.
     </p>
+  </div>
+
+  <!-- While dragging: what letting go will do. -->
+  <div class="drag-hint" slot="fixed" *ngIf="draggingEntry">
+    <ng-container *ngIf="dropOk && dropTarget; else dragIdle">
+      Move {{ draggingEntry.packageName }} to <strong>{{ dateKeyLabel(dropTarget) }}</strong>
+    </ng-container>
+    <ng-template #dragIdle>
+      <ng-container *ngIf="dropTarget === 'prev' || dropTarget === 'next'; else dragPlain">
+        Hold to go to the {{ dropTarget === 'prev' ? 'previous' : 'next' }} {{ viewMode }}…
+      </ng-container>
+      <ng-template #dragPlain>Drop on a day to move it · hover ‹ › to change {{ viewMode }}</ng-template>
+    </ng-template>
   </div>
 
   <!-- Session detail / attendance modal -->

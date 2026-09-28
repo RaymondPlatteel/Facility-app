@@ -1164,3 +1164,80 @@ ion-modal.session-modal {
 @media (max-width: 768px) {
   .icon-btn[aria-label^="Back"] { display: none; }
 }
+
+/* ---------- Drag to reschedule ---------- */
+// Cards and chips are press-and-hold targets: no text selection or iOS
+// callout on the hold, and no double-tap zoom delay.
+.session-card,
+.month-chip {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+// The card left behind while its ghost is being dragged.
+.session-card.drag-source,
+.month-chip.drag-source {
+  opacity: 0.3;
+  border-style: dashed;
+}
+
+.drag-ghost {
+  cursor: grabbing;
+}
+
+.day-col,
+.month-day {
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.day-col.drop-ok {
+  opacity: 1;
+  border-color: #00d4ff;
+  background: rgba(0, 212, 255, 0.07);
+  box-shadow: 0 0 0 1px #00d4ff, 0 0 28px rgba(0, 212, 255, 0.18);
+}
+
+.month-day.drop-ok {
+  opacity: 1;
+  background: rgba(0, 212, 255, 0.12);
+  box-shadow: inset 0 0 0 2px #00d4ff;
+}
+
+.day-col.drop-blocked {
+  border-color: rgba(255, 90, 106, 0.7);
+  box-shadow: 0 0 0 1px rgba(255, 90, 106, 0.5);
+}
+
+.month-day.drop-blocked {
+  box-shadow: inset 0 0 0 2px rgba(255, 90, 106, 0.6);
+}
+
+.icon-btn.drop-flip {
+  color: #00d4ff;
+  border-color: #00d4ff;
+  background: rgba(0, 212, 255, 0.14);
+}
+
+.drag-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 50;
+  max-width: calc(100% - 32px);
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid #133748;
+  background: rgba(7, 11, 18, 0.94);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  color: #88a6bf;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+
+  strong { color: #00d4ff; }
+}
