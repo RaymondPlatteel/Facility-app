@@ -184,6 +184,10 @@ export class SchedulePage implements OnInit, ViewWillEnter {
       ]);
       this.swapRequests = swaps.filter(r => r.status === 'pending');
       await this.autoMarkNoShows();
+      // After the sweep, so its new no-shows are counted: push out (or pull
+      // in) any package end date that no longer leaves room for exactly the
+      // sessions still owed. Patches this.packages in place.
+      await this.firebase.reprojectPackageEnds(this.packages, this.overrides);
     } catch (err) {
       console.error('Schedule: failed to load schedule data', err);
     }

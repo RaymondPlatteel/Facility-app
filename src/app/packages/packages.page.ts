@@ -21,7 +21,7 @@ import { arrowBack, cubeOutline, calculatorOutline, calendarOutline, peopleOutli
 import { Router } from '@angular/router';
 import { FirebaseService, ClientProfile, PackageRecord, ClientPayment, SessionOverride, localDateString } from '../services/firebase.service';
 import { ToastController } from '@ionic/angular/standalone';
-import { generateScheduleForRange, startOfWeek, addDays, countScheduledOccurrences } from '../services/schedule.util';
+import { generateScheduleForRange, startOfWeek, addDays, countScheduledOccurrences, projectPackageEnd } from '../services/schedule.util';
 import { TRAINERS } from '../services/auth.service';
 import { TopBarActionService } from '../services/top-bar-action.service';
 import html2canvas from 'html2canvas';
@@ -319,11 +319,12 @@ export class PackagesPage implements OnInit, OnDestroy {
 
   async loadData() {
     this.clients = await this.firebase.listClientProfiles();
-    const [packages, usedByPackage, excusedByPackage, overrides] = await Promise.all([
+    const [packages, usedByPackage, excusedByPackage, overrides, marksByPackage] = await Promise.all([
       this.firebase.listPackages(),
       this.firebase.getDecrementedCountsByPackage(),
       this.firebase.getExcusedCountsByPackage(),
-      this.firebase.listSessionOverrides()
+      this.firebase.listSessionOverrides(),
+      this.firebase.getAttendanceMarksByPackage()
     ]);
     this.packages = packages;
     this.overrides = overrides;
@@ -337,15 +338,25 @@ export class PackagesPage implements OnInit, OnDestroy {
       const excused = p.dailyGroupProgram ? 0 : (p.id ? (excusedByPackage.get(p.id) ?? 0) : 0);
       const beforeRemaining = p.sessionsRemaining;
       const beforeExpiration = p.expirationDate;
+      const beforeSkips = (p.skipDates || []).join();
       this.recalcRow(p, used, excused);
-      if (p.id && (beforeRemaining !== p.sessionsRemaining || beforeExpiration !== p.expirationDate)) {
+      // Weekly packages: the end date comes from attendance (see
+      // projectPackageEnd), so an owed session always has a calendar slot.
+      // recalcRow's slot-count projection only stands for the rest.
+      const projected = p.id ? projectPackageEnd({ ...p, expirationDate: beforeExpiration }, marksByPackage.get(p.id) || [], overrides) : null;
+      if (projected) {
+        p.expirationDate = projected.expirationDate;
+        p.skipDates = projected.skipDates;
+      }
+      if (p.id && (beforeRemaining !== p.sessionsRemaining || beforeExpiration !== p.expirationDate || beforeSkips !== (p.skipDates || []).join())) {
         await this.firebase.upsertPackage({
           id: p.id,
           packageName: p.packageName,
           totalSessions: p.totalSessions,
           sessionsPerWeek: p.sessionsPerWeek,
           sessionsRemaining: p.sessionsRemaining,
-          expirationDate: p.expirationDate
+          expirationDate: p.expirationDate,
+          skipDates: p.skipDates
         });
       }
     }
@@ -603,7 +614,21 @@ export class PackagesPage implements OnInit, OnDestroy {
         ])
       : [0, 0];
     const sessionsUsed = pkg.dailyGroupProgram ? countScheduledOccurrences(pkg) : checkedInCount;
+    const beforeExpiration = pkg.expirationDate;
     this.recalcRow(pkg, sessionsUsed, excusedCount);
+    // Same attendance-driven end date as loadData, so editing a weekly
+    // package (days, duration, start date) can't strand an owed session.
+    if (pkg.id) {
+      const [marks, overrides] = await Promise.all([
+        this.firebase.getAttendanceMarks(pkg.id),
+        this.firebase.listSessionOverrides()
+      ]);
+      const projected = projectPackageEnd({ ...pkg, expirationDate: beforeExpiration }, marks, overrides);
+      if (projected) {
+        pkg.expirationDate = projected.expirationDate;
+        pkg.skipDates = projected.skipDates;
+      }
+    }
     if (pkg.isFree) {
       // Every linked client is $0 and paid, current and newly-added alike —
       // re-normalize on every save instead of only when the checkbox is
@@ -644,6 +669,7 @@ export class PackagesPage implements OnInit, OnDestroy {
       trainerId: pkg.trainerId || '',
       purchaseDate: pkg.purchaseDate,
       expirationDate: pkg.expirationDate,
+      skipDates: pkg.skipDates,
       status: pkg.status
     });
     // Patch the same object in place instead of a full loadData() reload.

@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit } from 'firebase/firestore';
+import { projectPackageEnd, AttendanceMark } from './schedule.util';
 import { environment } from '../../environments/environment';
 import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank } from './omni.util';
 import type { TestOverrides, ResilienceInputs } from './omni.util';
@@ -381,6 +382,11 @@ export interface PackageRecord {
   trainerId?: string; // which trainer runs these sessions (see TRAINERS in auth.service)
   purchaseDate?: string; // ISO
   expirationDate?: string; // ISO (auto-calculated)
+  // Weekly slots that passed while the package was already past its end
+  // date — never on anyone's calendar, so the schedule skips them rather
+  // than showing (and no-show-charging) them once the end date is pushed
+  // out for sessions still owed. Maintained by projectPackageEnd.
+  skipDates?: string[];
   status: 'active' | 'completed' | 'prospect';
   // Set by the payments Worker when an athlete starts an auto-renewing
   // monthly membership; cleared (and subscriptionCanceledAt stamped) when
@@ -1128,14 +1134,85 @@ export class FirebaseService {
 
   // Derive and persist sessionsRemaining from occurrence usage. Idempotent —
   // the single source of truth, so no path can double-count. Returns new value.
+  //
+  // Also re-projects the end date in the same write, so a session that's
+  // still owed (an excused absence, a slot nobody recorded) always gets a
+  // real date on the calendar the moment attendance changes — not only the
+  // next time someone happens to open the Packages page.
   async recomputePackageSessions(packageId: string): Promise<number | null> {
     const ref = doc(this.db, 'packages', packageId);
     const snap = await getDoc(ref);
     if (!snap.exists()) return null;
     const total = snap.data()['totalSessions'] ?? 0;
     const remaining = Math.max(0, total - await this.usedOccurrenceCount(packageId));
-    await updateDoc(ref, { sessionsRemaining: remaining, updatedAt: new Date().toISOString() });
+    const update: Record<string, unknown> = { sessionsRemaining: remaining, updatedAt: new Date().toISOString() };
+
+    const pkg = { id: packageId, ...(snap.data() as any), sessionsRemaining: remaining } as PackageRecord;
+    const [marks, overrides] = await Promise.all([this.getAttendanceMarks(packageId), this.listSessionOverrides()]);
+    const projected = projectPackageEnd(pkg, marks, overrides);
+    if (projected) {
+      update['expirationDate'] = projected.expirationDate;
+      update['skipDates'] = projected.skipDates;
+    }
+    await updateDoc(ref, update as any);
+    if (projected && (projected.expirationDate !== pkg.expirationDate)) this.emitScheduleDataChanged();
     return remaining;
+  }
+
+  // Every attendance record for one package, trimmed to what
+  // projectPackageEnd reads.
+  async getAttendanceMarks(packageId: string): Promise<AttendanceMark[]> {
+    const snap = await getDocs(query(this.checkInsCollection(), where('packageId', '==', packageId)));
+    return snap.docs.map(d => ({
+      date: d.data()['date'],
+      decremented: !!d.data()['decremented'],
+      status: d.data()['status']
+    }));
+  }
+
+  // Same, for every package at once — one read of the check-in log instead
+  // of one query per package, for the page-load passes below.
+  async getAttendanceMarksByPackage(): Promise<Map<string, AttendanceMark[]>> {
+    const snap = await getDocs(this.checkInsCollection());
+    const byPackage = new Map<string, AttendanceMark[]>();
+    snap.forEach(d => {
+      const packageId = d.data()['packageId'] as string | undefined;
+      if (!packageId) return;
+      if (!byPackage.has(packageId)) byPackage.set(packageId, []);
+      byPackage.get(packageId)!.push({
+        date: d.data()['date'],
+        decremented: !!d.data()['decremented'],
+        status: d.data()['status']
+      });
+    });
+    return byPackage;
+  }
+
+  // Re-projects end dates for the given packages and saves only the ones
+  // that changed, patching the passed objects in place. Run on page loads so
+  // packages whose owed sessions fell off the calendar before this existed
+  // (and ones where a past slot just aged out) get fixed without waiting for
+  // an attendance change. Returns how many were updated.
+  async reprojectPackageEnds(packages: PackageRecord[], overrides: SessionOverride[]): Promise<number> {
+    const marks = await this.getAttendanceMarksByPackage();
+    let changed = 0;
+    for (const pkg of packages) {
+      if (!pkg.id || pkg.status !== 'active') continue;
+      const projected = projectPackageEnd(pkg, marks.get(pkg.id) || [], overrides);
+      if (!projected) continue;
+      const sameSkips = (pkg.skipDates || []).join() === projected.skipDates.join();
+      if (projected.expirationDate === pkg.expirationDate && sameSkips) continue;
+      pkg.expirationDate = projected.expirationDate;
+      pkg.skipDates = projected.skipDates;
+      await updateDoc(doc(this.db, 'packages', pkg.id), {
+        expirationDate: projected.expirationDate,
+        skipDates: projected.skipDates,
+        updatedAt: new Date().toISOString()
+      } as any);
+      changed++;
+    }
+    if (changed) this.emitScheduleDataChanged();
+    return changed;
   }
 
   // Records the visit, then reconciles the package's remaining sessions.

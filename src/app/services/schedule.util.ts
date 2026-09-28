@@ -1,4 +1,4 @@
-import { PackageRecord, SessionOverride, SingleSession } from './firebase.service';
+import type { PackageRecord, SessionOverride, SingleSession } from './firebase.service';
 
 // A package with NO clientPayments at all isn't being tracked through
 // online payment — that's a coach scheduling someone by hand and
@@ -112,6 +112,85 @@ export function countScheduledOccurrences(pkg: PackageRecord, asOf: Date = new D
   return count;
 }
 
+// One attendance record, reduced to what the end-date projection needs.
+export interface AttendanceMark {
+  date: string;          // YYYY-MM-DD the record was taken for
+  decremented: boolean;  // present / no-show used a session; excused did not
+  status?: string;
+}
+
+// Where a recurring package's calendar has to run to, so that every session
+// it still owes lands on a real future date.
+//
+// sessionsRemaining is counted from attendance records (distinct dates that
+// used a session), but the end date used to be "the Nth weekly slot after
+// purchase" — so any slot that didn't use a session (an excused absence, or
+// a date nobody ever recorded) left a session owed with no date to take it.
+// The Dads showed "1 left" with nothing on the calendar after Sep 13.
+//
+// Walks the package's slots from its start date:
+//   - a slot with a session-using record is spent;
+//   - an excused slot is not, and isn't available either;
+//   - a past slot with no record that was still inside the old end date is
+//     left alone (it's on the calendar; the no-show sweep may yet mark it);
+//   - a past slot with no record AFTER the old end date was never on anyone's
+//     calendar, so it's recorded in skipDates — otherwise extending the end
+//     date would put it back and the no-show sweep would charge for it;
+//   - every remaining session goes on the next open slots from today on.
+// Returns null for packages without a weekly pattern (per-session packs,
+// daily group programs), which keep their own end-date rules.
+export function projectPackageEnd(
+  pkg: PackageRecord,
+  marks: AttendanceMark[],
+  overrides: SessionOverride[],
+  today: Date = new Date()
+): { expirationDate: string; skipDates: string[] } | null {
+  if (pkg.perSessionPack || pkg.dailyGroupProgram) return null;
+  const start = parseLocalDate(pkg.purchaseDate);
+  const days = new Set(pkg.daysOfWeek || []);
+  const total = pkg.totalSessions ?? 0;
+  if (!start || days.size === 0 || total <= 0) return null;
+
+  const pkgId = pkg.id || pkg.packageId;
+  const movedTo = new Map(overrides.filter(o => o.packageId === pkgId).map(o => [o.originalDate, o.newDate]));
+  const used = new Set(marks.filter(m => m.decremented).map(m => m.date));
+  const excused = new Set(marks.filter(m => !m.decremented && m.status === 'excused').map(m => m.date));
+  const remaining = Math.max(0, total - used.size);
+  const oldEnd = (pkg.expirationDate || '').slice(0, 10);
+  const todayKey = toDateKey(dateOnly(today));
+  const lastMark = [...used, ...excused].sort().pop() || '';
+  const skip = new Set(pkg.skipDates || []);
+
+  let placed = 0;
+  let end = '';
+  for (let d = dateOnly(start), guard = 0; guard < 5000; d = addDays(d, 1), guard++) {
+    if (!days.has(DAY_LABELS[d.getDay()])) continue;
+    const key = toDateKey(d);
+    if (placed >= remaining && key > lastMark && key >= todayKey) break;
+
+    const actual = movedTo.get(key) || key; // attendance may be filed under either
+    if (used.has(key) || used.has(actual)) {
+      if (key > end) end = key;
+      continue;
+    }
+    if (excused.has(key) || excused.has(actual) || skip.has(key)) continue;
+
+    if (actual < todayKey) {
+      if (oldEnd && key > oldEnd) skip.add(key);
+      continue;
+    }
+    if (placed < remaining) {
+      placed++;
+      if (key > end) end = key;
+    }
+  }
+
+  return {
+    expirationDate: end || oldEnd || toDateKey(start),
+    skipDates: [...skip].sort()
+  };
+}
+
 // Expand active packages into concrete schedule entries within [start, end] inclusive.
 // Per-occurrence reschedule overrides relocate or pull in occurrences as needed.
 export function generateScheduleForRange(
@@ -176,12 +255,14 @@ export function generateScheduleForRange(
     const pkgStart = parseLocalDate(pkg.purchaseDate || undefined);
     const pkgEnd = parseLocalDate(pkg.expirationDate || undefined);
     const days = new Set(pkg.daysOfWeek);
+    const skip = new Set(pkg.skipDates || []);
 
     for (let d = new Date(rangeStart); d <= rangeEnd; d = addDays(d, 1)) {
       const label = DAY_LABELS[d.getDay()];
       if (!days.has(label)) continue;
       if (pkgStart && d < pkgStart) continue;
       if (pkgEnd && d > pkgEnd) continue;
+      if (skip.has(toDateKey(d))) continue; // passed while the package was already "over" — see projectPackageEnd
 
       const entry = buildEntry(pkg, new Date(d));
       seen.add(overrideKey(entry.packageId, entry.originalDateKey));
