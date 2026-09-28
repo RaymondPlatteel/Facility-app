@@ -218,11 +218,24 @@ export class SchedulePage implements OnInit, AfterViewInit, OnDestroy, ViewWillE
   // How many days back to sweep for missed check-ins each time the schedule loads.
   private static readonly NO_SHOW_LOOKBACK_DAYS = 14;
 
+  // ngOnInit and ionViewWillEnter both load the schedule on the first visit,
+  // at the same moment. Two sweeps racing each other both saw nobody marked
+  // and both wrote the no-show — every miss got filed twice. Concurrent
+  // callers now share the one sweep in flight.
+  private noShowSweep: Promise<void> | null = null;
+
+  private autoMarkNoShows(): Promise<void> {
+    if (!this.noShowSweep) {
+      this.noShowSweep = this.sweepNoShows().finally(() => (this.noShowSweep = null));
+    }
+    return this.noShowSweep;
+  }
+
   // Once a session's day has fully passed with nobody marked present/excused/
   // unexcused, default it to "no-show" automatically — coaches shouldn't have
   // to manually flag every miss. Idempotent: only fills in clients that still
   // have no check-in record, so re-running (e.g. on every page visit) is safe.
-  private async autoMarkNoShows() {
+  private async sweepNoShows() {
     const todayKey = localDateString();
     const start = addDays(new Date(), -SchedulePage.NO_SHOW_LOOKBACK_DAYS);
     const end = addDays(new Date(), -1); // through yesterday only
@@ -459,6 +472,14 @@ export class SchedulePage implements OnInit, AfterViewInit, OnDestroy, ViewWillE
     this.selectedDay = null;
     this.selectedClients = [];
     this.reschedOpen = false;
+  }
+
+  // Attendance is filed by date, so moving a session that has some leaves
+  // it behind on the old date, counting the session twice. Clear it first —
+  // same rule as dragging.
+  get selectedHasAttendance(): boolean {
+    const entry = this.selectedEntry;
+    return !!entry && this.selectedClients.some(c => this.clientStatus(entry, c) !== 'none');
   }
 
   // ----- Reschedule (single occurrence only) -----
@@ -803,9 +824,15 @@ export class SchedulePage implements OnInit, AfterViewInit, OnDestroy, ViewWillE
     const pkg = this.packages.find(p => (p.id || p.packageId) === entry.packageId) || null;
     const clearing = !!existing && existing.status === status;
     const previousCheckIns = this.weekCheckIns;
+    // Extra copies of the same record (same client, date and package) —
+    // they go along with it, or clearing would leave the row still marked.
+    const copies = existing
+      ? this.weekCheckIns.filter(c => c !== existing && c.date === existing.date && c.packageId === existing.packageId &&
+          ((!!c.clientId && c.clientId === existing.clientId) || c.clientName.trim().toLowerCase() === existing.clientName.trim().toLowerCase()))
+      : [];
 
     if (clearing) {
-      this.weekCheckIns = this.weekCheckIns.filter(c => c !== existing);
+      this.weekCheckIns = this.weekCheckIns.filter(c => c !== existing && !copies.includes(c));
     } else {
       const optimistic: CheckIn = {
         id: existing?.id,
@@ -829,7 +856,8 @@ export class SchedulePage implements OnInit, AfterViewInit, OnDestroy, ViewWillE
 
     try {
       if (clearing) {
-        const remaining = await this.firebase.undoCheckIn(existing!);
+        let remaining = await this.firebase.undoCheckIn(existing!);
+        for (const c of copies) remaining = await this.firebase.undoCheckIn(c);
         if (pkg?.id && remaining != null) pkg.sessionsRemaining = remaining;
         this.presentToast(`${client.name} — cleared`);
       } else {
@@ -840,6 +868,8 @@ export class SchedulePage implements OnInit, AfterViewInit, OnDestroy, ViewWillE
           date: entry.dateKey,
           status
         });
+        for (const c of copies) await this.firebase.undoCheckIn(c);
+        this.weekCheckIns = this.weekCheckIns.filter(c => !copies.includes(c));
         // Reconcile the optimistic record with the real one (id, sessionsRemainingAfter).
         this.weekCheckIns = this.weekCheckIns.map(c =>
           c.date === entry.dateKey &&

@@ -100,6 +100,9 @@ interface CalDay {
   note?: string;
   entry?: ScheduleEntry;  // the scheduled session on this date, if there is one
   movable?: boolean;      // scheduled, with no attendance filed on it yet
+  // Records left on a session's old date after it was moved to movedTo,
+  // where attendance was taken too — the same session counted twice.
+  movedTo?: string;
 }
 
 // One client's attendance row in the selected date's editor.
@@ -790,6 +793,7 @@ export class PackagesPage implements OnInit, OnDestroy {
   calDays: CalDay[] = [];
   calHighlights: { date: string; textColor: string; backgroundColor: string }[] = [];
   calSummary: { status: CalStatus; label: string; count: number }[] = [];
+  calUsed = 0;             // distinct dates that used a session
   calSelected = '';
   formatTime12h = formatTime12h;
   readonly calLegend = (Object.keys(CAL_LABELS) as CalStatus[]).map(status => ({ status, label: CAL_LABELS[status] }));
@@ -833,11 +837,21 @@ export class PackagesPage implements OnInit, OnDestroy {
   onCalDayChange(ev: CustomEvent) {
     const v = ev.detail?.value;
     if (typeof v === 'string') this.selectCalDay(v.slice(0, 10));
+    else this.calEdit = null;
   }
 
   selectCalDay(dateKey: string) {
     this.calSelected = dateKey;
     this.syncCalEditor();
+  }
+
+  // Tapping the open date again closes its editor.
+  toggleCalDay(dateKey: string) {
+    if (this.calEdit?.day.dateKey === dateKey) {
+      this.calEdit = null;
+      return;
+    }
+    this.selectCalDay(dateKey);
   }
 
   trackCalDay = (_: number, d: CalDay) => d.dateKey;
@@ -852,10 +866,11 @@ export class PackagesPage implements OnInit, OnDestroy {
     this.calEdit = null;
     await this.loadPackageCalendar();
     this.calLoading = false;
-    // Open on the most recent session that's already happened.
+    // Show the month of the most recent session that's already happened,
+    // with nothing open until a date is tapped.
     const today = localDateString();
     const past = this.calDays.filter(d => d.dateKey <= today);
-    this.selectCalDay((past[past.length - 1] || this.calDays[0])?.dateKey || today);
+    this.calSelected = (past[past.length - 1] || this.calDays[0])?.dateKey || today;
   }
 
   private async loadPackageCalendar() {
@@ -879,6 +894,7 @@ export class PackagesPage implements OnInit, OnDestroy {
       textColor: CAL_COLORS[d.status],
       backgroundColor: CAL_COLORS[d.status] + '2e'
     }));
+    this.calUsed = new Set(this.calRecords.filter(r => r.decremented).map(r => r.date)).size;
     const counts = new Map<CalStatus, number>();
     this.calDays.forEach(d => counts.set(d.status, (counts.get(d.status) || 0) + 1));
     this.calSummary = this.calLegend
@@ -900,7 +916,12 @@ export class PackagesPage implements OnInit, OnDestroy {
     if (booked) pkg.bookedSessions = booked;
     this.overrides = overrides;
     await this.loadPackageCalendar();
-    this.syncCalEditor();
+    if (this.calEdit) this.syncCalEditor();
+  }
+
+  // Sessions used beyond what the package holds.
+  get calOverUsed(): number {
+    return Math.max(0, this.calUsed - (this.calPkg?.totalSessions ?? 0));
   }
 
   private syncCalEditor() {
@@ -941,9 +962,14 @@ export class PackagesPage implements OnInit, OnDestroy {
     if (!pkg?.id || !day || this.calBusy.has(row.key)) return;
     this.calBusy.add(row.key);
     try {
-      const existing = this.calRecords.find(r => r.date === day.dateKey && sameClient(r, row)) || null;
+      // Normally one record per client per date, but a double-run no-show
+      // sweep left pairs behind. The first is the one shown; the copies go
+      // with it, or tapping No-show to clear would leave it still showing.
+      const mine = this.calRecords.filter(r => r.date === day.dateKey && sameClient(r, row));
+      const existing = mine[0] || null;
+      const copies = mine.slice(1);
       if (existing && existing.status === status) {
-        await this.firebase.undoCheckIn(existing);
+        for (const r of mine) await this.firebase.undoCheckIn(r);
       } else {
         const loose = existing ? null : this.calClientRecords.find(r => !r.packageId && r.date === day.dateKey && sameClient(r, row)) || null;
         await this.firebase.setAttendance({
@@ -953,6 +979,7 @@ export class PackagesPage implements OnInit, OnDestroy {
           date: day.dateKey,
           status
         });
+        for (const r of copies) await this.firebase.undoCheckIn(r);
         if (status === 'excused' && existing?.status !== 'excused') {
           postponeBillingForExcuse(pkg.id).then(days => {
             if (days) this.presentCalToast(`${row.name} — next charge pushed back ${Math.round(days * 10) / 10} days`);
@@ -966,6 +993,30 @@ export class PackagesPage implements OnInit, OnDestroy {
       this.presentCalToast('Could not save attendance', 'danger');
     } finally {
       this.calBusy.delete(row.key);
+    }
+  }
+
+  // Clears every record this package has on a leftover date (see
+  // CalDay.movedTo) — the session's attendance lives on the date it moved to.
+  async clearLeftover(day: CalDay) {
+    const pkg = this.calPkg;
+    const records = this.calRecords.filter(r => r.date === day.dateKey);
+    if (!pkg?.id || !day.movedTo || !records.length || this.calMoving) return;
+    const ok = confirm(`Clear the ${records.length === 1 ? 'record' : `${records.length} records`} on ${day.label}? ` +
+      `This session moved to ${this.calDateLabel(day.movedTo)}, and its attendance there stays as it is.`);
+    if (!ok) return;
+    this.calMoving = true;
+    try {
+      for (const r of records) await this.firebase.undoCheckIn(r);
+      this.calChanged = true;
+      this.calSelected = day.movedTo;
+      await this.refreshPackageCalendar();
+      this.presentCalToast(`Cleared ${day.label}`);
+    } catch (err) {
+      console.error('Packages: failed to clear leftover records', err);
+      this.presentCalToast('Could not clear those records', 'danger');
+    } finally {
+      this.calMoving = false;
     }
   }
 
@@ -1168,6 +1219,13 @@ export class PackagesPage implements OnInit, OnDestroy {
     // Scheduled dates with no record. A session moved to another day may
     // have its attendance filed under either date, so either one counts.
     for (const e of scheduled) {
+      const oldDay = e.dateKey !== e.originalDateKey ? days.get(e.originalDateKey) : undefined;
+      if (oldDay && days.has(e.dateKey)) {
+        oldDay.movedTo = e.dateKey;
+        oldDay.note = (byDate.get(e.originalDateKey) || []).some(r => r.decremented)
+          ? `Moved to ${label(e.dateKey)}, where attendance was taken. This record is left over and uses a second session.`
+          : `Moved to ${label(e.dateKey)}, where attendance was taken. This record is left over.`;
+      }
       const recorded = days.get(e.dateKey) || days.get(e.originalDateKey);
       if (recorded) {
         if (!recorded.time) recorded.time = e.time;

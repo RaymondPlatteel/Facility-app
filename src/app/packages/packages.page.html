@@ -353,7 +353,10 @@
         <span class="pkgcal-stat" *ngFor="let s of calSummary" [class]="'pkgcal-stat st-' + s.status">
           <strong>{{ s.count }}</strong> {{ s.label }}
         </span>
-        <span class="pkgcal-stat st-left"><strong>{{ calPkg.sessionsRemaining ?? '—' }}</strong> left</span>
+        <span class="pkgcal-stat st-left" *ngIf="!calOverUsed"><strong>{{ calPkg.sessionsRemaining ?? '—' }}</strong> left</span>
+        <span class="pkgcal-stat st-over" *ngIf="calOverUsed">
+          <strong>{{ calUsed }}</strong> sessions used of {{ calPkg.totalSessions }} · {{ calOverUsed }} too many
+        </span>
       </div>
 
       <div class="pkgcal-body" #pkgCalBody>
@@ -370,9 +373,9 @@
 
         <div class="pkgcal-list">
           <ng-container *ngFor="let d of calDays; trackBy: trackCalDay">
-            <div class="pkgcal-day" [class.selected]="d.dateKey === calSelected" [class.movable]="d.movable"
-                 [class.dragging]="calDragDay === d"
-                 (click)="selectCalDay(d.dateKey)" (pointerdown)="onCalRowPointerDown($event, d)">
+            <div class="pkgcal-day" [class.selected]="calEdit?.day?.dateKey === d.dateKey" [class.movable]="d.movable"
+                 [class.dragging]="calDragDay === d" [class.leftover]="d.movedTo"
+                 (click)="toggleCalDay(d.dateKey)" (pointerdown)="onCalRowPointerDown($event, d)">
               <span class="pkgcal-day-date">
                 <strong>{{ d.label }}</strong>
                 <span *ngIf="d.time">{{ formatTime12h(d.time) }}</span>
@@ -389,6 +392,13 @@
 
             <!-- The selected date's editor -->
             <div class="pkgcal-editor" *ngIf="calEdit && calEdit.day.dateKey === d.dateKey">
+              <div class="pkgcal-leftover" *ngIf="d.movedTo">
+                <p>
+                  This session was moved to <strong>{{ calDateLabel(d.movedTo) }}</strong> and attendance was taken there,
+                  so what's filed here counts it a second time.
+                </p>
+                <button type="button" [disabled]="calMoving" (click)="clearLeftover(d)">Clear {{ d.label }}</button>
+              </div>
               <div class="pkgcal-ed-section" *ngIf="calEdit.canMark">
                 <div class="pkgcal-ed-title">Attendance</div>
                 <div class="pkgcal-att-empty" *ngIf="!calEdit.clients.length">No clients on this package.</div>

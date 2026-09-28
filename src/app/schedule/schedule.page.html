@@ -303,17 +303,21 @@
           <div class="resched-banner" *ngIf="entry.rescheduled">
             <ion-icon name="swap-horizontal-outline"></ion-icon>
             <span>Moved from {{ dateKeyLabel(entry.originalDateKey) }}<span *ngIf="entry.originalTime"> · {{ formatTime(entry.originalTime) }}</span></span>
-            <button class="link-btn" (click)="revertReschedule()" [disabled]="reschedBusy">
+            <button class="link-btn" (click)="revertReschedule()" [disabled]="reschedBusy" *ngIf="!selectedHasAttendance">
               <ion-icon name="arrow-undo-outline"></ion-icon> Revert
             </button>
           </div>
 
-          <button class="resched-toggle" (click)="toggleReschedule()" *ngIf="!reschedOpen">
+          <p class="resched-locked" *ngIf="selectedHasAttendance">
+            Attendance is taken for this session, so it stays on this date. Clear it above to reschedule.
+          </p>
+
+          <button class="resched-toggle" (click)="toggleReschedule()" *ngIf="!reschedOpen && !selectedHasAttendance">
             <ion-icon name="pencil-outline"></ion-icon>
             {{ entry.rescheduled ? 'Change reschedule' : 'Reschedule this session' }}
           </button>
 
-          <div class="resched-form" *ngIf="reschedOpen">
+          <div class="resched-form" *ngIf="reschedOpen && !selectedHasAttendance">
             <div class="resched-fields">
               <label>
                 <span>Date</span>

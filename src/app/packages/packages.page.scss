@@ -1096,3 +1096,46 @@ $cal-status: (
   &:hover { color: #dceaf6; }
   &:disabled { opacity: 0.5; }
 }
+
+// More sessions used than the package holds — something is double counted.
+.pkgcal-stat.st-over {
+  color: #ff5d6c;
+  background: rgba(255, 93, 108, 0.12);
+
+  strong { color: #ff5d6c; }
+}
+
+.pkgcal-day.leftover .pkgcal-note { color: #ff9aa4; }
+
+.pkgcal-leftover {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 93, 108, 0.4);
+  background: rgba(255, 93, 108, 0.08);
+
+  p {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: #dceaf6;
+  }
+
+  strong { color: #00d4ff; font-weight: 600; }
+
+  button {
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid #ff5d6c;
+    background: rgba(255, 93, 108, 0.14);
+    color: #ff5d6c;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+
+    &:disabled { opacity: 0.5; cursor: default; }
+  }
+}
