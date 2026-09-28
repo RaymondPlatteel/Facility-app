@@ -348,7 +348,13 @@ export class PackagesPage implements OnInit, OnDestroy {
       // Weekly packages: the end date comes from attendance (see
       // projectPackageEnd), so an owed session always has a calendar slot.
       // recalcRow's slot-count projection only stands for the rest.
-      const projected = p.id && !p.bookedSessions ? projectPackageEnd({ ...p, expirationDate: beforeExpiration }, marksByPackage.get(p.id) || [], overrides) : null;
+      // Active packages only: a completed or prospect package isn't owed
+      // anything on the calendar, and projecting one pushed finished
+      // packages' Final Session out to today. For those, recalcRow's own
+      // date stands — the same one this page always saved for them.
+      const projected = p.id && !p.bookedSessions && p.status === 'active'
+        ? projectPackageEnd({ ...p, expirationDate: beforeExpiration }, marksByPackage.get(p.id) || [], overrides)
+        : null;
       if (projected) {
         p.expirationDate = projected.expirationDate;
         p.skipDates = projected.skipDates;
@@ -624,7 +630,7 @@ export class PackagesPage implements OnInit, OnDestroy {
     if (pkg.bookedSessions) pkg.expirationDate = beforeExpiration;
     // Same attendance-driven end date as loadData, so editing a weekly
     // package (days, duration, start date) can't strand an owed session.
-    if (pkg.id && !pkg.bookedSessions) {
+    if (pkg.id && !pkg.bookedSessions && pkg.status === 'active') {
       const [marks, overrides] = await Promise.all([
         this.firebase.getAttendanceMarks(pkg.id),
         this.firebase.listSessionOverrides()

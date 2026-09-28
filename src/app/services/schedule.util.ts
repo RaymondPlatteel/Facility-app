@@ -146,6 +146,10 @@ export function projectPackageEnd(
   overrides: SessionOverride[],
   today: Date = new Date()
 ): { expirationDate: string; skipDates: string[] } | null {
+  // Only a running package is owed dates. A completed one keeps the end
+  // date it finished on (projecting it pushed finished packages out to
+  // "today"); a prospect isn't booked yet.
+  if (pkg.status !== 'active') return null;
   if (pkg.perSessionPack || pkg.dailyGroupProgram) return null;
   const start = parseLocalDate(pkg.purchaseDate);
   const days = new Set(pkg.daysOfWeek || []);
