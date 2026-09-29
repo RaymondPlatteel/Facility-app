@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -26,7 +26,7 @@ interface DayOption {
   standalone: true,
   imports: [IonContent, IonIcon, CommonModule, FormsModule]
 })
-export class WorkoutLogPage implements OnInit {
+export class WorkoutLogPage implements OnInit, OnDestroy {
   loading = true;
   saving = false;
 
@@ -61,6 +61,11 @@ export class WorkoutLogPage implements OnInit {
 
   // History
   history: WorkoutLog[] = [];
+  // Keeps the list current while it's open — an athlete starting, editing
+  // or finishing a workout on their phone shows up without reopening.
+  private stopWatch: (() => void) | null = null;
+  private watchingKey: string | null | undefined;
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private firebase: FirebaseService,
@@ -68,7 +73,8 @@ export class WorkoutLogPage implements OnInit {
     private router: Router,
     private location: Location,
     private toastController: ToastController,
-    private alertController: AlertController
+    private alertController: AlertController,
+    private zone: NgZone
   ) {
     addIcons({
       arrowBack, add, saveOutline, trashOutline, clipboardOutline,
@@ -435,8 +441,33 @@ export class WorkoutLogPage implements OnInit {
     await alert.present();
   }
 
+  // Ionic keeps this page alive between visits, so coming back to it
+  // reloads the list too.
+  ionViewWillEnter() {
+    if (!this.loading) this.refreshHistory();
+  }
+
+  ngOnDestroy() {
+    this.stopWatch?.();
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+  }
+
+  private watchHistory() {
+    const key = this.selectedClient ? (this.selectedClient.nameKey || this.selectedClient.fullName).trim().toLowerCase() : null;
+    if (key === this.watchingKey) return;
+    this.stopWatch?.();
+    this.watchingKey = key;
+    let first = true;
+    this.stopWatch = this.firebase.watchWorkoutChanges(key, () => this.zone.run(() => {
+      if (first) { first = false; return; }   // the list was just loaded
+      if (this.refreshTimer) clearTimeout(this.refreshTimer);
+      this.refreshTimer = setTimeout(() => this.refreshHistory(), 600);
+    }));
+  }
+
   // ---------- History ----------
   async refreshHistory() {
+    this.watchHistory();
     try {
       if (this.selectedClientId) {
         this.history = await this.firebase.listWorkoutLogs({ clientId: this.selectedClientId, nameKey: this.selectedClient?.nameKey, max: 30 });

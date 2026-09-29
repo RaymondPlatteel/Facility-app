@@ -2527,6 +2527,18 @@ export class FirebaseService {
     );
   }
 
+  // Calls back whenever shared workouts change — one athlete's (by name
+  // key), or any workout in progress when there's none — so a history list
+  // can refresh itself. Returns the unsubscribe.
+  watchWorkoutChanges(nameKey: string | null, onChange: () => void): () => void {
+    const shared = collection(this.db, 'memberWorkoutLogs');
+    return onSnapshot(
+      query(shared, nameKey ? where('nameKey', '==', nameKey) : where('inProgress', '==', true)),
+      () => onChange(),
+      err => console.error('Workout changes watch failed', err)
+    );
+  }
+
   // The athlete's workout in progress today (the newest, if somehow more
   // than one), or null — so a live session picks it up the moment they
   // start one on their phone.
