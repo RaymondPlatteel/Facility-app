@@ -4,7 +4,7 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit, onSnapshot } from 'firebase/firestore';
 import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationPlan, usesStoredSessions } from './schedule.util';
 import type { ScheduleEntry } from './schedule.util';
-import { SYNC_CLIENT_ID, ensureExerciseKeys, isLiveWorkout, newExerciseKey, normalizeState, sheetToSync, syncToSheet, WorkoutSyncState } from './workout-sync';
+import { SYNC_CLIENT_ID, ensureExerciseKeys, isLiveWorkout, isStaleWorkout, staleCloseFields, newExerciseKey, normalizeState, sheetToSync, syncToSheet, WorkoutSyncState } from './workout-sync';
 import { environment } from '../../environments/environment';
 import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank } from './omni.util';
 import type { TestOverrides, ResilienceInputs } from './omni.util';
@@ -2333,14 +2333,27 @@ export class FirebaseService {
     ]);
     let logs: WorkoutLog[] = coachSnap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<WorkoutLog, 'id'>), source: 'coach' as const }));
     if (sharedSnap) {
-      logs = logs.concat(sharedSnap.docs.map(d =>
-        this.memberToWorkoutLog({ id: d.id, ...(d.data() as Omit<MemberWorkoutLog, 'id'>) }, opts.clientId ?? null)));
+      logs = logs.concat(sharedSnap.docs.map(d => {
+        const m = { id: d.id, ...(d.data() as Omit<MemberWorkoutLog, 'id'>) } as MemberWorkoutLog;
+        if (isStaleWorkout(m)) Object.assign(m, this.closeStaleWorkout(d.id, m));
+        return this.memberToWorkoutLog(m, opts.clientId ?? null);
+      }));
     }
     if (opts.programId && opts.clientId) {
       logs = logs.filter(l => l.programId === opts.programId);
     }
     logs.sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || ''));
     return opts.max ? logs.slice(0, opts.max) : logs;
+  }
+
+  // Marks a workout left in progress past its day as complete, as of its
+  // last edit (see staleCloseFields). Written in the background; returns
+  // the fields so the caller shows it closed straight away.
+  private closeStaleWorkout(id: string, w: MemberWorkoutLog) {
+    const fields = staleCloseFields(w);
+    updateDoc(doc(this.db, 'memberWorkoutLogs', id), fields as any)
+      .catch(err => console.error('Closing stale workout failed', err));
+    return fields;
   }
 
   // A client's name key, for the shared collection. Cached for the session.

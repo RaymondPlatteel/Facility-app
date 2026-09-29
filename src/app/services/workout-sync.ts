@@ -87,6 +87,23 @@ export function isLiveWorkout(w: { inProgress?: boolean; dateLabel?: string } | 
   return !!w?.inProgress && w.dateLabel === todayKey();
 }
 
+// Still marked in progress after the day it started: nobody tapped
+// finish. Whichever app sees it first closes it as complete.
+export function isStaleWorkout(w: { inProgress?: boolean; dateLabel?: string } | null | undefined): boolean {
+  return !!w?.inProgress && w.dateLabel !== todayKey();
+}
+
+// The fields that close a stale workout, dated back to its last edit — when
+// the work actually stopped, not whenever somebody next opened the app.
+export function staleCloseFields(w: { startedAt?: number | null; updatedAt?: string; timestamp?: string }): {
+  inProgress: false; timestamp: string; updatedAt: string; durationMin: number | null;
+} {
+  const last = w.updatedAt || w.timestamp || new Date().toISOString();
+  const lastMs = Date.parse(last);
+  const durationMin = w.startedAt && isFinite(lastMs) ? Math.max(1, Math.round((lastMs - w.startedAt) / 60000)) : null;
+  return { inProgress: false, timestamp: last, updatedAt: last, durationMin };
+}
+
 export function normalizeSet(s: Partial<SyncSet>): SyncSet {
   const out: SyncSet = {
     reps: typeof s.reps === 'number' && isFinite(s.reps) ? s.reps : null,
