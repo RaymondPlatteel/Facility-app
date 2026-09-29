@@ -292,47 +292,13 @@
             No workouts logged yet.
           </div>
           <button class="workout-row" *ngFor="let w of clientWorkouts" (click)="openWorkoutLog(w)">
-            <span class="dot"></span>
+            <span class="dot" [class.live]="w.inProgress"></span>
             <span class="w-main">
               <span class="w-title">{{ workoutTitle(w) }}</span>
               <span class="w-sub">{{ workoutDate(w) }} · {{ workoutSummary(w) }}</span>
             </span>
             <ion-icon name="chevron-forward" class="w-chevron"></ion-icon>
           </button>
-        </section>
-
-        <!-- Self-logged workouts (Project-000) -->
-        <section class="panel-section" *ngIf="!panelNew">
-          <h3>
-            <ion-icon name="phone-portrait-outline"></ion-icon> Self-Logged Workouts
-            <span class="total" *ngIf="clientMemberWorkouts.length">{{ clientMemberWorkouts.length }} logged</span>
-          </h3>
-          <div *ngIf="paymentsLoading" class="empty-note">Loading…</div>
-          <div *ngIf="!paymentsLoading && clientMemberWorkouts.length === 0" class="empty-note">
-            Nothing logged from their phone yet.
-          </div>
-          <div class="member-workout" *ngFor="let w of clientMemberWorkouts">
-            <button type="button" class="workout-row" (click)="toggleMemberWorkout(w)">
-              <span class="dot"></span>
-              <span class="w-main">
-                <span class="w-title">{{ memberWorkoutTitle(w) }}</span>
-                <span class="w-sub">{{ memberWorkoutDate(w) }} · {{ memberWorkoutSummary(w) }}</span>
-              </span>
-              <ion-icon [name]="expandedMemberWorkoutId === w.id ? 'chevron-down' : 'chevron-forward'" class="w-chevron"></ion-icon>
-            </button>
-            <div class="member-workout-detail" *ngIf="expandedMemberWorkoutId === w.id">
-              <div class="mw-exercise" *ngFor="let ex of w.exercises">
-                <div class="mw-exercise-name">{{ ex.name }}</div>
-                <div class="mw-set-row" *ngFor="let s of ex.sets; let i = index">
-                  <span class="mw-set-idx">{{ i + 1 }}</span>
-                  <span class="mw-set-line">{{ memberSetLine(s) }}</span>
-                  <ion-icon *ngIf="s.completed" name="checkmark-circle" class="mw-set-done"></ion-icon>
-                </div>
-                <div class="mw-exercise-notes" *ngIf="ex.notes">{{ ex.notes }}</div>
-              </div>
-              <div class="mw-notes" *ngIf="w.notes">"{{ w.notes }}"</div>
-            </div>
-          </div>
         </section>
 
         <!-- Daily check-ins (Project-000) -->

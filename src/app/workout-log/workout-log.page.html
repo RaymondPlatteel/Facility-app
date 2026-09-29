@@ -131,10 +131,14 @@
         <h2><ion-icon name="reader-outline"></ion-icon> {{ selectedClient ? selectedClient.fullName + "'s" : 'Recent' }} Sessions</h2>
         <div class="history-row" *ngFor="let log of history"
              [class.active]="log.id === editingLogId"
-             (click)="applyLog(log)">
+             [class.live]="log.inProgress"
+             (click)="openLog(log)">
           <span class="h-date">{{ historyDate(log) }}</span>
           <span class="h-client">{{ log.clientName || '—' }}</span>
-          <span class="h-day">{{ log.dayName || 'Session' }}</span>
+          <span class="h-day">
+            <span class="h-live" *ngIf="log.inProgress">LIVE</span>
+            {{ historyLabel(log) }}
+          </span>
           <span class="h-program">{{ log.programName }}</span>
           <span class="h-count">{{ log.exercises.length }} ex</span>
         </div>

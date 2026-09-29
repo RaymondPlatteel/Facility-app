@@ -98,6 +98,10 @@
                      below is always reachable — logging isn't gated on a
                      program anymore, see persist()'s comment. -->
                 <div class="ls-log" *ngIf="lane.clientId">
+                  <div class="ls-sync" *ngIf="lane.sharedId">
+                    <span class="ls-sync-dot"></span>
+                    Live · changes show on {{ laneName(lane) }}'s phone as you make them
+                  </div>
                   <div class="ex-block" *ngFor="let ex of lane.entries; let i = index">
                     <div class="ex-title">
                       <span class="ex-num">{{ i + 1 }}</span>

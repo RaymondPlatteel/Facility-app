@@ -697,6 +697,9 @@ ion-content {
     border-radius: 50%;
     background: #00d4ff;
     flex-shrink: 0;
+
+    // Being done right now — tapping opens it live.
+    &.live { background: #2dd36f; box-shadow: 0 0 0 3px rgba(45, 211, 111, 0.2); }
   }
 
   .w-main {

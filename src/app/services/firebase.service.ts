@@ -1,9 +1,10 @@
 import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit, onSnapshot } from 'firebase/firestore';
 import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationPlan, usesStoredSessions } from './schedule.util';
 import type { ScheduleEntry } from './schedule.util';
+import { SYNC_CLIENT_ID, ensureExerciseKeys, isLiveWorkout, newExerciseKey, normalizeState, sheetToSync, syncToSheet, WorkoutSyncState } from './workout-sync';
 import { environment } from '../../environments/environment';
 import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank } from './omni.util';
 import type { TestOverrides, ResilienceInputs } from './omni.util';
@@ -550,6 +551,7 @@ export interface SetLog {
 }
 
 export interface LoggedExercise {
+  key?: string;           // stable id, so live edits from both apps line up (see workout-sync.ts)
   exerciseName: string;
   prescription: string;   // human-readable summary captured at logging time
   attrColumns: string[];  // attribute types tracked per set (order = column order)
@@ -574,6 +576,13 @@ export interface WorkoutLog {
   completed?: boolean;
   createdAt?: string;
   updatedAt?: string;
+  // Runtime only, never saved. Where this workout lives: 'member' is the
+  // shared memberWorkoutLogs record every workout is written to now, by
+  // either app; 'coach' is this app's own workoutLogs from before workouts
+  // were shared. Both show as the same thing everywhere.
+  source?: 'coach' | 'member';
+  inProgress?: boolean;   // being done right now, live on both apps
+  title?: string;         // the athlete's own name for a workout they started
 }
 
 // A member's own freeform workout log, self-recorded in Project-000 —
@@ -589,12 +598,16 @@ export interface MemberWorkoutSet {
   completed: boolean;
   setType: 'warmup' | 'normal';
   videoUrl: string | null;
+  values?: { [column: string]: string };  // other sheet columns (Tempo, Duration…), as text
 }
 
 export interface MemberWorkoutExercise {
+  key?: string;
   name: string;
   sets: MemberWorkoutSet[];
   notes?: string;
+  prescription?: string;
+  attrColumns?: string[];
 }
 
 export interface MemberWorkoutLog {
@@ -612,6 +625,13 @@ export interface MemberWorkoutLog {
   programName?: string | null;
   dayIndex?: number | null;
   dayName?: string | null;
+  // Shared-workout fields (see workout-sync.ts).
+  inProgress?: boolean;       // being done right now, live on both apps
+  startedAt?: number | null;  // ms, for the elapsed timer on both apps
+  clientId?: string | null;
+  coachEdited?: boolean;      // the coach app wrote to it — the athlete can't delete it
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 // A member's own daily self-report — how they're feeling, logged from
@@ -2276,6 +2296,7 @@ export class FirebaseService {
         else if (setsAttr.strategy === 'Range') setCount = Math.max(1, parseInt(setsAttr.val.split('-')[0], 10) || 3);
       }
       return {
+        key: newExerciseKey(),
         exerciseName: ex.name || 'Exercise',
         prescription: ex.attributes.map(a =>
           `${a.type}: ${a.strategy === 'User Input' ? '—' : a.strategy === 'Bodyweight' ? 'BW' : a.val || '—'}`
@@ -2286,22 +2307,76 @@ export class FirebaseService {
     });
   }
 
-  async listWorkoutLogs(opts: { programId?: string; clientId?: string; max?: number } = {}): Promise<WorkoutLog[]> {
-    let q;
+  // Every workout, whichever app recorded it — this app's older
+  // workoutLogs plus the shared memberWorkoutLogs both apps write now — in
+  // this app's sheet shape, newest first. One where-clause per query to
+  // avoid composite indexes. The shared collection is joined by name key,
+  // the only key Project-000 has; pass it when known to skip a lookup.
+  async listWorkoutLogs(opts: { programId?: string; clientId?: string; nameKey?: string; max?: number } = {}): Promise<WorkoutLog[]> {
+    const shared = collection(this.db, 'memberWorkoutLogs');
+    let coachQ;
+    let sharedQ = null;
     if (opts.clientId) {
-      q = query(this.workoutLogsCollection(), where('clientId', '==', opts.clientId));
+      coachQ = query(this.workoutLogsCollection(), where('clientId', '==', opts.clientId));
+      const key = opts.nameKey || await this.nameKeyFor(opts.clientId);
+      if (key) sharedQ = query(shared, where('nameKey', '==', key));
     } else if (opts.programId) {
-      q = query(this.workoutLogsCollection(), where('programId', '==', opts.programId));
+      coachQ = query(this.workoutLogsCollection(), where('programId', '==', opts.programId));
+      sharedQ = query(shared, where('programId', '==', opts.programId));
     } else {
-      q = query(this.workoutLogsCollection(), orderBy('date', 'desc'), limit(opts.max ?? 200));
+      coachQ = query(this.workoutLogsCollection(), orderBy('date', 'desc'), limit(opts.max ?? 200));
+      sharedQ = query(shared, orderBy('timestamp', 'desc'), limit(opts.max ?? 200));
     }
-    const snap = await getDocs(q);
-    let logs = snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<WorkoutLog, 'id'>) }));
+    const [coachSnap, sharedSnap] = await Promise.all([
+      getDocs(coachQ),
+      sharedQ ? getDocs(sharedQ).catch(err => { console.error('Shared workouts read failed', err); return null; }) : null
+    ]);
+    let logs: WorkoutLog[] = coachSnap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<WorkoutLog, 'id'>), source: 'coach' as const }));
+    if (sharedSnap) {
+      logs = logs.concat(sharedSnap.docs.map(d =>
+        this.memberToWorkoutLog({ id: d.id, ...(d.data() as Omit<MemberWorkoutLog, 'id'>) }, opts.clientId ?? null)));
+    }
     if (opts.programId && opts.clientId) {
       logs = logs.filter(l => l.programId === opts.programId);
     }
     logs.sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || ''));
     return opts.max ? logs.slice(0, opts.max) : logs;
+  }
+
+  // A client's name key, for the shared collection. Cached for the session.
+  private nameKeys = new Map<string, string>();
+
+  private async nameKeyFor(clientId: string): Promise<string | null> {
+    const cached = this.nameKeys.get(clientId);
+    if (cached) return cached;
+    const snap = await getDoc(doc(this.db, 'clientProfiles', clientId));
+    if (!snap.exists()) return null;
+    const key = String(snap.data()['nameKey'] || snap.data()['fullName'] || '').trim().toLowerCase();
+    if (key) this.nameKeys.set(clientId, key);
+    return key || null;
+  }
+
+  // A shared workout in this app's sheet shape.
+  memberToWorkoutLog(m: MemberWorkoutLog, clientId: string | null = null): WorkoutLog {
+    const live = isLiveWorkout(m);
+    return {
+      id: m.id,
+      source: 'member',
+      inProgress: live,
+      title: m.title || '',
+      programId: m.programId ?? null,
+      programName: m.programName ?? '',
+      dayIndex: m.dayIndex ?? null,
+      dayName: m.dayName ?? '',
+      clientId: m.clientId ?? clientId,
+      clientName: m.clientName,
+      date: m.dateLabel,
+      exercises: ensureExerciseKeys(m.exercises || []).map((e, i) => syncToSheet(e, i)),
+      sessionNotes: m.notes || '',
+      completed: !live,
+      createdAt: m.createdAt,
+      updatedAt: m.updatedAt
+    };
   }
 
   // ---------- Self-logged data from Project-000 (read-only here) ----------
@@ -2327,24 +2402,133 @@ export class FirebaseService {
     return logs.slice(0, max);
   }
 
+  // Saves from the Workout Log page and the live session's fallback. An
+  // older coach-only session saves where it always lived; everything else,
+  // new sessions included, goes to the shared record both apps read.
   async saveWorkoutLog(log: WorkoutLog): Promise<string> {
     const now = new Date().toISOString();
-    const { id, ...data } = log;
-    const payload = this.cleanForFirestore({
-      ...data,
-      createdAt: log.createdAt ?? now,
-      updatedAt: now
-    });
-    if (id) {
-      await setDoc(doc(this.db, 'workoutLogs', id), payload);
+    if (log.source === 'coach' && log.id) {
+      const { id, source, inProgress, title, ...data } = log;
+      await setDoc(doc(this.db, 'workoutLogs', id), this.cleanForFirestore({
+        ...data,
+        createdAt: log.createdAt ?? now,
+        updatedAt: now
+      }));
       return id;
     }
-    const ref = await addDoc(this.workoutLogsCollection(), payload);
+    const title = log.title || [log.programName, log.dayName].filter(Boolean).join(' — ') || 'Workout';
+    const program = {
+      programId: log.programId ?? null,
+      programName: log.programName || null,
+      dayIndex: log.dayIndex ?? null,
+      dayName: log.dayName || null
+    };
+    if (log.id) {
+      const snap = await getDoc(doc(this.db, 'memberWorkoutLogs', log.id));
+      const prev = snap.exists() ? normalizeState(snap.data() as Partial<WorkoutSyncState>) : null;
+      await this.writeSharedWorkout(log.id, {
+        title,
+        notes: log.sessionNotes || '',
+        exercises: log.exercises.map((e, i) => sheetToSync(e, prev?.exercises.find(p => p.key === e.key), i)),
+        dateLabel: log.date,
+        ...program
+      });
+      return log.id;
+    }
+    return this.createSharedWorkout({
+      clientId: log.clientId,
+      clientName: log.clientName,
+      date: log.date,
+      title,
+      notes: log.sessionNotes || '',
+      exercises: log.exercises.map((e, i) => sheetToSync(e, undefined, i)),
+      ...program,
+      inProgress: log.completed === false
+    });
+  }
+
+  async deleteWorkoutLog(id: string, source: 'coach' | 'member' = 'coach'): Promise<void> {
+    await deleteDoc(doc(this.db, source === 'member' ? 'memberWorkoutLogs' : 'workoutLogs', id));
+  }
+
+  // ---------- Shared workouts, live ----------
+  // Every write from this app marks the workout coachEdited, which stops
+  // the athlete deleting it from their phone.
+  async createSharedWorkout(w: {
+    clientId: string | null;
+    clientName: string;
+    nameKey?: string;
+    date: string;
+    title: string;
+    notes: string;
+    exercises: WorkoutSyncState['exercises'];
+    programId?: string | null;
+    programName?: string | null;
+    dayIndex?: number | null;
+    dayName?: string | null;
+    inProgress: boolean;
+    startedAt?: number;
+  }): Promise<string> {
+    const now = new Date().toISOString();
+    const nameKey = w.nameKey || (w.clientId ? await this.nameKeyFor(w.clientId) : null) || w.clientName.trim().toLowerCase();
+    const ref = await addDoc(collection(this.db, 'memberWorkoutLogs'), this.cleanForFirestore({
+      nameKey,
+      clientName: w.clientName,
+      clientId: w.clientId,
+      dateLabel: w.date,
+      timestamp: now,
+      title: w.title,
+      durationMin: null,
+      exercises: w.exercises,
+      notes: w.notes,
+      createdAt: now,
+      programId: w.programId ?? null,
+      programName: w.programName ?? null,
+      dayIndex: w.dayIndex ?? null,
+      dayName: w.dayName ?? null,
+      inProgress: w.inProgress,
+      startedAt: w.startedAt ?? Date.now(),
+      coachEdited: true,
+      updatedAt: now,
+      updatedBy: SYNC_CLIENT_ID
+    }));
     return ref.id;
   }
 
-  async deleteWorkoutLog(id: string): Promise<void> {
-    await deleteDoc(doc(this.db, 'workoutLogs', id));
+  async writeSharedWorkout(id: string, changes: Partial<MemberWorkoutLog>): Promise<void> {
+    await updateDoc(doc(this.db, 'memberWorkoutLogs', id), this.cleanForFirestore({
+      ...changes,
+      coachEdited: true,
+      updatedAt: new Date().toISOString(),
+      updatedBy: SYNC_CLIENT_ID
+    }) as any);
+  }
+
+  // Calls back with the workout on every change from either app (null once
+  // it's deleted). Returns the unsubscribe.
+  watchSharedWorkout(id: string, onChange: (w: MemberWorkoutLog | null) => void): () => void {
+    return onSnapshot(
+      doc(this.db, 'memberWorkoutLogs', id),
+      snap => onChange(snap.exists() ? ({ id: snap.id, ...(snap.data() as Omit<MemberWorkoutLog, 'id'>) }) : null),
+      err => console.error('Shared workout watch failed', err)
+    );
+  }
+
+  // The athlete's workout in progress today (the newest, if somehow more
+  // than one), or null — so a live session picks it up the moment they
+  // start one on their phone.
+  watchLiveWorkout(nameKey: string, onChange: (w: MemberWorkoutLog | null) => void): () => void {
+    return onSnapshot(
+      query(collection(this.db, 'memberWorkoutLogs'), where('nameKey', '==', nameKey)),
+      snap => {
+        const live = snap.docs
+          .map(d => ({ id: d.id, ...(d.data() as Omit<MemberWorkoutLog, 'id'>) }))
+          .filter(isLiveWorkout)
+          .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+        onChange(live[0] || null);
+      },
+      err => console.error('Live workout watch failed', err)
+    );
   }
 
   // Save workout

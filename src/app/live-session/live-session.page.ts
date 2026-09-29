@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, HostListener } from '@angular/core';
+import { Component, OnDestroy, OnInit, HostListener, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -13,7 +13,11 @@ import {
 import { Subscription } from 'rxjs';
 import {
   FirebaseService, WorkoutLog, ClientProfile, Program,
-  LoggedExercise, SetLog, AssessmentInputs, localDateString, Sex } from '../services/firebase.service';
+  LoggedExercise, SetLog, AssessmentInputs, localDateString, Sex, MemberWorkoutLog } from '../services/firebase.service';
+import {
+  WorkoutSyncState, SyncExercise, ensureExerciseKeys, isLiveWorkout, merge3, newExerciseKey,
+  normalizeState, patchInPlace, sameValue, sheetToSync, syncToSheet
+} from '../services/workout-sync';
 import { HeartRateService, WatchSlot } from '../services/heart-rate.service';
 import {
   matchAssessmentLift, brzycki, computeOmni, getOmniRank, blankAssessmentInputs
@@ -58,7 +62,25 @@ interface Lane {
   targets: number[];
   prev: string[];          // per-exercise "last session" summary (e.g. "100×5 · 100×5")
   prevSets: Record<string, string>[][]; // per-exercise, per-set: last session's actual column values (e.g. prevSets[i][s]['RIR'] = '2'), used as per-field placeholders
-  editingLogId: string | null;
+  editingLogId: string | null;  // the workout being edited, whichever collection — skipped for "last time"
+  nameKey: string;
+  history: WorkoutLog[];        // past workouts from both apps, newest first
+  // The shared workout this lane is editing live with the athlete's phone
+  // (see workout-sync.ts). synced is the version both sides last agreed on;
+  // canon is the workout as last stored, which keeps what the sheet can't
+  // show (warm-up flags, set videos).
+  sharedId: string | null;
+  synced: WorkoutSyncState | null;
+  canon: SyncExercise[];
+  docTitle: string;
+  docNotes: string;
+  startedAt: number | null;
+  creating: Promise<void> | null;
+  stopDoc: (() => void) | null;
+  stopLive: (() => void) | null;
+  // Today's unfinished session from before workouts were shared — keeps
+  // saving the old way so it isn't split across two records.
+  legacyLogId: string | null;
   programComplete: boolean;
   noProgram: boolean;
   emptyProgram: boolean;   // program assigned but no day has exercises
@@ -162,6 +184,7 @@ export class LiveSessionPage implements OnInit, OnDestroy {
 
   private startedAt = Date.now();
   private tickTimer: any = null;
+  private finishing = false;
   private hrSub: Subscription | null = null;
 
   constructor(
@@ -169,7 +192,8 @@ export class LiveSessionPage implements OnInit, OnDestroy {
     private heartRate: HeartRateService,
     private router: Router,
     private route: ActivatedRoute,
-    private toast: ToastController
+    private toast: ToastController,
+    private zone: NgZone
   ) {
     addIcons({
       arrowBack, watchOutline, pulseOutline, flashOutline,
@@ -206,7 +230,8 @@ export class LiveSessionPage implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.tickTimer) clearInterval(this.tickTimer);
     this.lanes.forEach(lane => {
-      if (lane.saveTimer) { clearTimeout(lane.saveTimer); this.persist(lane); }
+      if (lane.saveTimer) { clearTimeout(lane.saveTimer); lane.saveTimer = null; this.persist(lane); }
+      this.detachLane(lane);
     });
     this.hrSub?.unsubscribe();
   }
@@ -217,6 +242,8 @@ export class LiveSessionPage implements OnInit, OnDestroy {
       clientId: '', clientName: '', program: null,
       dayIndex: null, dayPosition: 0, dayTotal: 0, programLabel: '',
       entries: [], targets: [], prev: [], prevSets: [], editingLogId: null,
+      nameKey: '', history: [], sharedId: null, synced: null, canon: [], docTitle: '', docNotes: '',
+      startedAt: null, creating: null, stopDoc: null, stopLive: null, legacyLogId: null,
       programComplete: false, noProgram: false, emptyProgram: false, pickerOpen: false, dayPickerOpen: false, dayList: [], saveTimer: null,
       newExerciseName: '', addExerciseOpen: false,
       demoSamples: [], demoPhase: Math.random() * 100,
@@ -239,7 +266,7 @@ export class LiveSessionPage implements OnInit, OnDestroy {
       if (this.lanes.length < 2) this.lanes.push(this.makeLane('B', LANE_B_COLOR));
     } else {
       const b = this.lanes[1];
-      if (b) { if (b.saveTimer) clearTimeout(b.saveTimer); this.persist(b); }
+      if (b) { if (b.saveTimer) clearTimeout(b.saveTimer); this.persist(b); this.detachLane(b); }
       this.lanes = this.lanes.slice(0, 1);
     }
     this.refreshHr();
@@ -338,8 +365,9 @@ export class LiveSessionPage implements OnInit, OnDestroy {
     this.lanes.forEach(l => l.dayPickerOpen = false);
   }
 
-  // Switch the lane to a specific program day, loading its prescription (or an
-  // in-progress log for that day from today). Saves the current day first.
+  // Switch the lane to a specific program day, loading its prescription.
+  // Mid-workout, that day replaces what the shared workout holds (asked
+  // first once anything's been logged), and the athlete's phone follows.
   async pickDay(lane: Lane, dayIndex: number) {
     lane.dayPickerOpen = false;
     if (!lane.program || dayIndex === lane.dayIndex) return;
@@ -349,26 +377,40 @@ export class LiveSessionPage implements OnInit, OnDestroy {
     // Flush any pending autosave of the current day before switching.
     if (lane.saveTimer) { clearTimeout(lane.saveTimer); lane.saveTimer = null; await this.persist(lane); }
 
-    const logs = await this.firebase.listWorkoutLogs({ clientId: lane.clientId, programId: lane.program.id! });
-    const today = localDateString();
-    const todayLog = logs.find(l => l.date === today && l.dayIndex === dayIndex && l.completed === false);
+    const logged = lane.entries.some(e => e.sets.some(s => s.done || Object.values(s.values || {}).some(v => (v || '').trim())));
+    const day = lane.program.schedule[dayIndex];
+    if (lane.sharedId && logged && !confirm(`Switch to ${day?.name || 'that day'}? What's logged in this workout will be replaced.`)) return;
 
     lane.programComplete = false;
     lane.emptyProgram = false;
-    if (todayLog) {
-      lane.editingLogId = todayLog.id || null;
-      lane.entries = JSON.parse(JSON.stringify(todayLog.exercises));
-    } else {
-      lane.editingLogId = null;
-      lane.entries = this.firebase.buildSessionExercises(lane.program, dayIndex);
-    }
+    lane.legacyLogId = null;
+    lane.entries = this.firebase.buildSessionExercises(lane.program, dayIndex);
     lane.dayIndex = dayIndex;
     lane.dayPosition = order.indexOf(dayIndex) + 1;
-    const day = lane.program.schedule[dayIndex];
     lane.programLabel = [lane.program.name, day?.name].filter(Boolean).join(' · ').toUpperCase();
-    lane.prev = lane.entries.map(ex => this.previousSummary(ex, logs, lane.editingLogId));
-    lane.prevSets = lane.entries.map(ex => this.previousSets(ex, logs, lane.editingLogId));
-    lane.targets = lane.entries.map(ex => Math.max(1, ex.sets.length));
+
+    if (lane.sharedId) {
+      lane.canon = [];
+      lane.docTitle = [lane.program.name, day?.name].filter(Boolean).join(' — ');
+      const state = this.laneState(lane);
+      lane.synced = state;
+      lane.canon = state.exercises;
+      try {
+        await this.firebase.writeSharedWorkout(lane.sharedId, {
+          title: lane.docTitle,
+          exercises: state.exercises,
+          programId: lane.program.id || null,
+          programName: lane.program.name,
+          dayIndex,
+          dayName: day?.name || null
+        });
+      } catch (err) {
+        console.error('Live session: day switch save failed', err);
+      }
+    } else {
+      lane.editingLogId = null;
+    }
+    this.refreshLaneHints(lane);
   }
 
   private programForClient(clientId: string): Program | null {
@@ -412,8 +454,10 @@ export class LiveSessionPage implements OnInit, OnDestroy {
   }
 
   async loadLane(lane: Lane, clientId: string) {
+    this.detachLane(lane);
     lane.clientId = clientId;
     lane.editingLogId = null;
+    lane.legacyLogId = null;
     lane.programComplete = false;
     lane.noProgram = false;
     lane.emptyProgram = false;
@@ -428,62 +472,216 @@ export class LiveSessionPage implements OnInit, OnDestroy {
     lane.dayTotal = 0;
     lane.program = null;
     lane.programLabel = '';
+    lane.history = [];
 
-    if (!clientId) { lane.clientName = ''; return; }
+    if (!clientId) { lane.clientName = ''; lane.nameKey = ''; return; }
 
-    lane.clientName = this.clients.find(c => c.id === clientId)?.fullName || '';
-    const program = this.programForClient(clientId);
-    if (!program) { lane.noProgram = true; return; }
+    const client = this.clients.find(c => c.id === clientId);
+    lane.clientName = client?.fullName || '';
+    lane.nameKey = (client?.nameKey || lane.clientName).trim().toLowerCase();
 
-    lane.program = program;
     try {
-      const order = this.firebase.programTrainingDays(program);
-      lane.dayTotal = order.length;
-      lane.dayList = this.dayOptions(lane);   // stable list (built once, not per change-detection)
-      const logs = await this.firebase.listWorkoutLogs({ clientId, programId: program.id! });
-      const today = localDateString();
-
-      // Resume only a session left mid-workout today; a finished one advances.
-      const todayLog = logs.find(l =>
-        l.date === today && l.dayIndex !== null && order.includes(l.dayIndex!) && l.completed === false
-      );
-      if (todayLog) {
-        lane.dayIndex = todayLog.dayIndex;
-        lane.editingLogId = todayLog.id || null;
-        lane.entries = JSON.parse(JSON.stringify(todayLog.exercises));
-      } else if (order.length === 0) {
-        // Program assigned but no day has exercises — nothing to run yet.
-        lane.emptyProgram = true;
-        lane.dayIndex = null;
-        lane.entries = [];
-      } else {
-        const last = logs.find(l => l.dayIndex !== null && order.includes(l.dayIndex!));
-        // Loop back to the first training day once the written program is
-        // finished, so an ongoing client always has the next session queued
-        // instead of a dead-end blank "complete" state.
-        const nextPos = last ? (order.indexOf(last.dayIndex!) + 1) % order.length : 0;
-        lane.dayIndex = order[nextPos];
-        lane.entries = this.firebase.buildSessionExercises(program, lane.dayIndex);
-      }
-
-      if (lane.dayIndex !== null) {
-        lane.dayPosition = order.indexOf(lane.dayIndex) + 1;
-        const day = program.schedule[lane.dayIndex];
-        lane.programLabel = [program.name, day?.name].filter(Boolean).join(' · ').toUpperCase();
-      } else {
-        lane.programLabel = `${program.name} · NO WORKOUT DAYS`.toUpperCase();
-      }
-
-      // Previous weights: for each exercise, the values from the most recent
-      // prior log (in this program) that contains it — so the coach can match
-      // or beat last time. Skips the in-progress log we may be resuming.
-      lane.prev = lane.entries.map(ex => this.previousSummary(ex, logs, lane.editingLogId));
-      lane.prevSets = lane.entries.map(ex => this.previousSets(ex, logs, lane.editingLogId));
+      lane.history = await this.firebase.listWorkoutLogs({ clientId, nameKey: lane.nameKey });
     } catch (err) {
-      console.error('Live session: failed to load program progress', err);
+      console.error('Live session: failed to load workout history', err);
+    }
+    if (lane.clientId !== clientId) return;   // switched athlete while loading
+
+    // Already under way today, on either app — join it.
+    const live = lane.history.find(l => l.source === 'member' && l.inProgress && l.id);
+    if (live) {
+      await this.joinShared(lane, live.id!);
+      this.watchForAthlete(lane);
+      return;
     }
 
+    const program = this.programForClient(clientId);
+    if (!program) {
+      lane.noProgram = true;
+      this.watchForAthlete(lane);
+      return;
+    }
+
+    lane.program = program;
+    const order = this.firebase.programTrainingDays(program);
+    lane.dayTotal = order.length;
+    lane.dayList = this.dayOptions(lane);   // stable list (built once, not per change-detection)
+    const logs = lane.history.filter(l => l.programId === program.id);
+    const today = localDateString();
+
+    // An unfinished coach session from today, saved before workouts were
+    // shared, picks up where it left off; a finished one advances.
+    const todayLog = logs.find(l =>
+      l.source === 'coach' && l.date === today && l.dayIndex !== null && order.includes(l.dayIndex!) && l.completed === false
+    );
+    if (todayLog) {
+      lane.dayIndex = todayLog.dayIndex;
+      lane.editingLogId = todayLog.id || null;
+      lane.legacyLogId = todayLog.id || null;
+      lane.entries = ensureExerciseKeys(JSON.parse(JSON.stringify(todayLog.exercises)) as LoggedExercise[]);
+    } else if (order.length === 0) {
+      // Program assigned but no day has exercises — nothing to run yet.
+      lane.emptyProgram = true;
+      lane.dayIndex = null;
+      lane.entries = [];
+    } else {
+      const last = logs.find(l => l.dayIndex !== null && order.includes(l.dayIndex!));
+      // Loop back to the first training day once the written program is
+      // finished, so an ongoing client always has the next session queued
+      // instead of a dead-end blank "complete" state.
+      const nextPos = last ? (order.indexOf(last.dayIndex!) + 1) % order.length : 0;
+      lane.dayIndex = order[nextPos];
+      lane.entries = this.firebase.buildSessionExercises(program, lane.dayIndex);
+    }
+
+    if (lane.dayIndex !== null) {
+      lane.dayPosition = order.indexOf(lane.dayIndex) + 1;
+      const day = program.schedule[lane.dayIndex];
+      lane.programLabel = [program.name, day?.name].filter(Boolean).join(' · ').toUpperCase();
+    } else {
+      lane.programLabel = `${program.name} · NO WORKOUT DAYS`.toUpperCase();
+    }
+    this.refreshLaneHints(lane);
+    this.watchForAthlete(lane);
+  }
+
+  // "Last time" per exercise and the set targets, from the lane's history.
+  private refreshLaneHints(lane: Lane) {
+    // Previous weights: for each exercise, the values from the most recent
+    // prior workout that contains it — so the coach can match or beat last
+    // time. Skips the workout being edited.
+    lane.prev = lane.entries.map(ex => this.previousSummary(ex, lane.history, lane.editingLogId));
+    lane.prevSets = lane.entries.map(ex => this.previousSets(ex, lane.history, lane.editingLogId));
     lane.targets = lane.entries.map(ex => Math.max(1, ex.sets.length));
+  }
+
+  // ---------- Live, shared with the athlete's phone ----------
+  private detachLane(lane: Lane) {
+    lane.stopDoc?.();
+    lane.stopLive?.();
+    lane.stopDoc = null;
+    lane.stopLive = null;
+    lane.sharedId = null;
+    lane.synced = null;
+    lane.canon = [];
+    lane.docTitle = '';
+    lane.docNotes = '';
+    lane.startedAt = null;
+  }
+
+  // Joins a workout already under way: the first snapshot fills the lane.
+  private joinShared(lane: Lane, id: string): Promise<void> {
+    lane.stopDoc?.();
+    lane.synced = null;
+    return new Promise(resolve => {
+      let first = true;
+      this.watchShared(lane, id, () => {
+        if (first) { first = false; resolve(); }
+      });
+    });
+  }
+
+  private watchShared(lane: Lane, id: string, after?: () => void) {
+    lane.sharedId = id;
+    lane.editingLogId = id;
+    lane.legacyLogId = null;
+    lane.stopDoc = this.firebase.watchSharedWorkout(id, w => this.zone.run(() => {
+      this.onSharedChange(lane, id, w);
+      after?.();
+    }));
+  }
+
+  // Picks up the athlete starting a workout on their phone. Only takes over
+  // a lane with nothing saved or waiting to save — once this app has a
+  // workout going, the phone joins that one instead.
+  private watchForAthlete(lane: Lane) {
+    if (!lane.nameKey) return;
+    lane.stopLive?.();
+    lane.stopLive = this.firebase.watchLiveWorkout(lane.nameKey, w => this.zone.run(() => {
+      if (!w?.id || lane.sharedId || lane.legacyLogId || lane.creating || lane.saveTimer) return;
+      this.joinShared(lane, w.id);
+    }));
+  }
+
+  private onSharedChange(lane: Lane, id: string, w: MemberWorkoutLog | null) {
+    if (lane.sharedId !== id) return;
+    // Its own workout counts as going until finished (not just today), so a
+    // session running past midnight isn't dropped.
+    if (!w || !w.inProgress) {
+      if (this.finishing) return;
+      const who = this.firstName(lane.clientName) || 'The athlete';
+      lane.stopDoc?.();
+      lane.stopDoc = null;
+      lane.sharedId = null;
+      this.notify(w ? `${who} finished the workout` : `${who}'s workout was discarded`);
+      this.loadLane(lane, lane.clientId);
+      return;
+    }
+    const remote = normalizeState(w);
+    lane.startedAt = w.startedAt || lane.startedAt;
+    if (!lane.synced) {
+      lane.synced = remote;
+      this.applyShared(lane, remote);
+      this.useProgramOf(lane, w);
+      this.refreshLaneHints(lane);
+      return;
+    }
+    const merged = merge3(lane.synced, this.laneState(lane), remote);
+    lane.synced = remote;
+    if (this.applyShared(lane, merged)) this.refreshLaneHints(lane);
+    else lane.targets = lane.entries.map(ex => Math.max(1, ex.sets.length));
+    // Edits made here since the last save are still to be written.
+    if (!sameValue(merged, remote)) this.scheduleSave(lane);
+  }
+
+  // Shows `state` in the lane, keeping the inputs in place when only values
+  // changed. True when the exercise list itself changed.
+  private applyShared(lane: Lane, state: WorkoutSyncState): boolean {
+    lane.canon = state.exercises;
+    lane.docTitle = state.title;
+    lane.docNotes = state.notes;
+    const sheets = state.exercises.map((e, i) => syncToSheet(e, i)) as LoggedExercise[];
+    if (patchInPlace(lane.entries, sheets, (x, i) => x.key || `x${i}`)) return false;
+    lane.entries = sheets;
+    return true;
+  }
+
+  // Program/day badges for a workout joined from the phone.
+  private useProgramOf(lane: Lane, w: MemberWorkoutLog) {
+    const program = w.programId ? this.programs.find(p => p.id === w.programId) || null : null;
+    lane.program = program;
+    lane.noProgram = false;
+    lane.emptyProgram = false;
+    lane.programComplete = false;
+    if (program) {
+      const order = this.firebase.programTrainingDays(program);
+      lane.dayTotal = order.length;
+      lane.dayList = this.dayOptions(lane);
+      lane.dayIndex = w.dayIndex ?? null;
+      lane.dayPosition = lane.dayIndex !== null ? order.indexOf(lane.dayIndex) + 1 : 0;
+      const day = lane.dayIndex !== null ? program.schedule[lane.dayIndex] : null;
+      lane.programLabel = [program.name, day?.name].filter(Boolean).join(' · ').toUpperCase();
+    } else {
+      lane.dayTotal = 0;
+      lane.dayList = [];
+      lane.dayIndex = null;
+      lane.dayPosition = 0;
+      lane.programLabel = (w.title || 'Workout').toUpperCase();
+    }
+  }
+
+  // The lane's workout in the shared shape.
+  private laneState(lane: Lane): WorkoutSyncState {
+    return {
+      title: lane.docTitle,
+      notes: lane.docNotes,
+      exercises: lane.entries.map((e, i) => sheetToSync(e, lane.canon.find(c => c.key === e.key), i))
+    };
+  }
+
+  private async notify(message: string) {
+    const t = await this.toast.create({ message, duration: 2500, position: 'bottom', color: 'medium' });
+    await t.present();
   }
 
   // ---------- Per-set logging ----------
@@ -568,6 +766,7 @@ export class LiveSessionPage implements OnInit, OnDestroy {
     const name = lane.newExerciseName.trim();
     if (!name) return;
     lane.entries.push({
+      key: newExerciseKey(),
       exerciseName: name,
       prescription: '',
       attrColumns: ['Reps', 'Load'],
@@ -632,30 +831,81 @@ export class LiveSessionPage implements OnInit, OnDestroy {
 
   private scheduleSave(lane: Lane) {
     if (lane.saveTimer) clearTimeout(lane.saveTimer);
-    lane.saveTimer = setTimeout(() => { lane.saveTimer = null; this.persist(lane); }, 700);
+    lane.saveTimer = setTimeout(() => { lane.saveTimer = null; this.persist(lane); }, 400);
   }
 
+  // Saves the lane to the shared workout the athlete's phone sees — made on
+  // the first change, then updated in place — or, for an unfinished
+  // session from before sharing, where it always lived.
   private async persist(lane: Lane, completed = false) {
-    // No program (or no day picked) is now a valid state to save from — a
+    // No program (or no day picked) is a valid state to save from — a
     // coach can log a fully ad-hoc session, or bolt extra exercises onto a
     // programmed one. Only a picked athlete is required.
     if (!lane.clientId) return;
     const day = lane.program && lane.dayIndex !== null ? lane.program.schedule[lane.dayIndex] : null;
-    const log: WorkoutLog = {
-      id: lane.editingLogId || undefined,
+    const program = {
       programId: lane.program?.id || null,
-      programName: lane.program?.name || '',
+      programName: lane.program?.name || null,
       dayIndex: lane.dayIndex,
-      dayName: day?.name || '',
-      clientId: lane.clientId,
-      clientName: lane.clientName,
-      date: localDateString(),
-      exercises: lane.entries,
-      sessionNotes: '',
-      completed
+      dayName: day?.name || null
     };
     try {
-      lane.editingLogId = await this.firebase.saveWorkoutLog(log);
+      if (lane.legacyLogId) {
+        await this.firebase.saveWorkoutLog({
+          id: lane.legacyLogId,
+          source: 'coach',
+          ...program,
+          programName: program.programName || '',
+          dayName: program.dayName || '',
+          clientId: lane.clientId,
+          clientName: lane.clientName,
+          date: localDateString(),
+          exercises: lane.entries,
+          sessionNotes: '',
+          completed
+        });
+        return;
+      }
+      if (lane.creating) await lane.creating;
+
+      if (!lane.sharedId) {
+        if (!lane.entries.length) return;
+        lane.docTitle = lane.docTitle || [lane.program?.name, day?.name].filter(Boolean).join(' — ') || 'Workout';
+        const state = this.laneState(lane);
+        lane.creating = (async () => {
+          const id = await this.firebase.createSharedWorkout({
+            clientId: lane.clientId,
+            clientName: lane.clientName,
+            nameKey: lane.nameKey,
+            date: localDateString(),
+            title: state.title,
+            notes: state.notes,
+            exercises: state.exercises,
+            ...program,
+            inProgress: !completed,
+            startedAt: this.startedAt
+          });
+          lane.synced = state;
+          lane.canon = state.exercises;
+          lane.startedAt = this.startedAt;
+          if (!completed) this.watchShared(lane, id);
+        })();
+        try { await lane.creating; } finally { lane.creating = null; }
+        return;
+      }
+
+      const state = this.laneState(lane);
+      if (!completed && lane.synced && sameValue(state, lane.synced)) return;
+      lane.synced = state;
+      lane.canon = state.exercises;
+      await this.firebase.writeSharedWorkout(lane.sharedId, {
+        exercises: state.exercises,
+        ...(completed ? {
+          inProgress: false,
+          timestamp: new Date().toISOString(),
+          durationMin: Math.max(1, Math.round((Date.now() - (lane.startedAt || this.startedAt)) / 60000))
+        } : {})
+      });
     } catch (err) {
       console.error('Live session: save failed', err);
     }
@@ -666,6 +916,7 @@ export class LiveSessionPage implements OnInit, OnDestroy {
   }
 
   async finishWorkout() {
+    this.finishing = true;
     let saved = 0;
     const prMessages: string[] = [];
     for (const lane of this.lanes) {
@@ -676,7 +927,9 @@ export class LiveSessionPage implements OnInit, OnDestroy {
         const pr = await this.updateAssessmentFromLane(lane);
         if (pr) prMessages.push(pr);
       }
+      this.detachLane(lane);
     }
+    this.finishing = false;
     const base = saved > 1 ? 'Both workouts saved' : 'Workout saved';
     const t = await this.toast.create({
       message: prMessages.length ? `${base} · ${prMessages.join(' · ')}` : base,

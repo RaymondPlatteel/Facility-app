@@ -1207,3 +1207,33 @@ ion-content {
     row-gap: 6px;
   }
 }
+
+// Shown while the lane is the same workout the athlete has open.
+.ls-sync {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: #88a6bf;
+}
+
+.ls-sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2dd36f;
+  box-shadow: 0 0 0 0 rgba(45, 211, 111, 0.6);
+  animation: ls-sync-pulse 2s ease-out infinite;
+}
+
+@keyframes ls-sync-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(45, 211, 111, 0.55); }
+  70% { box-shadow: 0 0 0 7px rgba(45, 211, 111, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(45, 211, 111, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ls-sync-dot { animation: none; }
+}

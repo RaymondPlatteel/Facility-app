@@ -411,3 +411,20 @@ select.fld-input {
 @media (max-width: 768px) {
   .icon-btn[aria-label^="Back"] { display: none; }
 }
+
+// A workout being done right now — opens in Live Session instead.
+.history-row.live {
+  border-color: rgba(45, 211, 111, 0.45);
+}
+
+.h-live {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #2dd36f;
+  background: rgba(45, 211, 111, 0.14);
+}

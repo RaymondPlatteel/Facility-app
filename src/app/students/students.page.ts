@@ -38,8 +38,6 @@ import {
   WorkoutLog,
   FitnessAssessment,
   WaiverData,
-  MemberWorkoutLog,
-  MemberWorkoutSet,
   DailyCheckIn,
   localDateString, Sex } from '../services/firebase.service';
 import { rankLetter, rankLabel, levelColor as omniLevelColor } from '../services/omni.util';
@@ -110,9 +108,7 @@ export class StudentsPage implements OnInit, OnDestroy {
   clientWorkouts: WorkoutLog[] = [];
   // Self-logged from Project-000 — see firebase.service.ts's own comment on
   // why these are separate types from clientWorkouts/clientCheckIns above.
-  clientMemberWorkouts: MemberWorkoutLog[] = [];
   clientDailyCheckIns: DailyCheckIn[] = [];
-  expandedMemberWorkoutId: string | null = null;
   clientLatestAssessment: FitnessAssessment | null = null;
   rankLetter = rankLetter;
   rankLabel = rankLabel;
@@ -326,7 +322,7 @@ export class StudentsPage implements OnInit, OnDestroy {
   }
 
   workoutTitle(log: WorkoutLog): string {
-    return [log.programName, log.dayName].filter(Boolean).join(' · ') || 'Freeform session';
+    return [log.programName, log.dayName].filter(Boolean).join(' · ') || log.title?.trim() || 'Freeform session';
   }
 
   workoutSummary(log: WorkoutLog): string {
@@ -337,42 +333,7 @@ export class StudentsPage implements OnInit, OnDestroy {
     return `${exercises} exercise${exercises === 1 ? '' : 's'} · ${sets} set${sets === 1 ? '' : 's'}`;
   }
 
-  // ---------- Self-logged workouts / daily check-ins (from Project-000) ----------
-  memberWorkoutDate(log: MemberWorkoutLog): string {
-    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(log.dateLabel || '');
-    if (!m) return log.dateLabel || '';
-    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
-      .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-
-  memberWorkoutTitle(log: MemberWorkoutLog): string {
-    return log.title?.trim() || [log.programName, log.dayName].filter(Boolean).join(' · ') || 'Freeform session';
-  }
-
-  memberWorkoutSummary(log: MemberWorkoutLog): string {
-    const exercises = log.exercises?.length || 0;
-    const sets = (log.exercises || []).reduce(
-      (n, ex) => n + (ex.sets?.filter(s => s.completed).length || 0), 0
-    );
-    const parts = [`${exercises} exercise${exercises === 1 ? '' : 's'}`, `${sets} set${sets === 1 ? '' : 's'}`];
-    if (log.durationMin) parts.push(`${log.durationMin} min`);
-    return parts.join(' · ');
-  }
-
-  toggleMemberWorkout(log: MemberWorkoutLog) {
-    this.expandedMemberWorkoutId = this.expandedMemberWorkoutId === log.id ? null : (log.id ?? null);
-  }
-
-  // A set's own line: "135 lbs x 8" style, skipping any value that was
-  // never filled in rather than showing it as a literal "0".
-  memberSetLine(set: MemberWorkoutSet): string {
-    const parts: string[] = [];
-    if (set.weight != null) parts.push(`${set.weight} lbs`);
-    if (set.reps != null) parts.push(`x ${set.reps}`);
-    if (set.rir != null) parts.push(`(${set.rir} RIR)`);
-    return parts.join(' ') || '—';
-  }
-
+  // ---------- Daily check-ins (from Project-000) ----------
   dailyCheckInDate(entry: DailyCheckIn): string {
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(entry.dateLabel || '');
     if (!m) return entry.dateLabel || '';
@@ -380,7 +341,12 @@ export class StudentsPage implements OnInit, OnDestroy {
       .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  // One being done right now opens live, where the athlete's phone sees it.
   openWorkoutLog(log: WorkoutLog) {
+    if (log.inProgress && this.selected?.profile.id) {
+      this.router.navigate(['/live-session'], { queryParams: { clientId: this.selected.profile.id } });
+      return;
+    }
     this.router.navigate(['/workout-log'], { queryParams: { logId: log.id } });
   }
 
@@ -399,9 +365,7 @@ export class StudentsPage implements OnInit, OnDestroy {
     this.clientCheckIns = [];
     this.clientPayments = [];
     this.clientWorkouts = [];
-    this.clientMemberWorkouts = [];
     this.clientDailyCheckIns = [];
-    this.expandedMemberWorkoutId = null;
     this.clientLatestAssessment = null;
     this.clientWaivers = [];
     this.showPaymentForm = false;
@@ -414,22 +378,20 @@ export class StudentsPage implements OnInit, OnDestroy {
 
     this.paymentsLoading = true;
     try {
-      const [checkIns, payments, workouts, assessments, member, waivers, memberWorkouts, dailyCheckIns] = await Promise.all([
+      const [checkIns, payments, workouts, assessments, member, waivers, dailyCheckIns] = await Promise.all([
         this.firebase.getCheckInsForClient({ clientId: row.profile.id, clientName: row.profile.fullName }),
         this.firebase.getPaymentsForClient(row.profile.fullName),
         row.profile.id
-          ? this.firebase.listWorkoutLogs({ clientId: row.profile.id, max: 25 })
+          ? this.firebase.listWorkoutLogs({ clientId: row.profile.id, nameKey: row.profile.nameKey, max: 25 })
           : Promise.resolve([]),
         this.firebase.listAssessmentsForClient({ clientId: row.profile.id, clientName: row.profile.fullName }),
         this.firebase.getMember(row.profile.nameKey),
         this.firebase.getStudentWaivers(row.profile.fullName).catch(() => [] as WaiverData[]),
-        this.firebase.listMemberWorkoutLogs(row.profile.nameKey).catch(() => [] as MemberWorkoutLog[]),
         this.firebase.listDailyCheckIns(row.profile.nameKey).catch(() => [] as DailyCheckIn[])
       ]);
       this.clientCheckIns = checkIns.slice(0, 12);
       this.clientPayments = payments;
       this.clientWorkouts = workouts;
-      this.clientMemberWorkouts = memberWorkouts;
       this.clientDailyCheckIns = dailyCheckIns;
       // listAssessmentsForClient returns oldest → newest, so the last is current.
       this.clientLatestAssessment = assessments.length ? assessments[assessments.length - 1] : null;
@@ -461,9 +423,7 @@ export class StudentsPage implements OnInit, OnDestroy {
     this.clientCheckIns = [];
     this.clientPayments = [];
     this.clientWorkouts = [];
-    this.clientMemberWorkouts = [];
     this.clientDailyCheckIns = [];
-    this.expandedMemberWorkoutId = null;
     this.clientLatestAssessment = null;
     this.clientWaivers = [];
     this.showPaymentForm = false;

@@ -12,6 +12,7 @@ import {
   FirebaseService, Program, ProgramDay, ProgramAttribute, ClientProfile,
   WorkoutLog, LoggedExercise, localDateString
 } from '../services/firebase.service';
+import { newExerciseKey } from '../services/workout-sync';
 
 interface DayOption {
   index: number;
@@ -42,6 +43,11 @@ export class WorkoutLogPage implements OnInit {
   entries: LoggedExercise[] = [];
   sessionNotes = '';
   editingLogId: string | null = null;
+  // Where the log being edited lives and what the athlete called it — see
+  // WorkoutLog.source. Every workout shows the same here whichever app
+  // recorded it.
+  private editingSource: 'coach' | 'member' | undefined;
+  private editingTitle = '';
 
   // Prescription lookup for placeholders: entryIdx -> attrType -> ProgramAttribute
   private prescriptions: Array<Map<string, ProgramAttribute>> = [];
@@ -141,8 +147,14 @@ export class WorkoutLogPage implements OnInit {
     return this.dayOptions.length;
   }
 
-  async onProgramChange() {
+  private clearEditing() {
     this.editingLogId = null;
+    this.editingSource = undefined;
+    this.editingTitle = '';
+  }
+
+  async onProgramChange() {
+    this.clearEditing();
     const opts = this.dayOptions;
     this.selectedDayIndex = opts.length > 0 ? opts[0].index : null;
     const p = this.selectedProgram;
@@ -154,12 +166,12 @@ export class WorkoutLogPage implements OnInit {
   }
 
   async onDayChange() {
-    this.editingLogId = null;
+    this.clearEditing();
     await this.buildEntries();
   }
 
   async onClientChange() {
-    this.editingLogId = null;
+    this.clearEditing();
     await this.autoAdvanceDay();
     await this.buildEntries();
     this.refreshHistory();
@@ -215,6 +227,7 @@ export class WorkoutLogPage implements OnInit {
       const setCount = this.defaultSetCount(attrMap.get('Sets'));
 
       this.entries.push({
+        key: newExerciseKey(),
         exerciseName: ex.name || 'Exercise',
         prescription: ex.attributes.map(a =>
           `${a.type}: ${a.strategy === 'User Input' ? '—' : a.strategy === 'Bodyweight' ? 'BW' : a.val || '—'}`
@@ -252,7 +265,7 @@ export class WorkoutLogPage implements OnInit {
     this.lastTime = this.entries.map(() => null);
     if (!this.selectedClientId || !this.selectedProgramId || this.selectedDayIndex === null) return;
     try {
-      const logs = await this.firebase.listWorkoutLogs({ clientId: this.selectedClientId });
+      const logs = await this.firebase.listWorkoutLogs({ clientId: this.selectedClientId, nameKey: this.selectedClient?.nameKey });
       const prev = logs.find(l =>
         l.programId === this.selectedProgramId &&
         l.dayIndex === this.selectedDayIndex &&
@@ -306,6 +319,8 @@ export class WorkoutLogPage implements OnInit {
       const day = p && this.selectedDayIndex !== null ? p.schedule[this.selectedDayIndex] : null;
       const log: WorkoutLog = {
         id: this.editingLogId || undefined,
+        source: this.editingLogId ? this.editingSource : undefined,
+        title: this.editingTitle || undefined,
         programId: this.selectedProgramId || null,
         programName: p?.name || '',
         dayIndex: this.selectedDayIndex,
@@ -317,10 +332,11 @@ export class WorkoutLogPage implements OnInit {
         sessionNotes: this.sessionNotes
       };
       this.editingLogId = await this.firebase.saveWorkoutLog(log);
+      if (wasNew) this.editingSource = 'member';
       await this.refreshHistory();
       // Fresh session → advance to the next day in the program automatically.
       if (wasNew && this.selectedProgramId && this.selectedClientId) {
-        this.editingLogId = null;
+        this.clearEditing();
         this.date = localDateString();
         await this.autoAdvanceDay();
         await this.buildEntries();
@@ -351,8 +367,24 @@ export class WorkoutLogPage implements OnInit {
     }
   }
 
+  // A workout being done right now is edited live, where the athlete's
+  // phone sees every change — not here, where changes wait for Save.
+  openLog(log: WorkoutLog) {
+    if (log.inProgress) {
+      const clientId = log.clientId || this.clients.find(c =>
+        (c.nameKey || c.fullName).trim().toLowerCase() === log.clientName.trim().toLowerCase())?.id;
+      if (clientId) {
+        this.router.navigate(['/live-session'], { queryParams: { clientId } });
+        return;
+      }
+    }
+    this.applyLog(log);
+  }
+
   applyLog(log: WorkoutLog) {
     this.editingLogId = log.id || null;
+    this.editingSource = log.source;
+    this.editingTitle = log.title || '';
     this.selectedProgramId = log.programId || '';
     this.selectedDayIndex = log.dayIndex;
     this.selectedClientId = log.clientId || '';
@@ -373,7 +405,7 @@ export class WorkoutLogPage implements OnInit {
   }
 
   startFresh() {
-    this.editingLogId = null;
+    this.clearEditing();
     this.date = localDateString();
     this.buildEntries();
   }
@@ -388,7 +420,7 @@ export class WorkoutLogPage implements OnInit {
         {
           text: 'Delete', role: 'destructive', handler: async () => {
             try {
-              await this.firebase.deleteWorkoutLog(this.editingLogId!);
+              await this.firebase.deleteWorkoutLog(this.editingLogId!, this.editingSource);
               await this.presentToast('Log deleted');
               this.startFresh();
               await this.refreshHistory();
@@ -407,7 +439,7 @@ export class WorkoutLogPage implements OnInit {
   async refreshHistory() {
     try {
       if (this.selectedClientId) {
-        this.history = await this.firebase.listWorkoutLogs({ clientId: this.selectedClientId, max: 30 });
+        this.history = await this.firebase.listWorkoutLogs({ clientId: this.selectedClientId, nameKey: this.selectedClient?.nameKey, max: 30 });
       } else if (this.selectedProgramId) {
         this.history = await this.firebase.listWorkoutLogs({ programId: this.selectedProgramId, max: 30 });
       } else {
@@ -421,6 +453,11 @@ export class WorkoutLogPage implements OnInit {
 
   historyDate(log: WorkoutLog): string {
     return this.shortDate(log.date);
+  }
+
+  // The day's name for a program session, else what the athlete named it.
+  historyLabel(log: WorkoutLog): string {
+    return log.dayName || log.title || 'Session';
   }
 
   goBack() {
