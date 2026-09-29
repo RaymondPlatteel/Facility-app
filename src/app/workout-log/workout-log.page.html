@@ -8,14 +8,17 @@
       </button>
       <div class="log-title">
         <h1>Workout Log</h1>
-        <p>{{ editingLogId ? 'Editing a saved session' : 'Record what actually happened in the session' }}</p>
+        <p>{{ liveId ? 'Live with ' + liveName + '\'s phone' : editingLogId ? 'Editing a saved session' : 'Record what actually happened in the session' }}</p>
       </div>
       <div class="log-actions">
         <button class="ghost-btn" *ngIf="editingLogId" (click)="startFresh()">New Log</button>
         <button class="ghost-btn danger" *ngIf="editingLogId" (click)="deleteCurrentLog()">
           <ion-icon name="trash-outline"></ion-icon> Delete
         </button>
-        <button class="primary-btn" (click)="save()" [disabled]="!canSave || saving">
+        <button class="primary-btn" *ngIf="liveId" (click)="finishLive()" [disabled]="saving">
+          <ion-icon name="checkmark-circle"></ion-icon> {{ saving ? 'Finishing…' : 'Finish Workout' }}
+        </button>
+        <button class="primary-btn" *ngIf="!liveId" (click)="save()" [disabled]="!canSave || saving">
           <ion-icon name="save-outline"></ion-icon> {{ saving ? 'Saving…' : (editingLogId ? 'Update Log' : 'Save Log') }}
         </button>
       </div>
@@ -74,6 +77,11 @@
         <p *ngIf="selectedProgramId && dayOptions.length === 0">This program has no training days with exercises yet.</p>
       </div>
 
+      <div class="live-banner" *ngIf="liveId">
+        <span class="live-dot"></span>
+        Live · {{ liveName }} is doing this workout — changes here show on their phone as you make them, and theirs show here.
+      </div>
+
       <!-- Exercise log sheets -->
       <div class="log-sheets" *ngIf="entries.length > 0">
         <div class="sheet" *ngFor="let entry of entries; let entryIdx = index">
@@ -100,6 +108,7 @@
                   <input
                     class="set-input"
                     [(ngModel)]="set.values[col]"
+                    (ngModelChange)="markDirty()"
                     [placeholder]="placeholderFor(entryIdx, col)" />
                 </td>
                 <td class="col-done">
@@ -118,11 +127,11 @@
             <button class="mini-action" (click)="removeSet(entry)" [disabled]="entry.sets.length <= 1">
               <ion-icon name="remove-outline"></ion-icon> Remove set
             </button>
-            <input class="exercise-notes" [(ngModel)]="entry.notes" placeholder="Notes for this exercise…" />
+            <input class="exercise-notes" [(ngModel)]="entry.notes" (ngModelChange)="markDirty()" placeholder="Notes for this exercise…" />
           </div>
         </div>
 
-        <textarea class="session-notes" rows="2" [(ngModel)]="sessionNotes"
+        <textarea class="session-notes" rows="2" [(ngModel)]="sessionNotes" (ngModelChange)="markDirty()"
                   placeholder="Session notes — how did it go overall?"></textarea>
       </div>
 

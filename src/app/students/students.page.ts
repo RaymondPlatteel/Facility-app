@@ -341,12 +341,8 @@ export class StudentsPage implements OnInit, OnDestroy {
       .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  // One being done right now opens live, where the athlete's phone sees it.
+  // Opens in the Workout Log — live there if it's being done right now.
   openWorkoutLog(log: WorkoutLog) {
-    if (log.inProgress && this.selected?.profile.id) {
-      this.router.navigate(['/live-session'], { queryParams: { clientId: this.selected.profile.id } });
-      return;
-    }
     this.router.navigate(['/workout-log'], { queryParams: { logId: log.id } });
   }
 

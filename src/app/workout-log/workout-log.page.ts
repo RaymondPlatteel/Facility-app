@@ -10,9 +10,11 @@ import {
 } from 'ionicons/icons';
 import {
   FirebaseService, Program, ProgramDay, ProgramAttribute, ClientProfile,
-  WorkoutLog, LoggedExercise, localDateString
+  WorkoutLog, LoggedExercise, localDateString, MemberWorkoutLog
 } from '../services/firebase.service';
-import { newExerciseKey } from '../services/workout-sync';
+import {
+  SyncExercise, WorkoutSyncState, merge3, newExerciseKey, normalizeState, patchInPlace, sameValue, sheetToSync, syncToSheet
+} from '../services/workout-sync';
 
 interface DayOption {
   index: number;
@@ -48,6 +50,18 @@ export class WorkoutLogPage implements OnInit, OnDestroy {
   // recorded it.
   private editingSource: 'coach' | 'member' | undefined;
   private editingTitle = '';
+
+  // A workout being done right now, edited live: every change here goes to
+  // the athlete's phone within a moment and theirs come back, merged three
+  // ways (see workout-sync.ts). `synced` is the version both last agreed
+  // on; `canon` keeps what this sheet can't show (warm-ups, set videos).
+  liveId: string | null = null;
+  liveName = '';
+  private stopLiveDoc: (() => void) | null = null;
+  private synced: WorkoutSyncState | null = null;
+  private canon: SyncExercise[] = [];
+  private liveStartedAt: number | null = null;
+  private liveSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Prescription lookup for placeholders: entryIdx -> attrType -> ProgramAttribute
   private prescriptions: Array<Map<string, ProgramAttribute>> = [];
@@ -154,6 +168,7 @@ export class WorkoutLogPage implements OnInit, OnDestroy {
   }
 
   private clearEditing() {
+    this.stopLive();
     this.editingLogId = null;
     this.editingSource = undefined;
     this.editingTitle = '';
@@ -301,14 +316,17 @@ export class WorkoutLogPage implements OnInit, OnDestroy {
   // ---------- Set editing ----------
   addSet(entry: LoggedExercise) {
     entry.sets.push({ values: {}, done: false });
+    this.markDirty();
   }
 
   removeSet(entry: LoggedExercise) {
     if (entry.sets.length > 1) entry.sets.pop();
+    this.markDirty();
   }
 
   toggleDone(set: { done?: boolean }) {
     set.done = !set.done;
+    this.markDirty();
   }
 
   // ---------- Save / load / delete ----------
@@ -367,33 +385,27 @@ export class WorkoutLogPage implements OnInit, OnDestroy {
       const logs = await this.firebase.listWorkoutLogs({ max: 500 });
       const log = logs.find(l => l.id === id);
       if (!log) return;
-      this.applyLog(log);
+      this.openLog(log);
     } catch (err) {
       console.error('Log: failed to load existing log', err);
     }
   }
 
-  // A workout being done right now is edited live, where the athlete's
-  // phone sees every change — not here, where changes wait for Save.
+  // A workout being done right now opens live.
   openLog(log: WorkoutLog) {
-    if (log.inProgress) {
-      const clientId = log.clientId || this.clients.find(c =>
-        (c.nameKey || c.fullName).trim().toLowerCase() === log.clientName.trim().toLowerCase())?.id;
-      if (clientId) {
-        this.router.navigate(['/live-session'], { queryParams: { clientId } });
-        return;
-      }
-    }
     this.applyLog(log);
+    if (log.inProgress && log.source === 'member' && log.id) this.startLive(log.id, log.clientName);
   }
 
   applyLog(log: WorkoutLog) {
+    this.stopLive();
     this.editingLogId = log.id || null;
     this.editingSource = log.source;
     this.editingTitle = log.title || '';
     this.selectedProgramId = log.programId || '';
     this.selectedDayIndex = log.dayIndex;
-    this.selectedClientId = log.clientId || '';
+    this.selectedClientId = log.clientId || this.clients.find(c =>
+      (c.nameKey || c.fullName).trim().toLowerCase() === log.clientName.trim().toLowerCase())?.id || '';
     this.date = log.date;
     this.entries = JSON.parse(JSON.stringify(log.exercises));
     this.sessionNotes = log.sessionNotes || '';
@@ -408,6 +420,133 @@ export class WorkoutLogPage implements OnInit, OnDestroy {
     });
     this.lastTime = this.entries.map(() => null);
     this.updateLastTime();
+  }
+
+  // Placeholders and "last time" per exercise, after the list changed.
+  private rebuildHints() {
+    const p = this.selectedProgram;
+    const day = p && this.selectedDayIndex !== null ? p.schedule[this.selectedDayIndex] : null;
+    this.prescriptions = this.entries.map(entry => {
+      const ex = day?.exercises.find(e => (e.name || 'Exercise') === entry.exerciseName);
+      const map = new Map<string, ProgramAttribute>();
+      ex?.attributes.forEach(a => map.set(a.type, a));
+      return map;
+    });
+    this.updateLastTime();
+  }
+
+  // ---------- Live ----------
+  private startLive(id: string, clientName: string) {
+    this.liveId = id;
+    this.liveName = (clientName || '').trim().split(/\s+/)[0] || 'the athlete';
+    this.synced = null;
+    this.stopLiveDoc = this.firebase.watchSharedWorkout(id, w => this.zone.run(() => this.onLiveChange(id, w)));
+  }
+
+  // Writes any unsaved edit, then stops following the workout.
+  private stopLive() {
+    if (!this.liveId) return;
+    if (this.liveSaveTimer) {
+      clearTimeout(this.liveSaveTimer);
+      this.liveSaveTimer = null;
+      this.persistLive();
+    }
+    this.stopLiveDoc?.();
+    this.stopLiveDoc = null;
+    this.liveId = null;
+    this.synced = null;
+    this.canon = [];
+  }
+
+  // Bound to every edit on the sheet; only live workouts save as they go.
+  markDirty() {
+    if (!this.liveId) return;
+    if (this.liveSaveTimer) clearTimeout(this.liveSaveTimer);
+    this.liveSaveTimer = setTimeout(() => { this.liveSaveTimer = null; this.persistLive(); }, 400);
+  }
+
+  private liveState(): WorkoutSyncState {
+    return {
+      title: this.editingTitle,
+      notes: this.sessionNotes,
+      exercises: this.entries.map((e, i) => sheetToSync(e, this.canon.find(c => c.key === e.key), i))
+    };
+  }
+
+  private async persistLive() {
+    const id = this.liveId;
+    if (!id) return;
+    const state = this.liveState();
+    if (this.synced && sameValue(state, this.synced)) return;
+    this.synced = state;
+    this.canon = state.exercises;
+    try {
+      await this.firebase.writeSharedWorkout(id, { exercises: state.exercises, notes: state.notes });
+    } catch (err) {
+      console.error('Log: live save failed', err);
+      this.synced = null;
+    }
+  }
+
+  private onLiveChange(id: string, w: MemberWorkoutLog | null) {
+    if (this.liveId !== id) return;
+    if (!w || !w.inProgress) {
+      this.stopLiveDoc?.();
+      this.stopLiveDoc = null;
+      this.liveId = null;
+      if (this.liveSaveTimer) { clearTimeout(this.liveSaveTimer); this.liveSaveTimer = null; }
+      if (w) {
+        // Finished: stays open here as a normal saved workout.
+        this.presentToast(`${this.liveName} finished the workout`);
+      } else {
+        this.presentToast(`${this.liveName}'s workout was discarded`, 'danger');
+        this.startFresh();
+      }
+      this.refreshHistory();
+      return;
+    }
+    this.liveStartedAt = w.startedAt || this.liveStartedAt;
+    const remote = normalizeState(w);
+    const merged = this.synced ? merge3(this.synced, this.liveState(), remote) : remote;
+    this.synced = remote;
+    this.canon = merged.exercises;
+    this.editingTitle = merged.title;
+    this.sessionNotes = merged.notes;
+    const sheets = merged.exercises.map((e, i) => syncToSheet(e, i)) as LoggedExercise[];
+    if (!patchInPlace(this.entries, sheets, (x, i) => x.key || `x${i}`)) {
+      this.entries = sheets;
+      this.rebuildHints();
+    }
+    // Edits made here since the last save are still to be written.
+    if (!sameValue(merged, remote)) this.markDirty();
+  }
+
+  // Ends the workout for both apps; it stays open here as a saved one.
+  async finishLive() {
+    const id = this.liveId;
+    if (!id || this.saving) return;
+    this.saving = true;
+    try {
+      if (this.liveSaveTimer) { clearTimeout(this.liveSaveTimer); this.liveSaveTimer = null; }
+      const state = this.liveState();
+      this.stopLiveDoc?.();
+      this.stopLiveDoc = null;
+      this.liveId = null;
+      await this.firebase.writeSharedWorkout(id, {
+        exercises: state.exercises,
+        notes: state.notes,
+        inProgress: false,
+        timestamp: new Date().toISOString(),
+        durationMin: this.liveStartedAt ? Math.max(1, Math.round((Date.now() - this.liveStartedAt) / 60000)) : null
+      });
+      await this.refreshHistory();
+      await this.presentToast('Workout finished');
+    } catch (err) {
+      console.error('Log: finish failed', err);
+      await this.presentToast('Could not finish the workout', 'danger');
+    } finally {
+      this.saving = false;
+    }
   }
 
   startFresh() {
@@ -444,10 +583,15 @@ export class WorkoutLogPage implements OnInit, OnDestroy {
   // Ionic keeps this page alive between visits, so coming back to it
   // reloads the list too.
   ionViewWillEnter() {
-    if (!this.loading) this.refreshHistory();
+    if (this.loading) return;
+    this.refreshHistory();
+    // Opened again with a specific workout (e.g. from a client's page).
+    const logId = this.route.snapshot.queryParamMap.get('logId');
+    if (logId && logId !== this.editingLogId) this.loadExistingLog(logId);
   }
 
   ngOnDestroy() {
+    this.stopLive();
     this.stopWatch?.();
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
   }
