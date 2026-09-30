@@ -337,6 +337,12 @@ export interface Member {
   // Absent on every record written before rank thresholds became
   // sex-specific; treated as 'male' wherever it is read.
   sex?: Sex;
+  // Assigned by Project-000 at intake; tells same-named athletes apart.
+  competitorId?: string;
+  // Set by the coach only. An in-person client trains with the facility, so
+  // the athlete app shows them Schedule and Membership; everyone else (the
+  // competition's remote athletes) doesn't get those.
+  inPerson?: boolean;
   cell: number | null;
   generation: number | null;
   cohort: number | null;
@@ -425,6 +431,20 @@ export interface PackageRecord {
   subscriptionCanceledAt?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface Announcement {
+  id?: string;
+  title: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface CompetitionConfig {
+  prizePool?: number | null;
+  eventDate?: string | null;
+  eventEndDate?: string | null;
+  label?: string | null;
 }
 
 export interface WaiverData {
@@ -3069,6 +3089,10 @@ export class FirebaseService {
     await setDoc(doc(this.db, 'members', nameKey), { nameKey, clientName, ...designation }, { merge: true });
   }
 
+  async setMemberInPerson(nameKey: string, clientName: string, inPerson: boolean): Promise<void> {
+    await setDoc(doc(this.db, 'members', nameKey), { nameKey, clientName, inPerson }, { merge: true });
+  }
+
   // Which rank threshold table this athlete is scored against.
   //
   // merge:true so this can be set on an athlete whose member doc does not
@@ -3135,6 +3159,38 @@ export class FirebaseService {
       where('cell', '==', cell), where('generation', '==', generation), where('cohort', '==', cohort)
     ));
     return snap.docs.map(d => d.data() as Member).sort((a, b) => (a.latestLvl ?? 0) - (b.latestLvl ?? 0));
+  }
+
+  // ---------- Announcements & competition banner (shown on the athlete app's World page) ----------
+  async listAnnouncements(n = 20): Promise<Announcement[]> {
+    const snap = await getDocs(query(collection(this.db, 'announcements'), orderBy('createdAt', 'desc'), limit(n)));
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Announcement, 'id'>) }));
+  }
+
+  async addAnnouncement(title: string, body: string): Promise<void> {
+    await addDoc(collection(this.db, 'announcements'), {
+      title: title.trim(), body: body.trim(), createdAt: new Date().toISOString()
+    });
+  }
+
+  async deleteAnnouncement(id: string): Promise<void> {
+    await deleteDoc(doc(this.db, 'announcements', id));
+  }
+
+  async getCompetitionConfig(): Promise<CompetitionConfig> {
+    const snap = await getDoc(doc(this.db, 'config', 'competition'));
+    return snap.exists() ? (snap.data() as CompetitionConfig) : {};
+  }
+
+  // Everything optional: blank fields are stored as null and the athlete app
+  // hides whatever isn't set.
+  async setCompetitionConfig(cfg: CompetitionConfig): Promise<void> {
+    await setDoc(doc(this.db, 'config', 'competition'), {
+      prizePool: cfg.prizePool ?? null,
+      eventDate: cfg.eventDate || null,
+      eventEndDate: cfg.eventEndDate || null,
+      label: cfg.label?.trim() || null
+    });
   }
 
   // ---------- Daily Quest ----------

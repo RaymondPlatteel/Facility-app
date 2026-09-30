@@ -103,6 +103,12 @@ export class StudentsPage implements OnInit, OnDestroy {
   // S80 vs D20/C40/B60/A80/S100). Defaults to male for every record written
   // before the field existed.
   groupSex: Sex = 'male';
+  // members/{nameKey}.competitorId — read-only here; shown so two clients with
+  // the same name can be told apart.
+  competitorId = '';
+  // members/{nameKey}.inPerson — see Member.inPerson. A client the coach adds
+  // here by hand is in-person by default; existing ones read what's stored.
+  groupInPerson = false;
   clientCheckIns: CheckIn[] = [];
   clientPayments: PaymentRecord[] = [];
   clientWorkouts: WorkoutLog[] = [];
@@ -370,6 +376,8 @@ export class StudentsPage implements OnInit, OnDestroy {
     this.groupGeneration = null;
     this.groupCohort = null;
     this.groupSex = 'male';
+    this.competitorId = '';
+    this.groupInPerson = false;
     this.panelOpen = true;
 
     this.paymentsLoading = true;
@@ -395,6 +403,8 @@ export class StudentsPage implements OnInit, OnDestroy {
       this.groupGeneration = member?.generation ?? null;
       this.groupCohort = member?.cohort ?? null;
       this.groupSex = member?.sex ?? 'male';
+      this.competitorId = member?.competitorId ?? '';
+      this.groupInPerson = member?.inPerson ?? false;
       this.clientWaivers = waivers;
     } catch (err) {
       console.error('Clients: detail load failed', err);
@@ -427,6 +437,8 @@ export class StudentsPage implements OnInit, OnDestroy {
     this.groupGeneration = null;
     this.groupCohort = null;
     this.groupSex = 'male';
+    this.competitorId = '';
+    this.groupInPerson = true;
     this.panelOpen = true;
   }
 
@@ -613,6 +625,7 @@ export class StudentsPage implements OnInit, OnDestroy {
         cell: this.groupCell, generation: this.groupGeneration, cohort: this.groupCohort
       });
       await this.firebase.setMemberSex(name.toLowerCase(), name, this.groupSex);
+      await this.firebase.setMemberInPerson(name.toLowerCase(), name, this.groupInPerson);
       this.panelOpen = false;
       await this.loadData(true);
     } catch (err) {

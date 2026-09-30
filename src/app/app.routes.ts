@@ -40,6 +40,12 @@ export const routes: Routes = [
     data: { title: 'Schedule' }
   },
   {
+    path: 'announcements',
+    canActivate: [authGuard],
+    loadComponent: () => import('./announcements/announcements.page').then( m => m.AnnouncementsPage),
+    data: { title: 'Announcements' }
+  },
+  {
     path: 'students',
     canActivate: [authGuard],
     loadComponent: () => import('./students/students.page').then( m => m.StudentsPage),

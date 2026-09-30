@@ -114,6 +114,7 @@
               (click)="onClientNameClick()"
             >{{ panelNew ? 'New Client' : form.fullName }}</h2>
             <p *ngIf="!panelNew && selected?.profile?.clientId" class="sub">{{ selected?.profile?.clientId }}</p>
+            <p *ngIf="!panelNew && competitorId" class="sub">Competitor ID {{ competitorId }}</p>
             <p *ngIf="!panelNew && clientWaivers.length" class="sub waiver-hint">
               <ion-icon name="document-text-outline"></ion-icon>
               {{ clientWaivers.length }} waiver{{ clientWaivers.length > 1 ? 's' : '' }} on file — tap name to view
@@ -166,6 +167,13 @@
                 <option value="social">Social Media</option>
                 <option value="event">Event</option>
                 <option value="other">Other</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>In-person client</span>
+              <select [ngModel]="groupInPerson ? 'yes' : 'no'" (ngModelChange)="groupInPerson = $event === 'yes'">
+                <option value="yes">Yes — trains with the facility</option>
+                <option value="no">No — remote competitor</option>
               </select>
             </label>
             <label class="field">
