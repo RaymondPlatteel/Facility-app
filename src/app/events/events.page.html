@@ -1,0 +1,452 @@
+<ion-content [fullscreen]="true">
+  <div class="ev-container" [class.wide]="!!form">
+
+    <!-- ============ Tabs ============ -->
+    <div class="ev-tabs" *ngIf="!form">
+      <button type="button" [class.on]="tab === 'events'" (click)="tab = 'events'">Events</button>
+      <button type="button" [class.on]="tab === 'announcements'" (click)="tab = 'announcements'">Announcements</button>
+      <button type="button" [class.on]="tab === 'order'" (click)="openOrder()">Order</button>
+      <button type="button" [class.on]="tab === 'testers'" (click)="openTesters()">Testers</button>
+    </div>
+
+    <!-- ============ Testers ============ -->
+    <ng-container *ngIf="!form && tab === 'testers'">
+      <div class="ev-header">
+        <div>
+          <h2>Testers</h2>
+          <p class="subtitle">Events and announcements set to “Testers only” are visible to these people and nobody else.</p>
+        </div>
+      </div>
+      <section class="ev-card">
+        <h3>Add a tester</h3>
+        <div class="ev-opt">
+          <select [(ngModel)]="testerPick"><option value="">Choose a member…</option><option *ngFor="let m of testerChoices" [value]="m.nameKey">{{ m.clientName }}</option></select>
+          <button class="ev-btn" [disabled]="!testerPick" (click)="addTester()">Add</button>
+        </div>
+      </section>
+      <section class="ev-card">
+        <h3>Testers ({{ testerKeys.length }})</h3>
+        <p class="hint" *ngIf="!testerKeys.length">Nobody yet. A “Testers only” item is hidden from everyone.</p>
+        <div *ngFor="let k of testerKeys" class="ev-reg">
+          <div class="ev-reg-main"><div class="ev-row-title">{{ testerName(k) }}</div></div>
+          <button class="icon-btn" (click)="removeTester(k)" aria-label="Remove"><ion-icon name="trash-outline"></ion-icon></button>
+        </div>
+      </section>
+    </ng-container>
+
+    <!-- ============ Order ============ -->
+    <ng-container *ngIf="!form && tab === 'order'">
+      <div class="ev-header">
+        <div>
+          <h2>World page order</h2>
+          <p class="subtitle">Drag to change the order athletes swipe through, top to bottom. Events and announcements share one order. Only published, upcoming events are listed. New ones are added to the end until you move them.</p>
+        </div>
+      </div>
+      <p class="hint" *ngIf="!orderItems.length">Nothing is published yet.</p>
+      <div *ngFor="let it of orderItems; let i = index" class="ev-card ev-order"
+           draggable="true" [class.over]="dragOver === i && dragFrom !== i" [class.dragging]="dragFrom === i"
+           (dragstart)="onDragStart(i)" (dragover)="onDragOver($event, i)" (drop)="onDrop($event, i)" (dragend)="onDragEnd()">
+        <span class="ev-grip" aria-hidden="true">⠿</span>
+        <span class="ev-pos">{{ i + 1 }}</span>
+        <div class="ev-row-main">
+          <div class="ev-row-title">{{ it.title }} <span class="ev-chip" [class.published]="it.kind === 'event'">{{ it.kind }}</span></div>
+          <div class="ev-row-meta">{{ it.sub }}</div>
+        </div>
+        <button class="ev-link" [disabled]="i === 0" (click)="moveOrder(i, i - 1)" aria-label="Move up">▲</button>
+        <button class="ev-link" [disabled]="i === orderItems.length - 1" (click)="moveOrder(i, i + 1)" aria-label="Move down">▼</button>
+      </div>
+    </ng-container>
+
+    <!-- ============ Announcements ============ -->
+    <ng-container *ngIf="!form && tab === 'announcements'">
+      <div class="ev-header">
+        <div>
+          <h2>Announcements</h2>
+          <p class="subtitle">Shown on the World page in the athlete app, newest first. The newest one is pinned.</p>
+        </div>
+      </div>
+
+      <section class="ev-card">
+        <h3>{{ annEditingId ? 'Edit announcement' : 'New announcement' }}</h3>
+        <label>
+          <span>Title <em class="ev-count" [class.near]="annTitle.length >= titleMax - 8">{{ annTitle.length }}/{{ titleMax }}</em></span>
+          <input type="text" [(ngModel)]="annTitle" [attr.maxlength]="titleMax" placeholder="Headline">
+        </label>
+        <label>
+          <span>Message <em class="ev-count" [class.near]="annBody.length >= bodyMax - 20">{{ annBody.length }}/{{ bodyMax }}</em></span>
+          <textarea rows="5" [(ngModel)]="annBody" [attr.maxlength]="bodyMax" placeholder="What do you want everyone to see?"></textarea>
+        </label>
+        <div class="ev-bd">
+          <span class="ev-image-title">Visible to</span>
+          <div class="ev-float-chips">
+            <button type="button" *ngFor="let a of audiences" [class.on]="annAudience === a.value" (click)="annAudience = a.value" [title]="a.note">{{ a.label }}</button>
+          </div>
+        </div>
+
+        <label class="ev-check"><input type="checkbox" [(ngModel)]="annNotify"><span>Notify athletes — a badge on their World tab until they open it</span></label>
+        <p class="hint">This is an in-app notification. Phone push notifications aren’t set up yet.</p>
+
+        <div class="ev-bd">
+          <span class="ev-image-title">Button</span>
+          <div class="ev-float-chips">
+            <button type="button" *ngFor="let t of actionTypes" [class.on]="annActionType === t.value" (click)="setActionType(t.value)" [title]="t.note">{{ t.label }}</button>
+          </div>
+          <ng-container *ngIf="annActionType !== 'none'">
+            <label><span>Button label <em class="ev-count">{{ annLabel.length }}/{{ labelMax }}</em></span><input type="text" [(ngModel)]="annLabel" [attr.maxlength]="labelMax"></label>
+            <label *ngIf="annActionType === 'link'"><span>Web address</span><input type="url" [(ngModel)]="annUrl" placeholder="https://"></label>
+            <label *ngIf="annActionType === 'event'">
+              <span>Event</span>
+              <select [(ngModel)]="annEventId">
+                <option value="">Choose an event…</option>
+                <option *ngFor="let e of events" [value]="e.id">{{ e.title }}{{ e.status !== 'published' ? ' (' + e.status + ')' : '' }}</option>
+              </select>
+            </label>
+            <ng-container *ngIf="annActionType === 'vote'">
+              <span class="ev-image-title">Options (2–6)</span>
+              <div *ngFor="let o of annOptions; let i = index; trackBy: trackIdx" class="ev-opt">
+                <input type="text" [(ngModel)]="annOptions[i]" [attr.maxlength]="optionMax" [placeholder]="'Option ' + (i + 1)">
+                <button class="ev-link" *ngIf="annOptions.length > 2" (click)="removeOption(i)">Remove</button>
+              </div>
+              <button class="ev-link" *ngIf="annOptions.length < 6" (click)="addOption()">+ Add an option</button>
+              <p class="hint" *ngIf="annEditingId">Changing options after people have voted can mix up the results.</p>
+            </ng-container>
+            <p class="ev-error" *ngIf="actionProblem">{{ actionProblem }}</p>
+          </ng-container>
+        </div>
+
+        <button class="ev-btn" [disabled]="!canPost" (click)="saveAnnouncement()">{{ annSaving ? 'Saving…' : annEditingId ? 'Save changes' : 'Post announcement' }}</button>
+        <button class="ev-link" *ngIf="annEditingId" (click)="cancelAnnouncementEdit()">Cancel</button>
+      </section>
+
+      <section class="ev-card">
+        <h3>Posted</h3>
+        <p *ngIf="annLoading" class="hint">Loading…</p>
+        <p *ngIf="!annLoading && !announcements.length" class="hint">Nothing posted yet.</p>
+        <div *ngFor="let a of announcements; let i = index" class="ev-reg">
+          <div class="ev-reg-main">
+            <div class="ev-row-title">{{ a.title }} <span *ngIf="i === 0" class="ev-chip published">pinned</span></div>
+            <div class="ev-row-meta ev-pre">{{ a.body }}</div>
+            <div class="ev-row-meta">
+              <span class="ev-chip" *ngIf="a.audience && a.audience !== 'everyone'">{{ audienceLabel(a.audience) }}</span>
+              <span class="ev-chip" *ngIf="a.notify">notifies</span>
+              <span class="ev-chip" *ngIf="a.action">{{ a.action.label }} · {{ a.action.type }}</span>
+            </div>
+            <div class="ev-row-meta" *ngIf="a.action?.type === 'vote'">
+              <div *ngFor="let o of a.action!.options; let i = index">{{ o }}: <b>{{ voteCounts[a.id!]?.[i] ?? 0 }}</b></div>
+              <div>{{ totalVotes(a) }} vote{{ totalVotes(a) === 1 ? '' : 's' }}</div>
+            </div>
+            <div class="ev-row-meta">{{ a.createdAt | date:'MMM d, y · h:mm a' }}</div>
+          </div>
+          <button class="ev-link" (click)="editAnnouncement(a)">Edit</button>
+          <button class="icon-btn" (click)="removeAnnouncement(a)" aria-label="Delete"><ion-icon name="trash-outline"></ion-icon></button>
+        </div>
+      </section>
+    </ng-container>
+
+    <!-- ============ List ============ -->
+    <ng-container *ngIf="!form && tab === 'events'">
+      <div class="ev-header">
+        <div>
+          <h2>Events</h2>
+          <p class="subtitle">Everything the athlete app shows about an event comes from here. Publish one and it appears on the World page — no app update needed. The soonest published event that hasn’t ended is the one featured.</p>
+        </div>
+        <button class="ev-btn" (click)="newEvent()">New event</button>
+      </div>
+
+      <p *ngIf="isLoading" class="hint">Loading…</p>
+      <p *ngIf="!isLoading && !events.length" class="hint">No events yet.</p>
+
+      <section *ngFor="let e of events" class="ev-card ev-row">
+        <div class="ev-row-main" (click)="edit(e)">
+          <div class="ev-row-title">{{ e.title }} <span class="ev-chip" [ngClass]="e.status">{{ e.status }}</span><span class="ev-chip" *ngIf="e.audience && e.audience !== 'everyone'">{{ audienceLabel(e.audience) }}</span></div>
+          <div class="ev-row-meta">{{ dates(e) }}<span *ngIf="e.venueName"> · {{ e.venueName }}</span></div>
+          <div class="ev-row-meta">{{ e.registered }}<span *ngIf="e.capacity"> of {{ e.capacity }}</span> registered<span *ngIf="e.prizePool"> · {{ e.prizePool | currency:'USD':'symbol':'1.0-0' }} prize pool</span></div>
+        </div>
+        <button class="ev-link" (click)="duplicate(e)">Duplicate</button>
+        <button class="ev-link" (click)="edit(e)">Edit</button>
+      </section>
+    </ng-container>
+
+    <!-- ============ Editor ============ -->
+    <ng-container *ngIf="form">
+      <div class="ev-header">
+        <div>
+          <button class="ev-link back" (click)="close()">← All events</button>
+          <h2>{{ form.id ? 'Edit event' : 'New event' }}</h2>
+        </div>
+        <button class="ev-btn" [disabled]="!canSave" (click)="save()">{{ isSaving ? 'Saving…' : 'Save' }}</button>
+      </div>
+
+      <div class="ev-editor">
+      <div class="ev-fields">
+      <section class="ev-card">
+        <h3>Basics</h3>
+        <label class="wide"><span>Event name</span><input type="text" [(ngModel)]="form.title" placeholder="e.g. Project [000] Official Testing Event"></label>
+        <div class="ev-grid">
+          <label>
+            <span>Status</span>
+            <select [(ngModel)]="form.status">
+              <option value="draft">Draft — hidden from the app</option>
+              <option value="published">Published — live in the app</option>
+              <option value="archived">Archived — hidden, kept on file</option>
+            </select>
+          </label>
+        </div>
+        <div class="ev-bd">
+          <span class="ev-image-title">Background (World page)</span>
+          <div class="ev-bd-tiles">
+            <button type="button" *ngFor="let b of backdrops" class="ev-bd-tile" [class.on]="form.backdrop === b.value" (click)="form.backdrop = b.value">
+              <span class="ev-bd-swatch" [ngClass]="scenes.includes(b.value) ? 'scene-' + b.value : 'sw-' + b.value" [style.background-image]="b.value === 'photo' && form.image ? 'url(' + form.image + ')' : null"></span>
+              <b>{{ b.label }}</b>
+              <small>{{ b.note }}</small>
+            </button>
+          </div>
+          <ng-container *ngIf="form.backdrop !== 'photo'">
+            <span class="ev-image-title">Floating over it</span>
+            <div class="ev-float-chips">
+              <button type="button" *ngFor="let f of floats" [class.on]="form.float === f.value" (click)="form.float = f.value">{{ f.label }}</button>
+            </div>
+          </ng-container>
+
+          <div class="ev-image" *ngIf="form.backdrop === 'photo'">
+            <div class="ev-image-box" [style.background-image]="form.image ? 'url(' + form.image + ')' : null">
+              <span *ngIf="!form.image">No photo yet</span>
+            </div>
+            <div class="ev-image-side">
+              <p class="hint">Use a tall portrait photo, ideally {{ imageW }} × {{ imageH }} px. The bottom 75% is the card the title sits on; the top is revealed as people scroll or pull up. Any photo works — it’s cropped from the centre to fit. It’s shown as-is, with nothing laid over it, so choose one the white title will read on.</p>
+              <label class="ev-btn small">Choose photo<input type="file" accept="image/*" hidden (change)="pickImage($event)"></label>
+              <button class="ev-link" *ngIf="form.image" (click)="form.image = ''">Remove</button>
+              <p class="ev-error" *ngIf="imageError">{{ imageError }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="ev-bd">
+          <span class="ev-image-title">Visible to</span>
+          <div class="ev-float-chips">
+            <button type="button" *ngFor="let a of audiences" [class.on]="form.audience === a.value" (click)="form.audience = a.value" [title]="a.note">{{ a.label }}</button>
+          </div>
+          <p class="hint">Only the chosen group sees this event on their World page or can register for it. Academy means athletes who have a designation (like 000 or 001). In-person clients are the ones marked in-person on their profile.</p>
+        </div>
+        <label class="wide"><span>Description (top of the registration page)</span><textarea rows="3" [(ngModel)]="form.description"></textarea></label>
+      </section>
+
+      <section class="ev-card">
+        <h3>When &amp; where</h3>
+        <label class="ev-check"><input type="checkbox" [ngModel]="form.multiSite" (ngModelChange)="setMultiSite($event)"><span>A different location each day</span></label>
+
+        <ng-container *ngIf="!form.multiSite">
+          <div class="ev-grid">
+            <label><span>Start date</span><input type="date" [(ngModel)]="form.startDate"></label>
+            <label><span>End date (optional)</span><input type="date" [(ngModel)]="form.endDate"></label>
+            <label><span>Venue</span><input type="text" [(ngModel)]="form.venueName" placeholder="e.g. Harvard Stadium"></label>
+            <label><span>Address</span><input type="text" [(ngModel)]="form.venueAddress"></label>
+          </div>
+        </ng-container>
+
+        <ng-container *ngIf="form.multiSite">
+          <div *ngFor="let d of form.days; let i = index" class="ev-day">
+            <div class="ev-grid">
+              <label><span>Day {{ i + 1 }}</span><input type="date" [(ngModel)]="d.date"></label>
+              <label><span>Venue</span><input type="text" [(ngModel)]="d.venueName"></label>
+              <label class="wide"><span>Address</span><input type="text" [(ngModel)]="d.venueAddress"></label>
+            </div>
+            <button class="ev-link" *ngIf="form.days.length > 2" (click)="removeDay(i)">Remove day</button>
+          </div>
+          <button class="ev-link" (click)="addDay()">+ Add a day</button>
+        </ng-container>
+
+        <div class="ev-grid">
+          <label><span>Prize pool (USD)</span><input type="number" inputmode="numeric" min="0" [(ngModel)]="form.prizePool" placeholder="Leave empty if none"></label>
+          <label *ngIf="!form.prizePool"><span>Caption (shown instead of the prize pool)</span><input type="text" maxlength="90" [(ngModel)]="form.caption" placeholder="e.g. Hosted by Omni Fitness"></label>
+        </div>
+      </section>
+
+      <section class="ev-card">
+        <h3>Registration</h3>
+        <label class="ev-check"><input type="checkbox" [(ngModel)]="form.registrationOpen"><span>Registration is open (shows “Reserve your spot”)</span></label>
+        <div class="ev-grid">
+          <label>
+            <span>Who can register</span>
+            <select [(ngModel)]="form.minRank"><option *ngFor="let r of ranks" [value]="r.value">{{ r.label }}</option></select>
+          </label>
+          <label><span>Entry fee (USD)</span><input type="number" inputmode="decimal" min="0" [(ngModel)]="form.fee" placeholder="0 = free"></label>
+          <label><span>Total spots</span><input type="number" inputmode="numeric" min="0" [(ngModel)]="form.capacity" placeholder="Empty = unlimited"></label>
+          <label><span>Guests per attendee</span><input type="number" inputmode="numeric" min="0" [(ngModel)]="form.guestsPerCompetitor"></label>
+        </div>
+        <div class="ev-times">
+          <span class="ev-image-title">Wording</span>
+          <p class="hint">Change the words on the buttons and screens. Leave a box empty to keep the usual wording. Click a box and the preview on the right jumps to that screen.</p>
+          <label *ngFor="let f of copyFields" class="ev-copy">
+            <span>{{ f.label }} <em class="ev-count">{{ (form.copy[f.key] || '').length }}/{{ f.max }}</em></span>
+            <textarea *ngIf="f.long" rows="2" [attr.maxlength]="f.max" [(ngModel)]="form.copy[f.key]" [placeholder]="copyDefaults[f.key]" (focus)="previewScreen = f.screen"></textarea>
+            <input *ngIf="!f.long" type="text" [attr.maxlength]="f.max" [(ngModel)]="form.copy[f.key]" [placeholder]="copyDefaults[f.key]" (focus)="previewScreen = f.screen">
+          </label>
+        </div>
+
+        <div class="ev-times">
+          <span class="ev-image-title">Times</span>
+          <p class="hint">Add the blocks of time people can compete in. With one block, everyone is in it and nobody chooses. With several, each athlete picks theirs while registering — unless you turn that off below.</p>
+          <div *ngFor="let t of form.slots; let i = index" class="ev-slot">
+            <label><span>Day</span><input type="date" [(ngModel)]="t.date"></label>
+            <label><span>Starts</span><input type="time" [(ngModel)]="t.start"></label>
+            <label><span>Ends</span><input type="time" [(ngModel)]="t.end"></label>
+            <label class="grow"><span>Name (optional)</span><input type="text" [(ngModel)]="t.label" placeholder="e.g. Group A"></label>
+            <button class="ev-link" (click)="removeSlot(i)">Remove</button>
+          </div>
+          <button class="ev-link" (click)="addSlot()">+ Add a time</button>
+          <label class="ev-check" *ngIf="form.slots.length > 1"><input type="checkbox" [(ngModel)]="form.timeSelection"><span>Let athletes choose their time (off: you assign them)</span></label>
+        </div>
+        <label class="wide">
+          <span>Terms &amp; guidelines — one per line</span>
+          <textarea rows="7" [(ngModel)]="form.rulesText"></textarea>
+        </label>
+        <p class="hint">Each line becomes an item the attendee must tick (rules for a competition, terms or safety notes for a hike or trip). A non-refundable fee line is added automatically when there’s an entry fee. The athlete app hides the number of spots left until half are gone.</p>
+      </section>
+
+      <section class="ev-card" *ngIf="form.id">
+        <div class="ev-reg-head">
+          <h3>Registrations ({{ registrations.length }}<span *ngIf="form.capacity"> of {{ form.capacity }}</span>)</h3>
+          <button class="ev-link" *ngIf="registrations.length" (click)="exportCsv()">Export CSV</button>
+        </div>
+        <p class="hint" *ngIf="!registrations.length">Nobody has registered yet.</p>
+        <p class="hint" *ngIf="registrations.length">{{ paidCount }} paid · {{ guestCount }} guest{{ guestCount === 1 ? '' : 's' }}</p>
+        <p class="hint" *ngIf="form.slots.length > 1 && form.timeSelection && registrations.length">
+          <span *ngFor="let t of form.slots; let last = last">{{ slotText(t) }}: {{ slotCount(t.id) }}<span *ngIf="!last"> · </span></span>
+        </p>
+        <div *ngFor="let r of registrations" class="ev-reg">
+          <div class="ev-reg-main">
+            <div class="ev-row-title">{{ r.clientName }} <span class="ev-chip">{{ r.rank }}</span></div>
+            <div class="ev-row-meta" *ngIf="r.timeSlotText">Time: {{ r.timeSlotText }}</div>
+            <div class="ev-row-meta">{{ r.phone }} · Born {{ r.dob }} · {{ r.guests }} guest{{ r.guests === 1 ? '' : 's' }}</div>
+            <div class="ev-row-meta">Emergency: {{ r.emergencyName }} ({{ r.emergencyRelation }}) {{ r.emergencyPhone }}</div>
+            <div class="ev-row-meta" *ngIf="r.medicalNotes">Medical: {{ r.medicalNotes }}</div>
+          </div>
+          <button class="ev-link" *ngIf="r.fee > 0" (click)="togglePaid(r)">{{ r.feeStatus === 'paid' ? 'Paid ✓' : 'Mark paid' }}</button>
+          <button class="icon-btn" (click)="removeRegistration(r)" aria-label="Remove"><ion-icon name="trash-outline"></ion-icon></button>
+        </div>
+      </section>
+
+      <button *ngIf="form.id" class="ev-danger" (click)="remove()">Delete event</button>
+      </div>
+
+      <!-- ============ Phone preview: the World page as athletes will see it ============ -->
+      <aside class="ev-preview">
+        <span class="ev-image-title">Preview</span>
+        <div class="ev-phone">
+          <div class="ev-screen" [style.--acc]="previewAccent">
+            <!-- ===== Test screens: the registration, step by step ===== -->
+            <div class="pv-page pv-reg" *ngIf="previewScreen !== 'world'">
+              <div class="pv-reg-top"><span class="pv-back" (click)="previewScreen = 'world'">‹</span></div>
+              <div class="pv-pips" *ngIf="previewScreen !== 'done'"><i class="on"></i><i [class.on]="previewScreen !== 'intro'"></i><i [class.on]="previewScreen === 'rules' || previewScreen === 'review'"></i><i [class.on]="previewScreen === 'review'"></i></div>
+              <span class="pv-kick" *ngIf="previewScreen === 'intro'">Step 1 of 4 · Event</span>
+              <span class="pv-kick" *ngIf="previewScreen === 'details'">Step 2 of 4 · Details</span>
+              <span class="pv-kick" *ngIf="previewScreen === 'rules'">Step 3 of 4 · Rules</span>
+              <span class="pv-kick" *ngIf="previewScreen === 'review'">Step 4 of 4 · Review</span>
+              <span class="pv-kick" *ngIf="previewScreen === 'done'">{{ form.title }}</span>
+
+              <ng-container [ngSwitch]="previewScreen">
+                <ng-container *ngSwitchCase="'intro'">
+                  <h1 class="pv-rtitle">{{ c('introTitle') }}</h1>
+                  <p class="pv-rlead">{{ form.description || 'Registration for this event.' }}</p>
+                  <div class="pv-ticket">
+                    <div><b>Event</b><span>{{ form.title || 'Event title' }}</span></div>
+                    <div *ngIf="previewDates"><b>When</b><span>{{ previewDates }}</span></div>
+                    <div *ngIf="previewWhere"><b>Where</b><span>{{ previewWhere }}</span></div>
+                    <div *ngIf="previewFee"><b>{{ c('feeLabel') }}</b><span>{{ previewFee | currency:'USD':'symbol':'1.0-2' }}<small>Non-refundable</small></span></div>
+                    <div *ngIf="previewTimes.length"><b>Times</b><span><span *ngFor="let t of previewTimes" class="pv-line">{{ t }}</span></span></div>
+                    <div *ngIf="form.guestsPerCompetitor"><b>{{ c('guestsWord') }}</b><span>Up to {{ form.guestsPerCompetitor }}</span></div>
+                  </div>
+                  <div class="pv-rbtn" (click)="nextScreen()">{{ c('startButton') }}</div>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'details'">
+                  <h1 class="pv-rtitle sm">{{ c('detailsTitle') }}</h1>
+                  <p class="pv-rlead">{{ c('detailsLead') }}</p>
+                  <div class="pv-card"><i class="pv-fld"></i><i class="pv-fld"></i><i class="pv-fld"></i></div>
+                  <h2 class="pv-sub">Emergency contact</h2>
+                  <div class="pv-card"><i class="pv-fld"></i><i class="pv-fld"></i></div>
+                  <div class="pv-rbtn" (click)="nextScreen()">{{ c('continueButton') }}</div>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'rules'">
+                  <h1 class="pv-rtitle sm">{{ c('rulesTitle') }}</h1>
+                  <p class="pv-rlead">{{ c('rulesLead') }}</p>
+                  <div class="pv-card">
+                    <div *ngFor="let r of previewRules" class="pv-check"><i></i><span>{{ r }}</span></div>
+                    <div *ngIf="previewFee" class="pv-check"><i></i><span>I understand the {{ previewFee | currency:'USD':'symbol':'1.0-2' }} {{ c('feeLabel').toLowerCase() }} is non-refundable, even if I cancel or can’t attend.</span></div>
+                  </div>
+                  <div class="pv-rbtn" (click)="nextScreen()">{{ c('continueButton') }}</div>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'review'">
+                  <h1 class="pv-rtitle sm">{{ c('reviewTitle') }}</h1>
+                  <p class="pv-rlead">{{ c('reviewLead') }}</p>
+                  <div class="pv-ticket">
+                    <div><b>Event</b><span>{{ form.title || 'Event title' }}<small>{{ previewDates }}</small></span></div>
+                    <div><b>{{ c('participantWord') }}</b><span>Casey Sandbox<small>D-Rank</small></span></div>
+                    <div *ngIf="previewTimes.length"><b>Your time</b><span>{{ previewTimes[0] }}</span></div>
+                  </div>
+                  <div class="pv-total" *ngIf="previewFee"><span>{{ c('feeLabel') }}</span><strong>{{ previewFee | currency:'USD':'symbol':'1.0-2' }}</strong></div>
+                  <div class="pv-rbtn" (click)="nextScreen()">{{ c('confirmButton') }}</div>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'done'">
+                  <h1 class="pv-rtitle">{{ previewFee ? c('receivedTitle') : c('doneTitle') }}</h1>
+                  <p class="pv-rlead">{{ previewFee ? 'Pay the ' + c('feeLabel').toLowerCase() + ' to confirm your spot.' : 'Your spot is confirmed.' }}</p>
+                  <div class="pv-ticket held">
+                    <div *ngIf="previewDates"><b>When</b><span>{{ previewDates }}</span></div>
+                    <div *ngIf="previewWhere"><b>Where</b><span>{{ previewWhere }}</span></div>
+                    <div><b>{{ c('participantWord') }}</b><span>Casey Sandbox</span></div>
+                  </div>
+                </ng-container>
+              </ng-container>
+            </div>
+
+            <div class="pv-page" *ngIf="previewScreen === 'world'" [ngClass]="'pv-' + form.backdrop" [class.chromeRank]="previewRank === 'S'">
+              <div class="pv-bg" *ngIf="form.backdrop === 'photo' && form.image" [style.background-image]="'url(' + form.image + ')'"></div>
+              <div class="pv-bg pv-chrome" *ngIf="form.backdrop === 'chrome'" [style.background-image]="chromeRamp"></div>
+              <div class="pv-bg pv-aurora" *ngIf="form.backdrop === 'aurora'"></div>
+              <div class="pv-bg pv-spotlight" *ngIf="form.backdrop === 'spotlight'"></div>
+              <div class="pv-bg pv-dusk" *ngIf="form.backdrop === 'dusk'"></div>
+              <div class="pv-bg pv-deep" *ngIf="form.backdrop === 'deep'"></div>
+              <div class="pv-bg" *ngIf="scenes.includes(form.backdrop)" [ngClass]="'scene-' + form.backdrop"></div>
+              <ng-container *ngIf="form.backdrop !== 'photo'">
+                <div class="pv-ticker" *ngIf="form.float === 'zeros'"><span>000 000 000 000 000 000 000 000 </span></div>
+                <div class="pv-fx" *ngIf="form.float !== 'none' && form.float !== 'zeros'" [ngClass]="'fx-' + form.float">
+                  <i *ngFor="let f of fxItems" [style.--x]="f.x" [style.--y]="f.y" [style.--s]="f.s" [style.--d]="f.d" [style.--w]="f.w"></i>
+                </div>
+              </ng-container>
+              <div class="pv-content">
+                <h1 class="pv-title">{{ form.title || 'Event title' }}</h1>
+                <ng-container *ngIf="form.prizePool; else cap">
+                  <div class="pv-prize"><span>{{ c('prizeLabel') }}</span><b>{{ form.prizePool | currency:'USD':'symbol':'1.0-0' }}</b></div>
+                </ng-container>
+                <ng-template #cap><p class="pv-caption" *ngIf="form.caption">{{ form.caption }}</p></ng-template>
+                <p class="pv-dates" *ngIf="previewDates">{{ previewDates }}</p>
+                <div class="pv-stats">
+                  <div *ngIf="previewDaysToGo !== null"><strong>{{ previewDaysToGo }}</strong><span>{{ previewDaysToGo === 1 ? 'Day' : 'Days' }} to go</span></div>
+                  <div *ngIf="previewSite as site"><strong>{{ site.value }}</strong><span>{{ site.label }}</span></div>
+                </div>
+                <div class="pv-bar"><i></i><i></i><i></i><i></i><i class="grey"></i></div>
+                <div class="pv-cta" *ngIf="form.registrationOpen" (click)="previewScreen = 'intro'">{{ c('reserveButton') }}</div>
+                <div class="pv-dots"><i class="on"></i><i></i></div>
+              </div>
+            </div>
+            <div class="pv-tabs"><i></i><i></i><i></i><i></i></div>
+          </div>
+        </div>
+        <div class="ev-pv-rank screens">
+          <span>Screen</span>
+          <button type="button" *ngFor="let s of previewScreens" [class.on]="previewScreen === s.id" (click)="previewScreen = s.id">{{ s.label }}</button>
+        </div>
+        <div class="ev-pv-rank">
+          <span>Viewed as</span>
+          <button type="button" *ngFor="let r of previewRanks" [class.on]="previewRank === r" (click)="previewRank = r">{{ r }}</button>
+        </div>
+        <p class="hint">Rank color changes with each athlete’s rank. Chrome and the photo look the same for everyone.</p>
+      </aside>
+      </div>
+
+    </ng-container>
+  </div>
+</ion-content>

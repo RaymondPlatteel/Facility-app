@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit, onSnapshot } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit, onSnapshot, getCountFromServer } from 'firebase/firestore';
 import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationPlan, usesStoredSessions } from './schedule.util';
 import type { ScheduleEntry } from './schedule.util';
 import { SYNC_CLIENT_ID, ensureExerciseKeys, isLiveWorkout, isStaleWorkout, staleCloseFields, newExerciseKey, normalizeState, sheetToSync, syncToSheet, WorkoutSyncState } from './workout-sync';
@@ -433,11 +433,39 @@ export interface PackageRecord {
   updatedAt?: string;
 }
 
+export interface AnnouncementAction {
+  type: 'link' | 'event' | 'vote';
+  label: string;
+  url?: string | null;
+  eventId?: string | null;
+  options?: string[];
+}
+
 export interface Announcement {
   id?: string;
   title: string;
   body: string;
   createdAt: string;
+  editedAt?: string;
+  audience?: EventAudience;
+  order?: number;
+  notify?: boolean;
+  action?: AnnouncementAction | null;
+}
+
+export interface AnnouncementVote {
+  nameKey: string;
+  clientName: string;
+  option: number;
+  votedAt: string;
+}
+
+export interface AnnouncementDraft {
+  title: string;
+  body: string;
+  audience: EventAudience;
+  notify: boolean;
+  action: AnnouncementAction | null;
 }
 
 export interface CompetitionConfig {
@@ -445,6 +473,121 @@ export interface CompetitionConfig {
   eventDate?: string | null;
   eventEndDate?: string | null;
   label?: string | null;
+}
+
+// events/{id} — everything the athlete app shows about an event (World page and
+// registration) comes from this document. registrations/{nameKey} is a
+// subcollection written by the athletes themselves.
+export type EventStatus = 'draft' | 'published' | 'archived';
+export type EventMinRank = 'UNRANKED' | 'D-RANK' | 'C-RANK' | 'B-RANK' | 'A-RANK' | 'S-RANK';
+
+export interface EventDay {
+  date: string;
+  venueName?: string | null;
+  venueAddress?: string | null;
+}
+
+export type EventBackdrop = 'rank' | 'chrome' | 'midnight' | 'aurora' | 'spotlight' | 'dusk' | 'deep' | 'mountains' | 'snowpeaks' | 'foliage' | 'dawn' | 'day' | 'night' | 'photo';
+export type EventFloat = 'none' | 'zeros' | 'dust' | 'embers' | 'rings' | 'stars' | 'bubbles' | 'steam' | 'snow' | 'fireflies';
+
+export type EventAudience = 'everyone' | 'academy' | 'inperson' | 'testers';
+
+export interface EventTimeSlot {
+  id: string;
+  date?: string | null;
+  start: string;
+  end?: string | null;
+  label?: string | null;
+}
+
+export function formatSlot(s: EventTimeSlot): string {
+  const t = (hm: string) => {
+    const [h, m] = hm.split(':').map(Number);
+    return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+  };
+  const day = s.date ? new Date(s.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '';
+  return [day, s.end ? `${t(s.start)} – ${t(s.end)}` : t(s.start), s.label].filter(Boolean).join(' · ');
+}
+
+export type EventCopyKey =
+  | 'reserveButton' | 'introTitle' | 'startButton' | 'detailsTitle' | 'detailsLead'
+  | 'rulesTitle' | 'rulesLead' | 'reviewTitle' | 'reviewLead'
+  | 'continueButton' | 'confirmButton' | 'doneTitle' | 'receivedTitle'
+  | 'participantWord' | 'guestsWord' | 'feeLabel' | 'prizeLabel';
+
+// What the athlete app shows when a field is left blank. Keep in step with the athlete app.
+export const EVENT_COPY_DEFAULTS: Record<EventCopyKey, string> = {
+  reserveButton: 'Reserve your spot',
+  introTitle: 'Event registration',
+  startButton: 'I’m ready',
+  detailsTitle: 'Your details',
+  detailsLead: 'Needed for check-in and for emergencies on the day.',
+  rulesTitle: 'Terms & guidelines',
+  rulesLead: 'Please read and accept each item to continue.',
+  reviewTitle: 'Review & confirm',
+  reviewLead: 'Review your registration. Your spot is held once you confirm.',
+  continueButton: 'Continue',
+  confirmButton: 'Confirm my spot',
+  doneTitle: 'Registration confirmed',
+  receivedTitle: 'Registration received',
+  participantWord: 'Participant',
+  guestsWord: 'Guests',
+  feeLabel: 'Entry fee',
+  prizeLabel: 'Current Prize Pool'
+};
+
+export interface CompetitionEvent {
+  id?: string;
+  title: string;
+  label?: string | null;
+  audience?: EventAudience;
+  order?: number;
+  copy?: Partial<Record<EventCopyKey, string>>;
+  timeSlots?: EventTimeSlot[];
+  timeSelection?: boolean;
+  backdrop?: EventBackdrop;
+  float?: EventFloat;
+  ticker?: boolean;
+  image?: string | null;
+  caption?: string | null;
+  status: EventStatus;
+  startDate?: string | null;
+  endDate?: string | null;
+  prizePool?: number | null;
+  description?: string | null;
+  venueName?: string | null;
+  venueAddress?: string | null;
+  days?: EventDay[];
+  registrationOpen?: boolean;
+  minRank?: EventMinRank | null;
+  fee?: number | null;
+  capacity?: number | null;
+  guestsPerCompetitor?: number | null;
+  rules?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface EventRegistration {
+  eventId: string;
+  eventTitle: string;
+  nameKey: string;
+  clientName: string;
+  rank: string;
+  lvl: number;
+  createdAt: string;
+  dob: string;
+  phone: string;
+  emergencyName: string;
+  emergencyPhone: string;
+  emergencyRelation: string;
+  medicalNotes: string;
+  guests: number;
+  timeSlotId?: string | null;
+  timeSlotText?: string | null;
+  fee: number;
+  feeStatus: 'unpaid' | 'paid';
+  paidAt?: string;
 }
 
 export interface WaiverData {
@@ -3167,14 +3310,110 @@ export class FirebaseService {
     return snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Announcement, 'id'>) }));
   }
 
-  async addAnnouncement(title: string, body: string): Promise<void> {
-    await addDoc(collection(this.db, 'announcements'), {
-      title: title.trim(), body: body.trim(), createdAt: new Date().toISOString()
-    });
+  // Kept short so an announcement fits its panel on the athlete's World page.
+  static readonly ANNOUNCEMENT_TITLE_MAX = 60;
+  static readonly ANNOUNCEMENT_BODY_MAX = 240;
+
+  private announcementFields(d: AnnouncementDraft) {
+    return {
+      title: d.title.trim().slice(0, FirebaseService.ANNOUNCEMENT_TITLE_MAX),
+      body: d.body.trim().slice(0, FirebaseService.ANNOUNCEMENT_BODY_MAX),
+      audience: d.audience,
+      notify: d.notify,
+      action: d.action
+    };
+  }
+
+  async addAnnouncement(d: AnnouncementDraft): Promise<void> {
+    await addDoc(collection(this.db, 'announcements'), { ...this.announcementFields(d), createdAt: new Date().toISOString() });
+  }
+
+  // Edits keep the original date, so the announcement keeps its place in the order.
+  async updateAnnouncement(id: string, d: AnnouncementDraft): Promise<void> {
+    await updateDoc(doc(this.db, 'announcements', id), { ...this.announcementFields(d), editedAt: new Date().toISOString() });
+  }
+
+  // The World page order for events and announcements together: each one's position.
+  async saveWorldOrder(items: Array<{ kind: 'event' | 'announcement'; id: string }>): Promise<void> {
+    const batch = writeBatch(this.db);
+    items.forEach((it, i) => batch.update(doc(this.db, it.kind === 'event' ? 'events' : 'announcements', it.id), { order: i }));
+    await batch.commit();
+  }
+
+  // ---------- Testers: the list behind "Testers only" (config/testers) ----------
+  async getTesters(): Promise<string[]> {
+    const snap = await getDoc(doc(this.db, 'config', 'testers'));
+    return snap.exists() ? ((snap.data()['names'] as string[]) ?? []) : [];
+  }
+
+  async setTesters(names: string[]): Promise<void> {
+    await setDoc(doc(this.db, 'config', 'testers'), { names, updatedAt: new Date().toISOString() });
+  }
+
+  // Every member's display name and key, for picking testers.
+  async listMemberNames(): Promise<Array<{ nameKey: string; clientName: string }>> {
+    const snap = await getDocs(collection(this.db, 'members'));
+    return snap.docs
+      .map(d => d.data() as { nameKey?: string; clientName?: string })
+      .filter(m => m.nameKey && m.clientName)
+      .map(m => ({ nameKey: m.nameKey!, clientName: m.clientName! }))
+      .sort((a, b) => a.clientName.localeCompare(b.clientName));
+  }
+
+  async listVotes(id: string): Promise<AnnouncementVote[]> {
+    const snap = await getDocs(collection(this.db, 'announcements', id, 'votes'));
+    return snap.docs.map(d => d.data() as AnnouncementVote);
   }
 
   async deleteAnnouncement(id: string): Promise<void> {
     await deleteDoc(doc(this.db, 'announcements', id));
+  }
+
+  // ---------- Events (athlete app World page + registration) ----------
+  async listEvents(): Promise<CompetitionEvent[]> {
+    const snap = await getDocs(collection(this.db, 'events'));
+    return snap.docs
+      .map(d => ({ id: d.id, ...(d.data() as Omit<CompetitionEvent, 'id'>) }))
+      .sort((a, b) => (b.startDate || '9999').localeCompare(a.startDate || '9999'));
+  }
+
+  // Creates when there's no id, otherwise overwrites the fields shown on the form.
+  async saveEvent(ev: CompetitionEvent): Promise<string> {
+    const now = new Date().toISOString();
+    const { id, ...rest } = ev;
+    const data = stripUndefined({ ...rest, updatedAt: now });
+    if (id) {
+      await setDoc(doc(this.db, 'events', id), data, { merge: true });
+      return id;
+    }
+    const ref = await addDoc(collection(this.db, 'events'), { ...data, createdAt: now });
+    return ref.id;
+  }
+
+  async deleteEvent(id: string): Promise<void> {
+    const regs = await getDocs(collection(this.db, 'events', id, 'registrations'));
+    await Promise.all(regs.docs.map(d => deleteDoc(d.ref)));
+    await deleteDoc(doc(this.db, 'events', id));
+  }
+
+  async countEventRegistrations(id: string): Promise<number> {
+    try { return (await getCountFromServer(collection(this.db, 'events', id, 'registrations'))).data().count; }
+    catch { return 0; }
+  }
+
+  async listEventRegistrations(id: string): Promise<EventRegistration[]> {
+    const snap = await getDocs(collection(this.db, 'events', id, 'registrations'));
+    return snap.docs.map(d => d.data() as EventRegistration).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async setRegistrationPaid(eventId: string, nameKey: string, paid: boolean): Promise<void> {
+    await updateDoc(doc(this.db, 'events', eventId, 'registrations', nameKey), paid
+      ? { feeStatus: 'paid', paidAt: new Date().toISOString() }
+      : { feeStatus: 'unpaid', paidAt: deleteField() });
+  }
+
+  async removeEventRegistration(eventId: string, nameKey: string): Promise<void> {
+    await deleteDoc(doc(this.db, 'events', eventId, 'registrations', nameKey));
   }
 
   async getCompetitionConfig(): Promise<CompetitionConfig> {

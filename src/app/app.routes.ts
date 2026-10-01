@@ -1,4 +1,5 @@
-import { Routes } from '@angular/router';
+import { inject } from '@angular/core';
+import { Router, Routes } from '@angular/router';
 import { authGuard } from './guards/auth.guard';
 
 // `data: { title }` feeds the mobile top bar (app.component.ts reads it off
@@ -41,9 +42,14 @@ export const routes: Routes = [
   },
   {
     path: 'announcements',
+    // Announcements now live on the Events page, under their own tab.
+    redirectTo: () => inject(Router).parseUrl('/events?tab=announcements')
+  },
+  {
+    path: 'events',
     canActivate: [authGuard],
-    loadComponent: () => import('./announcements/announcements.page').then( m => m.AnnouncementsPage),
-    data: { title: 'Announcements' }
+    loadComponent: () => import('./events/events.page').then( m => m.EventsPage),
+    data: { title: 'Events' }
   },
   {
     path: 'students',
