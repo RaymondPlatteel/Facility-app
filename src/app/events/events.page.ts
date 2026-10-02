@@ -595,7 +595,7 @@ export class EventsPage implements OnInit {
         float: f.backdrop === 'photo' ? 'none' : f.float,
         ticker: f.backdrop !== 'photo' && f.float === 'zeros',   // read by older app builds
         image: f.image || null,
-        caption: f.prizePool ? null : f.caption.trim() || null,
+        caption: f.caption.trim() || null,
         status: f.status,
         description: f.description.trim() || null,
         startDate: multi ? days[0].date : f.startDate || null,

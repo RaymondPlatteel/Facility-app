@@ -227,7 +227,7 @@
           </div>
           <p class="hint">Only the chosen group sees this event on their World page or can register for it. Academy means athletes who have a designation (like 000 or 001). In-person clients are the ones marked in-person on their profile.</p>
         </div>
-        <label class="wide"><span>Description (top of the registration page)</span><textarea rows="3" [(ngModel)]="form.description"></textarea></label>
+        <label class="wide"><span>Description (shown when an athlete taps the action button)</span><textarea rows="5" placeholder="What the event is, who it is for and what to expect." [(ngModel)]="form.description"></textarea></label>
       </section>
 
       <section class="ev-card">
@@ -257,7 +257,7 @@
 
         <div class="ev-grid">
           <label><span>Prize pool (USD)</span><input type="number" inputmode="numeric" min="0" [(ngModel)]="form.prizePool" placeholder="Leave empty if none"></label>
-          <label *ngIf="!form.prizePool"><span>Caption (shown instead of the prize pool)</span><input type="text" maxlength="90" [(ngModel)]="form.caption" placeholder="e.g. Hosted by Omni Fitness"></label>
+          <label><span>Caption (one line under the title on the World page)</span><input type="text" maxlength="90" [(ngModel)]="form.caption" placeholder="e.g. A one-day strength meet for all ranks"></label>
         </div>
       </section>
 
@@ -418,10 +418,8 @@
               </ng-container>
               <div class="pv-content">
                 <h1 class="pv-title">{{ form.title || 'Event title' }}</h1>
-                <ng-container *ngIf="form.prizePool; else cap">
-                  <div class="pv-prize"><span>{{ c('prizeLabel') }}</span><b>{{ form.prizePool | currency:'USD':'symbol':'1.0-0' }}</b></div>
-                </ng-container>
-                <ng-template #cap><p class="pv-caption" *ngIf="form.caption">{{ form.caption }}</p></ng-template>
+                <div class="pv-prize" *ngIf="form.prizePool"><span>{{ c('prizeLabel') }}</span><b>{{ form.prizePool | currency:'USD':'symbol':'1.0-0' }}</b></div>
+                <p class="pv-caption" *ngIf="form.caption">{{ form.caption }}</p>
                 <p class="pv-dates" *ngIf="previewDates">{{ previewDates }}</p>
                 <div class="pv-stats">
                   <div *ngIf="previewDaysToGo !== null"><strong>{{ previewDaysToGo }}</strong><span>{{ previewDaysToGo === 1 ? 'Day' : 'Days' }} to go</span></div>
