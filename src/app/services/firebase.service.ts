@@ -711,6 +711,7 @@ export interface Program {
 export interface SetLog {
   values: { [attrType: string]: string }; // e.g. { Reps: '8', Load: '135' }
   done?: boolean;
+  warmup?: boolean;       // a warm-up set: shown, but never counted toward volume or PRs
 }
 
 export interface LoggedExercise {
@@ -746,6 +747,7 @@ export interface WorkoutLog {
   source?: 'coach' | 'member';
   inProgress?: boolean;   // being done right now, live on both apps
   title?: string;         // the athlete's own name for a workout they started
+  durationMin?: number | null;  // how long it took, when the athlete's timer ran
 }
 
 // A member's own freeform workout log, self-recorded in Project-000 —
@@ -2550,6 +2552,7 @@ export class FirebaseService {
       exercises: ensureExerciseKeys(m.exercises || []).map((e, i) => syncToSheet(e, i)),
       sessionNotes: m.notes || '',
       completed: !live,
+      durationMin: m.durationMin ?? null,
       createdAt: m.createdAt,
       updatedAt: m.updatedAt
     };

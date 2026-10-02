@@ -44,6 +44,7 @@ export interface WorkoutSyncState {
 export interface SheetSet {
   values: { [column: string]: string };
   done?: boolean;
+  warmup?: boolean;
 }
 
 export interface SheetExercise {
@@ -150,7 +151,8 @@ export function sheetToSync(ex: SheetExercise, prev?: SyncExercise, index = 0): 
     const out: SyncSet = {
       reps: null, weight: null, rir: null,
       completed: !!s.done,
-      setType: before?.setType ?? 'normal',
+      // The sheet says outright when it knows; otherwise what was stored.
+      setType: s.warmup === undefined ? before?.setType ?? 'normal' : s.warmup ? 'warmup' : 'normal',
       videoUrl: before?.videoUrl ?? null
     };
     const extra: { [column: string]: string } = {};
@@ -195,7 +197,7 @@ export function syncToSheet(ex: SyncExercise, index = 0): SheetExercise {
         const field = NUMERIC_COLUMN[col];
         if (field && s[field] != null) values[col] = String(s[field]);
       }
-      return { values, done: !!s.completed };
+      return { values, done: !!s.completed, warmup: s.setType === 'warmup' };
     })
   };
 }

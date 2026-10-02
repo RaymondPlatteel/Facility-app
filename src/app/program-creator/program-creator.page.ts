@@ -13,12 +13,9 @@ import {
   FirebaseService, Program, ProgramDay, ProgramExercise, ProgramAttribute, ClientProfile
 } from '../services/firebase.service';
 import { matchAssessmentLift } from '../services/omni.util';
+import { ATTRIBUTE_TYPES, isAttributeLocked } from '../services/attributes';
 
 type CreatorView = 'setup' | 'builder';
-
-const DISTANCE_UNITS = ['Feet', 'Yards', 'Meters', 'Miles', 'Kilometers'];
-const SPEED_UNITS = ['mph', 'kph'];
-const PACE_UNITS = ['min/mile', 'min/km'];
 
 @Component({
   selector: 'app-program-creator',
@@ -62,12 +59,8 @@ export class ProgramCreatorPage implements OnInit {
     'Bike', 'Yoga Mat', 'Medicine Ball', 'Foam Roller', 'Jump Rope', 'Bodyweight Only'
   ];
 
-  availableAttributes = [
-    'Sets', 'Reps', 'Load', 'Duration', 'RIR', 'RPE', 'Tempo',
-    'Feet', 'Yards', 'Meters', 'Miles', 'Kilometers',
-    'mph', 'kph', 'min/mile', 'min/km',
-    'Watts', 'SPM', 'RPM', 'Incline', 'Drag Factor', 'Gear', 'HR'
-  ];
+  // Shared with the workout log, so a column added in one exists in the other.
+  availableAttributes = ATTRIBUTE_TYPES;
 
   // Builder state
   schedule: ProgramDay[] = [];
@@ -496,18 +489,7 @@ export class ProgramCreatorPage implements OnInit {
   isAttributeDisabled(exIdx: number, attrType: string): boolean {
     const day = this.currentDay;
     if (!day) return false;
-    const existing = day.exercises[exIdx].attributes.map(a => a.type);
-    if (existing.includes(attrType)) return false;
-    if (attrType === 'RIR' && existing.includes('RPE')) return true;
-    if (attrType === 'RPE' && existing.includes('RIR')) return true;
-    if (attrType === 'Tempo' && existing.includes('Duration')) return true;
-    if (attrType === 'Duration' && existing.includes('Tempo')) return true;
-    if (attrType === 'Reps' && existing.includes('Duration')) return true;
-    if (attrType === 'Duration' && existing.includes('Reps')) return true;
-    if (DISTANCE_UNITS.includes(attrType)) return existing.some(t => DISTANCE_UNITS.includes(t));
-    if (SPEED_UNITS.includes(attrType)) return existing.some(t => SPEED_UNITS.includes(t));
-    if (PACE_UNITS.includes(attrType)) return existing.some(t => PACE_UNITS.includes(t));
-    return false;
+    return isAttributeLocked(day.exercises[exIdx].attributes.map(a => a.type), attrType);
   }
 
   getAvailableAttributesForExercise(exIdx: number): string[] {

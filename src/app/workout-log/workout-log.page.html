@@ -15,128 +15,309 @@
         <button class="ghost-btn danger" *ngIf="editingLogId" (click)="deleteCurrentLog()">
           <ion-icon name="trash-outline"></ion-icon> Delete
         </button>
-        <button class="primary-btn" *ngIf="liveId" (click)="finishLive()" [disabled]="saving">
-          <ion-icon name="checkmark-circle"></ion-icon> {{ saving ? 'Finishing…' : 'Finish Workout' }}
-        </button>
-        <button class="primary-btn" *ngIf="!liveId" (click)="save()" [disabled]="!canSave || saving">
-          <ion-icon name="save-outline"></ion-icon> {{ saving ? 'Saving…' : (editingLogId ? 'Update Log' : 'Save Log') }}
-        </button>
       </div>
     </div>
 
     <div *ngIf="loading" class="state-msg">Loading…</div>
 
     <ng-container *ngIf="!loading">
-      <!-- Selection bar -->
-      <div class="select-bar">
-        <label class="fld">
-          <span>Program</span>
-          <select class="fld-input" [(ngModel)]="selectedProgramId" (ngModelChange)="onProgramChange()">
-            <option value="">— No program (freeform) —</option>
-            <option *ngFor="let p of programs" [value]="p.id">{{ p.name }}</option>
-          </select>
-        </label>
-        <label class="fld" *ngIf="selectedProgramId">
-          <span>Day</span>
-          <select class="fld-input" [(ngModel)]="selectedDayIndex" (ngModelChange)="onDayChange()">
-            <option *ngFor="let d of dayOptions" [ngValue]="d.index">{{ d.label }}</option>
-          </select>
-        </label>
-        <label class="fld">
-          <span>Client</span>
-          <select class="fld-input" [(ngModel)]="selectedClientId" (ngModelChange)="onClientChange()">
-            <option value="">— Select client —</option>
-            <option *ngFor="let c of clientOptions" [value]="c.id">
-              {{ c.fullName }}{{ isAssigned(c) ? ' ★' : '' }}
-            </option>
-          </select>
-        </label>
-        <label class="fld">
-          <span>Date</span>
-          <input class="fld-input" type="date" [(ngModel)]="date" />
-        </label>
-      </div>
 
-      <!-- Program progression status -->
-      <div class="progress-bar" *ngIf="selectedProgramId && selectedClientId && dayTotal > 0"
-           [class.complete]="programComplete">
-        <ion-icon [name]="programComplete ? 'checkmark-circle' : 'barbell-outline'"></ion-icon>
-        <span class="progress-main" *ngIf="!programComplete">
-          Day {{ dayPosition }} of {{ dayTotal }}
-        </span>
-        <span class="progress-main" *ngIf="programComplete">
-          Program complete — pick a day to repeat any session
-        </span>
-        <span class="progress-last" *ngIf="lastDoneLabel">· last done {{ lastDoneLabel }}</span>
-      </div>
+      <!-- Who, which program, which day -->
+      <section class="setup">
+        <div class="setup-row">
+          <label class="fld">
+            <span>Client</span>
+            <select class="fld-input" [(ngModel)]="selectedClientId" (ngModelChange)="onClientChange()">
+              <option value="">— Select client —</option>
+              <option *ngFor="let c of clientOptions" [value]="c.id">
+                {{ c.fullName }}{{ isAssigned(c) ? ' ★' : '' }}
+              </option>
+            </select>
+          </label>
+          <label class="fld">
+            <span>Program</span>
+            <select class="fld-input" [(ngModel)]="selectedProgramId" (ngModelChange)="onProgramChange()">
+              <option value="">— No program (freeform) —</option>
+              <option *ngFor="let p of programs" [value]="p.id">{{ p.name }}</option>
+            </select>
+          </label>
+          <label class="fld fld-date">
+            <span>Date</span>
+            <input class="fld-input" type="date" [(ngModel)]="date" (ngModelChange)="rebuildHints()" />
+          </label>
+        </div>
 
-      <!-- No entries -->
-      <div class="empty-state" *ngIf="entries.length === 0">
-        <ion-icon name="clipboard-outline"></ion-icon>
-        <p *ngIf="!selectedProgramId">Pick a program and day to load its exercises, or open a recent session below.</p>
-        <p *ngIf="selectedProgramId && dayOptions.length === 0">This program has no training days with exercises yet.</p>
-      </div>
+        <div class="day-rail" *ngIf="selectedProgramId && dayOptions.length > 0">
+          <div class="rail-head">
+            <span class="rail-title">Training day</span>
+            <span class="rail-meta ok" *ngIf="programComplete">Program complete — pick any day to repeat it</span>
+            <span class="rail-meta" *ngIf="!programComplete && selectedClientId">
+              Day {{ dayPosition }} of {{ dayTotal }}<ng-container *ngIf="lastDoneLabel"> · last done {{ lastDoneLabel }}</ng-container>
+            </span>
+          </div>
+          <div class="rail-scroll">
+            <button type="button" class="day-chip" *ngFor="let d of dayOptions; trackBy: trackIdx"
+                    [class.sel]="d.index === selectedDayIndex"
+                    [class.done]="doneDays.has(d.index)"
+                    (click)="pickDay(d.index)">
+              <span class="dc-code">{{ d.code }}</span>
+              <span class="dc-name">{{ d.name || 'Training day' }}</span>
+              <ion-icon class="dc-check" name="checkmark-circle" *ngIf="doneDays.has(d.index)"></ion-icon>
+              <span class="dc-next" *ngIf="d.index === upNext && !doneDays.has(d.index)">Up next</span>
+            </button>
+          </div>
+        </div>
+      </section>
 
       <div class="live-banner" *ngIf="liveId">
         <span class="live-dot"></span>
         Live · {{ liveName }} is doing this workout — changes here show on their phone as you make them, and theirs show here.
       </div>
 
-      <!-- Exercise log sheets -->
-      <div class="log-sheets" *ngIf="entries.length > 0">
-        <div class="sheet" *ngFor="let entry of entries; let entryIdx = index">
-          <div class="sheet-head">
-            <div class="sheet-name">{{ entry.exerciseName }}</div>
-            <div class="sheet-prescription">{{ entry.prescription }}</div>
-            <div class="sheet-last" *ngIf="lastTime[entryIdx]">
-              <ion-icon name="reader-outline"></ion-icon> Last {{ lastTime[entryIdx] }}
-            </div>
-          </div>
-
-          <table class="set-table">
-            <thead>
-              <tr>
-                <th class="col-set">Set</th>
-                <th *ngFor="let col of entry.attrColumns">{{ col }}</th>
-                <th class="col-done">Done</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let set of entry.sets; let setIdx = index" [class.done]="set.done">
-                <td class="col-set">{{ setIdx + 1 }}</td>
-                <td *ngFor="let col of entry.attrColumns">
-                  <input
-                    class="set-input"
-                    [(ngModel)]="set.values[col]"
-                    (ngModelChange)="markDirty()"
-                    [placeholder]="placeholderFor(entryIdx, col)" />
-                </td>
-                <td class="col-done">
-                  <button class="done-btn" [class.checked]="set.done" (click)="toggleDone(set)">
-                    <ion-icon name="checkmark-circle"></ion-icon>
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div class="sheet-foot">
-            <button class="mini-action" (click)="addSet(entry)">
-              <ion-icon name="add"></ion-icon> Add set
-            </button>
-            <button class="mini-action" (click)="removeSet(entry)" [disabled]="entry.sets.length <= 1">
-              <ion-icon name="remove-outline"></ion-icon> Remove set
-            </button>
-            <input class="exercise-notes" [(ngModel)]="entry.notes" (ngModelChange)="markDirty()" placeholder="Notes for this exercise…" />
-          </div>
-        </div>
-
-        <textarea class="session-notes" rows="2" [(ngModel)]="sessionNotes" (ngModelChange)="markDirty()"
-                  placeholder="Session notes — how did it go overall?"></textarea>
+      <!-- Nothing loaded yet -->
+      <div class="empty-state" *ngIf="entries.length === 0">
+        <ion-icon name="clipboard-outline"></ion-icon>
+        <p *ngIf="!selectedProgramId">Pick a program and day to load its exercises, build a session from scratch below, or open a recent one.</p>
+        <p *ngIf="selectedProgramId && dayOptions.length === 0">This program has no training days with exercises yet.</p>
+        <p *ngIf="selectedProgramId && dayOptions.length > 0 && selectedDayIndex === null">Pick a training day above.</p>
       </div>
 
+      <!-- Stays with you down the page: where you are, and the save button -->
+      <div class="session-bar" *ngIf="entries.length > 0">
+        <div class="sb-who">
+          <div class="sb-name">
+            <span class="live-dot" *ngIf="liveId"></span>
+            {{ selectedClient ? selectedClient.fullName : 'Select a client to save' }}
+          </div>
+          <div class="sb-sub">{{ sessionLabel }}</div>
+        </div>
+        <div class="sb-rail" role="list">
+          <button type="button" class="seg" role="listitem" *ngFor="let e of entries; trackBy: trackKey"
+                  [style.--p]="exProgress(e)" [class.full]="isComplete(e)"
+                  [title]="e.exerciseName" [attr.aria-label]="'Jump to ' + e.exerciseName"
+                  (click)="jumpTo(e)"></button>
+        </div>
+        <div class="sb-stats">
+          <span><b>{{ stats.setsDone }}</b>/{{ stats.sets }} sets</span>
+          <span class="sb-vol" *ngIf="stats.volume"><b>{{ fmtVolume(stats.volume) }}</b> lb</span>
+          <span class="sb-time" *ngIf="elapsedLabel"><ion-icon name="time-outline"></ion-icon><b>{{ elapsedLabel }}</b></span>
+          <span class="gold" *ngIf="prCount"><ion-icon name="trophy"></ion-icon><b>{{ prCount }}</b> PR</span>
+        </div>
+        <ng-container *ngTemplateOutlet="saveBtn"></ng-container>
+      </div>
+
+      <!-- Exercises -->
+      <div class="log-sheets" *ngIf="entries.length > 0">
+        <article class="ex" *ngFor="let entry of entries; let i = index; trackBy: trackKey"
+                 [id]="'ex-' + entry.key"
+                 [class.collapsed]="isCollapsed(entry)"
+                 [class.complete]="isComplete(entry)">
+          <div class="ex-prog" [style.--p]="exProgress(entry)"></div>
+
+          <header class="ex-head">
+            <button type="button" class="ex-idx" (click)="toggleCollapse(entry)" [attr.aria-label]="isCollapsed(entry) ? 'Expand exercise' : 'Collapse exercise'">
+              <ion-icon name="checkmark" *ngIf="isComplete(entry)"></ion-icon>
+              <ng-container *ngIf="!isComplete(entry)">{{ i + 1 }}</ng-container>
+            </button>
+            <div class="ex-title">
+              <input class="ex-name" [(ngModel)]="entry.exerciseName" (ngModelChange)="markDirty()" (change)="onRename(entry)"
+                     placeholder="Exercise name" autocomplete="off" aria-label="Exercise name" />
+              <div class="ex-badges">
+                <span class="badge bench" *ngIf="benchmarkLabel(entry) as lift"
+                      [title]="lift + ' is an Omni Method benchmark — a PR here updates the athlete\'s level'">
+                  <ion-icon name="trending-up-outline"></ion-icon> {{ lift }} benchmark
+                </span>
+                <span class="badge pr" *ngIf="hasPr(entry)"><ion-icon name="trophy"></ion-icon> New PR</span>
+                <span class="ex-meta" *ngIf="isCollapsed(entry)">{{ exSummary(entry) }}</span>
+                <span class="ex-meta" *ngIf="!isCollapsed(entry) && hint(entry).prevDate">Previously completed {{ shortDate(hint(entry).prevDate) }}</span>
+              </div>
+            </div>
+            <div class="ex-count" [class.full]="isComplete(entry)">{{ exDone(entry) }}<small>/{{ entry.sets.length }}</small></div>
+            <button type="button" class="mini-btn" [class.on]="isToolsOpen(entry)" (click)="toggleTools(entry)" aria-label="Exercise options" title="Move, duplicate, remove">
+              <ion-icon name="ellipsis-horizontal"></ion-icon>
+            </button>
+            <button type="button" class="mini-btn" (click)="toggleCollapse(entry)" [attr.aria-label]="isCollapsed(entry) ? 'Expand' : 'Collapse'">
+              <ion-icon [name]="isCollapsed(entry) ? 'chevron-down' : 'chevron-up'"></ion-icon>
+            </button>
+          </header>
+
+          <div class="ex-tools" *ngIf="isToolsOpen(entry)">
+            <button type="button" class="tool" (click)="completeAll(entry)" [disabled]="isComplete(entry)"><ion-icon name="checkmark-circle"></ion-icon> Complete all sets</button>
+            <button type="button" class="tool" (click)="moveExercise(i, -1)" [disabled]="i === 0"><ion-icon name="arrow-up"></ion-icon> Move up</button>
+            <button type="button" class="tool" (click)="moveExercise(i, 1)" [disabled]="i === entries.length - 1"><ion-icon name="arrow-down"></ion-icon> Move down</button>
+            <button type="button" class="tool" (click)="duplicateExercise(i)"><ion-icon name="copy-outline"></ion-icon> Duplicate</button>
+            <button type="button" class="tool danger" (click)="removeExercise(i)"><ion-icon name="trash-outline"></ion-icon> Remove</button>
+          </div>
+
+          <ng-container *ngIf="!isCollapsed(entry)">
+
+            <!-- What the coach prescribed -->
+            <div class="rx" *ngIf="hint(entry).chips.length > 0">
+              <span class="rx-label">Prescribed</span>
+              <span class="rx-chip" *ngFor="let c of hint(entry).chips" [class.open]="!c.text">
+                <em>{{ c.type }}</em>{{ c.text || 'Self-selected' }}
+              </span>
+            </div>
+
+            <!-- Sets -->
+            <div class="grid-scroll">
+              <div class="set-grid" [style.min-width.px]="gridMin(entry)">
+                <div class="gr gh" [style.grid-template-columns]="gridCols(entry)">
+                  <div class="gc gc-set">Set</div>
+                  <div class="gc gc-prev" *ngIf="showPrev(entry)">Previous</div>
+                  <div class="gc gh-col" *ngFor="let col of entry.attrColumns" [title]="col">
+                    <span class="gh-label">{{ header(col) }}</span>
+                    <button type="button" class="gh-x" *ngIf="entry.attrColumns.length > 1"
+                            (click)="removeColumn(entry, col)" [attr.aria-label]="'Remove ' + col + ' column'">
+                      <ion-icon name="close-outline"></ion-icon>
+                    </button>
+                    <span class="gh-target" *ngIf="target(entry, col) as t">
+                      <ng-container *ngIf="t.text">{{ t.text }}</ng-container><ng-container *ngIf="t.note"> <i>{{ t.note }}</i></ng-container>
+                    </span>
+                  </div>
+                  <div class="gc gc-done"></div>
+                </div>
+
+                <div class="gr" *ngFor="let set of entry.sets; let si = index; trackBy: trackIdx"
+                     [style.grid-template-columns]="gridCols(entry)"
+                     [class.done]="set.done" [class.warm]="set.warmup" [class.pr]="si === prIdx(entry)">
+                  <div class="gc gc-set">
+                    <button type="button" class="set-no" (click)="toggleWarmup(set)"
+                            [attr.title]="set.warmup ? 'Warm-up set — tap to make it a working set' : 'Tap to mark as a warm-up set'">
+                      {{ setLabel(entry, si) }}
+                      <ion-icon class="pr-mark" name="trophy" *ngIf="si === prIdx(entry)"></ion-icon>
+                    </button>
+                  </div>
+
+                  <button type="button" class="gc gc-prev prev-btn" *ngIf="showPrev(entry)"
+                          (click)="usePrev(entry, si)" [disabled]="!prevText(entry, si)" title="Use last time's numbers">
+                    {{ prevText(entry, si) || '—' }}
+                  </button>
+
+                  <div class="gc cell" *ngFor="let col of entry.attrColumns" [ngSwitch]="kind(col)">
+                    <div class="tempo" *ngSwitchCase="'tempo'">
+                      <ng-container *ngFor="let n of [0, 1, 2, 3]; let last = last">
+                        <input class="tempo-box" maxlength="1" inputmode="numeric" autocomplete="off"
+                               [value]="tempoPart(set, col, n)" [placeholder]="tempoGhost(entry, col, n)"
+                               [attr.aria-label]="'Tempo ' + (n + 1) + ' set ' + (si + 1)"
+                               (focus)="selectAll($event)" (input)="onTempo($event, set, col, n)" />
+                        <i *ngIf="!last">–</i>
+                      </ng-container>
+                    </div>
+
+                    <div class="field" *ngSwitchCase="'duration'">
+                      <input class="cell-input" inputmode="numeric" autocomplete="off"
+                             [value]="set.values[col] || ''" [placeholder]="ghost(entry, col) || 'm:ss'"
+                             [attr.aria-label]="col + ' set ' + (si + 1)"
+                             (focus)="selectAll($event)" (input)="onDuration($event, set, col)" />
+                    </div>
+
+                    <div class="field" *ngSwitchDefault>
+                      <input class="cell-input" [class.has-unit]="!!unit(col)" [attr.inputmode]="mode(col)" autocomplete="off"
+                             [(ngModel)]="set.values[col]" (ngModelChange)="onValue(set, col)"
+                             [placeholder]="ghost(entry, col)" [attr.aria-label]="col + ' set ' + (si + 1)"
+                             (focus)="selectAll($event)" />
+                      <span class="unit" *ngIf="unit(col)">{{ unit(col) }}</span>
+                    </div>
+                  </div>
+
+                  <div class="gc gc-done">
+                    <button type="button" class="done-btn" [class.checked]="set.done" (click)="toggleDone(entry, set)"
+                            [attr.aria-pressed]="set.done" [attr.aria-label]="'Set ' + (si + 1) + ' done'">
+                      <ion-icon name="checkmark"></ion-icon>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="ex-foot">
+              <button type="button" class="mini-action" (click)="addSet(entry)"><ion-icon name="add"></ion-icon> Set</button>
+              <button type="button" class="mini-action" (click)="addSet(entry, true)" *ngIf="entry.sets.length > 0" title="Add a set with the last one's numbers">
+                <ion-icon name="copy-outline"></ion-icon> Copy last
+              </button>
+              <button type="button" class="mini-action" (click)="removeSet(entry)" [disabled]="entry.sets.length <= 1">
+                <ion-icon name="remove-outline"></ion-icon> Set
+              </button>
+              <button type="button" class="mini-action" (click)="useLastTime(entry)" *ngIf="hasPrev(entry)" title="Fill the empty fields from last time">
+                <ion-icon name="reader-outline"></ion-icon> Previous
+              </button>
+              <button type="button" class="mini-action accent" [class.on]="attrPanelKey === entry.key" (click)="toggleAttrPanel(entry)">
+                <ion-icon name="add-circle-outline"></ion-icon> Attribute
+              </button>
+              <input class="exercise-notes" [(ngModel)]="entry.notes" (ngModelChange)="markDirty()" placeholder="Notes for this exercise…" aria-label="Exercise notes" />
+            </div>
+
+            <div class="attr-panel" *ngIf="attrPanelKey === entry.key">
+              <div class="attr-search">
+                <ion-icon name="search-outline"></ion-icon>
+                <input [(ngModel)]="attrSearch" placeholder="Search attributes — Tempo, Watts, Distance, HR" aria-label="Search attributes" />
+              </div>
+              <div class="attr-options">
+                <button type="button" class="attr-option" *ngFor="let a of attrOptions(entry)"
+                        [class.locked]="isLocked(entry, a)" [title]="lockWhy(entry, a)" (click)="addColumn(entry, a)">
+                  {{ a }}
+                  <ion-icon name="lock-closed" *ngIf="isLocked(entry, a)"></ion-icon>
+                </button>
+                <div class="no-results" *ngIf="attrOptions(entry).length === 0">No matches</div>
+              </div>
+            </div>
+
+          </ng-container>
+        </article>
+      </div>
+
+      <!-- Add an exercise -->
+      <section class="add-ex">
+        <p class="add-needs-client" *ngIf="!selectedClientId">Select a client to add exercises to their workout.</p>
+        <button type="button" class="add-exercise-btn" *ngIf="!addOpen && selectedClientId" (click)="openAdd()">
+          <ion-icon name="add"></ion-icon> Add exercise
+        </button>
+        <div class="add-card" *ngIf="addOpen && selectedClientId">
+          <div class="add-head">
+            <strong>Add an exercise</strong>
+            <button type="button" class="mini-btn" (click)="addOpen = false" aria-label="Close"><ion-icon name="close-outline"></ion-icon></button>
+          </div>
+          <input id="new-ex-name" class="fld-input name" list="exercise-names" [(ngModel)]="newName" autocomplete="off"
+                 placeholder="Exercise name — e.g. Back Squat" (keydown.enter)="addExercise()" />
+          <datalist id="exercise-names">
+            <option *ngFor="let n of exerciseNames" [value]="n"></option>
+          </datalist>
+          <p class="plan-note" *ngIf="newPlan.fromHistory">
+            Logged before — starts with {{ newPlan.columns.join(' · ') }}, the way it was last time.
+          </p>
+          <div class="preset-grid" [class.dim]="newPlan.fromHistory">
+            <button type="button" class="preset" *ngFor="let p of presets" [class.sel]="p.id === newPreset && !newPlan.fromHistory"
+                    (click)="newPreset = p.id">
+              <strong>{{ p.label }}</strong><small>{{ p.hint }}</small>
+            </button>
+          </div>
+          <div class="add-actions">
+            <button type="button" class="ghost-btn" (click)="addOpen = false">Cancel</button>
+            <button type="button" class="primary-btn" (click)="addExercise()"><ion-icon name="add"></ion-icon> Add to session</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Wrap-up -->
+      <section class="wrap" *ngIf="entries.length > 0">
+        <div class="wrap-tiles">
+          <div class="tile"><span>Sets</span><b>{{ stats.setsDone }}<small>/{{ stats.sets }}</small></b></div>
+          <div class="tile"><span>Exercises</span><b>{{ stats.exercisesDone }}<small>/{{ entries.length }}</small></b></div>
+          <div class="tile"><span>Volume</span><b>{{ fmtVolume(stats.volume) }}<small> lb</small></b></div>
+          <div class="tile" *ngIf="stats.seconds"><span>Work time</span><b>{{ fmtDur(stats.seconds) }}</b></div>
+          <div class="tile" *ngIf="elapsedLabel"><span>Session</span><b>{{ elapsedLabel }}</b></div>
+          <div class="tile gold" *ngIf="prCount"><span>New PRs</span><b>{{ prCount }}</b></div>
+        </div>
+        <textarea class="session-notes" rows="2" [(ngModel)]="sessionNotes" (ngModelChange)="markDirty()"
+                  placeholder="Session notes"></textarea>
+        <div class="wrap-actions">
+          <ng-container *ngTemplateOutlet="saveBtn"></ng-container>
+        </div>
+      </section>
+
       <!-- History -->
-      <div class="history" *ngIf="history.length > 0">
+      <section class="history" *ngIf="history.length > 0">
         <h2><ion-icon name="reader-outline"></ion-icon> {{ selectedClient ? selectedClient.fullName + "'s" : 'Recent' }} Sessions</h2>
         <div class="history-row" *ngFor="let log of history"
              [class.active]="log.id === editingLogId"
@@ -149,9 +330,23 @@
             {{ historyLabel(log) }}
           </span>
           <span class="h-program">{{ log.programName }}</span>
-          <span class="h-count">{{ log.exercises.length }} ex</span>
+          <span class="h-count" *ngIf="summary(log) as s">
+            {{ s.exercises }} ex · {{ s.sets }} sets<ng-container *ngIf="s.volume"> · {{ fmtVolume(s.volume) }} lb</ng-container>
+          </span>
+          <button type="button" class="h-delete" aria-label="Delete workout" title="Delete workout" (click)="deleteLog(log, $event)">
+            <ion-icon name="trash-outline"></ion-icon>
+          </button>
         </div>
-      </div>
+      </section>
     </ng-container>
   </div>
+
+  <ng-template #saveBtn>
+    <button type="button" class="primary-btn" *ngIf="liveId" (click)="finishLive()" [disabled]="saving">
+      <ion-icon name="checkmark-circle"></ion-icon> {{ saving ? 'Finishing…' : 'Finish Workout' }}
+    </button>
+    <button type="button" class="primary-btn" *ngIf="!liveId" (click)="save()" [disabled]="!canSave || saving">
+      <ion-icon name="save-outline"></ion-icon> {{ saving ? 'Saving…' : (editingLogId ? 'Update Log' : 'Save Log') }}
+    </button>
+  </ng-template>
 </ion-content>
