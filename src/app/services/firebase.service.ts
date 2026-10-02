@@ -665,9 +665,19 @@ export interface ProgramAttribute {
   val: string;
 }
 
+export interface ProgramSetPlan {
+  reps: number;
+  load?: number;
+}
+
 export interface ProgramExercise {
   name: string;
   attributes: ProgramAttribute[];
+  // Optional. Each set's own target, for prescriptions where the sets differ
+  // (otherwise every set takes the Reps/Load attributes).
+  setPlan?: ProgramSetPlan[];
+  // Optional. Plain-language notes shown with the prescription, such as rest times.
+  instructions?: string;
 }
 
 export interface ProgramDay {
