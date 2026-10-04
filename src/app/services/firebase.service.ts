@@ -700,8 +700,11 @@ export interface Program {
   cycles: number;          // weeks when isStandardWeek
   daysPerCycle: number;
   isStandardWeek: boolean;
-  // Optional. A generated one-week program that repeats until it is replaced.
+  // Optional. A generated program that repeats until it is replaced.
   loops?: boolean;
+  // Optional. Built by the athlete app from their assessment and schedule, and what it was built from.
+  generated?: boolean;
+  generatedFrom?: { assessmentAt: string | null; intakeAt: string; version: number };
   durationPerDayMinutes?: number;
   equipment?: string[];
   schedule: ProgramDay[];  // length = cycles * daysPerCycle
