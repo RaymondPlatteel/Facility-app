@@ -24,10 +24,14 @@ export const ASSESSMENT_LIFTS: AssessmentLift[] = [
   { key: 'pullup1rm', label: 'Pull-up', bodyweightBased: true, includes: ['pull-up', 'pullup', 'pull up', 'chin-up', 'chinup', 'chin up'], excludes: [] }
 ];
 
+const NOT_A_LIFT = ['adduction', 'abduction', 'jump', 'hop', 'sprint', 'rotation', 'raise', 'bridge'];
+
 // Returns the matching benchmark lift for an exercise name, or null.
 export function matchAssessmentLift(name: string): AssessmentLift | null {
   const n = (name || '').trim().toLowerCase();
   if (!n) return null;
+  // movements that merely share a word with a lift ("Bench Adduction", "Bench Jump") are never that lift
+  if (NOT_A_LIFT.some(x => n.includes(x))) return null;
   for (const lift of ASSESSMENT_LIFTS) {
     if (lift.excludes.some(x => n.includes(x))) continue;
     if (lift.includes.some(inc => n.includes(inc))) return lift;
