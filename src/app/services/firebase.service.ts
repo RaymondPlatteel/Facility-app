@@ -700,6 +700,8 @@ export interface Program {
   cycles: number;          // weeks when isStandardWeek
   daysPerCycle: number;
   isStandardWeek: boolean;
+  // Optional. A generated one-week program that repeats until it is replaced.
+  loops?: boolean;
   durationPerDayMinutes?: number;
   equipment?: string[];
   schedule: ProgramDay[];  // length = cycles * daysPerCycle
