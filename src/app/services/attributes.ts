@@ -59,7 +59,7 @@ const META: { [type: string]: Partial<AttrMeta> } = {
   Load: { unit: 'lb', width: 96 },
   RIR: { mode: 'numeric', width: 68 },
   RPE: { width: 68 },
-  Duration: { kind: 'duration', header: 'Time', width: 96 },
+  Duration: { kind: 'duration', header: 'Duration', width: 96 },
   Tempo: { kind: 'tempo', width: 156 },
   Feet: { unit: 'ft', width: 92 },
   Yards: { unit: 'yd', width: 92 },
@@ -68,15 +68,15 @@ const META: { [type: string]: Partial<AttrMeta> } = {
   Kilometers: { header: 'Km', unit: 'km', width: 92 },
   mph: { unit: 'mph', width: 92 },
   kph: { unit: 'kph', width: 92 },
-  'min/mile': { header: 'Pace', unit: '/mi', width: 92 },
-  'min/km': { header: 'Pace', unit: '/km', width: 92 },
+  'min/mile': { header: 'Avg Pace', unit: '/mi', width: 92 },
+  'min/km': { header: 'Avg Pace', unit: '/km', width: 92 },
   Watts: { unit: 'W', width: 88 },
   SPM: { unit: 'spm', mode: 'numeric', width: 92 },
   RPM: { unit: 'rpm', mode: 'numeric', width: 92 },
   Incline: { unit: '%', width: 84 },
   'Drag Factor': { header: 'Drag', mode: 'numeric', width: 76 },
   Gear: { mode: 'numeric', width: 68 },
-  HR: { unit: 'bpm', mode: 'numeric', width: 92 }
+  HR: { header: 'Avg HR', unit: 'bpm', mode: 'numeric', width: 92 }
 };
 
 export function attrMeta(type: string): AttrMeta {
