@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit, onSnapshot, getCountFromServer } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit, onSnapshot, getCountFromServer, arrayUnion } from 'firebase/firestore';
 import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationPlan, usesStoredSessions } from './schedule.util';
 import type { ScheduleEntry } from './schedule.util';
 import { SYNC_CLIENT_ID, ensureExerciseKeys, isLiveWorkout, isStaleWorkout, staleCloseFields, newExerciseKey, normalizeState, sheetToSync, syncToSheet, WorkoutSyncState } from './workout-sync';
@@ -665,6 +665,12 @@ export interface ProgramAttribute {
   val: string;
 }
 
+export interface ProgramSupportMessage {
+  from: 'athlete' | 'coach';
+  text: string;
+  at: string;
+}
+
 export interface ProgramSetPlan {
   reps: number;
   load?: number;
@@ -704,6 +710,14 @@ export interface Program {
   loops?: boolean;
   // Optional. Built by the athlete app from their assessment and schedule, and what it was built from.
   generated?: boolean;
+  // Optional. A generated program is manually reviewed by a coach: it starts pending and the athlete can train
+  // meanwhile. The coach app approves it and may leave a note.
+  reviewStatus?: 'pending' | 'approved';
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+  // Optional. Questions and problems from the athlete, and the coach's replies.
+  support?: ProgramSupportMessage[];
   // Optional. The day the athlete actually got the program (startDate is the Monday that anchors its weeks).
   startedOn?: string;
   generatedFrom?: { assessmentAt: string | null; intakeAt: string; version: number };
@@ -2416,6 +2430,16 @@ export class FirebaseService {
     }
     const ref = await addDoc(this.programsCollection(), payload);
     return ref.id;
+  }
+
+  // Review edits touch only their own fields, so a message the athlete sends meanwhile is not overwritten.
+  async saveProgramReview(id: string, fields: Partial<Program>): Promise<void> {
+    await updateDoc(doc(this.db, 'programs', id), this.cleanForFirestore({ ...fields, updatedAt: new Date().toISOString() }));
+  }
+
+  async addProgramSupportReply(id: string, text: string): Promise<void> {
+    const message: ProgramSupportMessage = { from: 'coach', text: text.trim(), at: new Date().toISOString() };
+    await updateDoc(doc(this.db, 'programs', id), { support: arrayUnion(message) });
   }
 
   async deleteProgram(id: string): Promise<void> {

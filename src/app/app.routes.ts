@@ -137,6 +137,12 @@ export const routes: Routes = [
     data: { title: 'Programs' }
   },
   {
+    path: 'program-review/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./program-review/program-review.page').then( m => m.ProgramReviewPage),
+    data: { title: 'Program Review' }
+  },
+  {
     path: 'program-creator',
     canActivate: [authGuard],
     loadComponent: () => import('./program-creator/program-creator.page').then( m => m.ProgramCreatorPage),

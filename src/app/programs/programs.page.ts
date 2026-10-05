@@ -64,12 +64,28 @@ export class ProgramsPage implements OnInit, OnDestroy, ViewWillEnter {
     this.loading = false;
   }
 
+  // Generated programs waiting on a first review, or with a question from the athlete not yet answered.
+  get toReview(): Program[] {
+    return this.programs.filter(p => p.generated && (p.reviewStatus !== 'approved' || this.needsReply(p)));
+  }
+
+  needsReply(p: Program): boolean {
+    const last = (p.support || [])[(p.support || []).length - 1];
+    return !!last && last.from === 'athlete';
+  }
+
+  reviewReason(p: Program): string {
+    if (p.reviewStatus !== 'approved') return this.needsReply(p) ? 'New program · question from the athlete' : 'New program';
+    return 'Question from the athlete';
+  }
+
   newProgram() {
     this.router.navigateByUrl('/program-creator');
   }
 
+  // Generated programs are reviewed in the review page; the creator would drop their per-set targets.
   editProgram(p: Program) {
-    this.router.navigate(['/program-creator', p.id]);
+    this.router.navigate([p.generated ? '/program-review' : '/program-creator', p.id]);
   }
 
   logSession(p: Program) {

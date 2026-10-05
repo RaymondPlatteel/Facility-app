@@ -22,6 +22,16 @@
 
     <div *ngIf="loading" class="state-msg">Loading programs…</div>
 
+    <!-- Programs the coach still has to review -->
+    <div class="review-queue" *ngIf="!loading && toReview.length > 0">
+      <h2>To review <span class="badge">{{ toReview.length }}</span></h2>
+      <div class="rq-row" *ngFor="let p of toReview" (click)="editProgram(p)">
+        <span class="rq-name">{{ (p.assignedClientNames || []).join(', ') || 'Athlete' }}</span>
+        <span class="rq-reason">{{ reviewReason(p) }}</span>
+        <span class="rq-go">Review</span>
+      </div>
+    </div>
+
     <!-- Empty state -->
     <div *ngIf="!loading && programs.length === 0" class="empty-programs">
       <ion-icon name="barbell-outline"></ion-icon>
@@ -36,7 +46,9 @@
     <div class="program-grid" *ngIf="!loading && programs.length > 0">
       <div class="program-card" *ngFor="let p of programs">
         <div class="pc-top" (click)="editProgram(p)">
-          <div class="pc-name">{{ p.name }}</div>
+          <div class="pc-name">{{ p.name }}
+            <span class="pc-tag" *ngIf="p.generated" [class.ok]="p.reviewStatus === 'approved'">{{ p.reviewStatus === 'approved' ? 'Approved' : 'Pending review' }}</span>
+          </div>
           <div class="pc-desc" *ngIf="p.goals || p.description">{{ p.goals || p.description }}</div>
           <div class="pc-stats">
             <span><ion-icon name="calendar-outline"></ion-icon> {{ p.cycles }} {{ cycleLabel(p) }}{{ p.cycles === 1 ? '' : 's' }}</span>

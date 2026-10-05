@@ -1,0 +1,83 @@
+<ion-content [fullscreen]="true" class="content-no-header">
+  <div class="pr-page">
+    <div class="pr-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back"><ion-icon name="arrow-back"></ion-icon></button>
+      <div class="pr-title">
+        <h1>{{ athlete }}</h1>
+        <p *ngIf="program">
+          <span class="chip" [class.ok]="approved">{{ approved ? 'Approved' : 'Pending review' }}</span>
+          <span *ngIf="approved && program.reviewedBy"> by {{ program.reviewedBy }}</span>
+        </p>
+      </div>
+      <div class="pr-actions" *ngIf="program">
+        <button class="ghost-btn" [disabled]="!dirty || saving" (click)="save(false)">Save changes</button>
+        <button class="primary-btn" [disabled]="saving" (click)="save(true)">
+          <ion-icon name="checkmark-circle"></ion-icon> {{ approved ? 'Save and re-approve' : 'Approve' }}
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="loading" class="state-msg">Loading program…</div>
+    <div *ngIf="!loading && !program" class="state-msg">This program could not be found.</div>
+
+    <ng-container *ngIf="program">
+      <div class="pr-controls">
+        <div class="tabs">
+          <button *ngFor="let w of weeks" [class.on]="week === w" (click)="week = w">Week {{ w + 1 }}</button>
+        </div>
+        <label class="apply"><input type="checkbox" [(ngModel)]="allWeeks"> Apply changes to every week</label>
+      </div>
+
+      <div class="week-grid">
+        <div class="day" *ngFor="let name of weekdays; let d = index" [class.rest]="!day(week, d).exercises.length">
+          <div class="day-head">
+            <b>{{ name }}</b>
+            <select (change)="swapDays(d, $any($event.target).value); $any($event.target).value = ''">
+              <option value="">Swap day with…</option>
+              <ng-container *ngFor="let n of weekdays; let o = index"><option *ngIf="o !== d" [value]="o">{{ n }}</option></ng-container>
+            </select>
+          </div>
+
+          <div class="ex" *ngFor="let e of day(week, d).exercises; let i = index">
+            <div class="ex-main">
+              <span class="ex-name">{{ e.name }}</span>
+              <span class="ex-sum">{{ summary(e) }}</span>
+              <span class="ex-note" *ngIf="e.instructions">{{ e.instructions }}</span>
+            </div>
+            <div class="ex-tools">
+              <button (click)="move(d, i, -1)" [disabled]="i === 0" aria-label="Move up"><ion-icon name="arrow-up"></ion-icon></button>
+              <button (click)="move(d, i, 1)" [disabled]="i === day(week, d).exercises.length - 1" aria-label="Move down"><ion-icon name="arrow-down"></ion-icon></button>
+              <select (change)="moveToDay(d, i, $any($event.target).value); $any($event.target).value = ''">
+                <option value="">Move to…</option>
+                <ng-container *ngFor="let n of weekdays; let o = index"><option *ngIf="o !== d" [value]="o">{{ n }}</option></ng-container>
+              </select>
+              <button class="del" (click)="remove(d, i)" aria-label="Remove"><ion-icon name="close-outline"></ion-icon></button>
+            </div>
+          </div>
+          <p class="rest-label" *ngIf="!day(week, d).exercises.length">Rest</p>
+
+          <textarea rows="2" placeholder="Note for this day" [ngModel]="day(week, d).notes" (ngModelChange)="setNote(d, $event)"></textarea>
+        </div>
+      </div>
+
+      <div class="pr-card">
+        <h2>Review</h2>
+        <label>Your name <input type="text" [(ngModel)]="reviewer" placeholder="Shown to the athlete"></label>
+        <label>Note to the athlete
+          <textarea rows="3" [(ngModel)]="program.reviewNote" (ngModelChange)="dirty = true" placeholder="Optional"></textarea>
+        </label>
+      </div>
+
+      <div class="pr-card">
+        <h2>Program support</h2>
+        <p class="muted" *ngIf="!(program.support || []).length">No messages from the athlete.</p>
+        <div class="msg" *ngFor="let m of program.support || []" [class.coach]="m.from === 'coach'">
+          <span>{{ m.from === 'coach' ? 'You' : 'Athlete' }} · {{ when(m.at) }}</span>
+          <p>{{ m.text }}</p>
+        </div>
+        <textarea rows="3" [(ngModel)]="reply" placeholder="Reply to the athlete"></textarea>
+        <button class="primary-btn" [disabled]="!reply.trim()" (click)="sendReply()">Send reply</button>
+      </div>
+    </ng-container>
+  </div>
+</ion-content>
