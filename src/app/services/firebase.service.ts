@@ -704,6 +704,8 @@ export interface Program {
   loops?: boolean;
   // Optional. Built by the athlete app from their assessment and schedule, and what it was built from.
   generated?: boolean;
+  // Optional. The day the athlete actually got the program (startDate is the Monday that anchors its weeks).
+  startedOn?: string;
   generatedFrom?: { assessmentAt: string | null; intakeAt: string; version: number };
   durationPerDayMinutes?: number;
   equipment?: string[];
