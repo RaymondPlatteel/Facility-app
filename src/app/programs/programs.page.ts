@@ -66,7 +66,7 @@ export class ProgramsPage implements OnInit, OnDestroy, ViewWillEnter {
 
   // Generated programs waiting on a first review, or with a question from the athlete not yet answered.
   get toReview(): Program[] {
-    return this.programs.filter(p => p.generated && (p.reviewStatus !== 'approved' || this.needsReply(p)));
+    return this.programs.filter(p => p.generated && (p.reviewStatus !== 'approved' || !!p.proposal || this.needsReply(p)));
   }
 
   needsReply(p: Program): boolean {
@@ -75,8 +75,11 @@ export class ProgramsPage implements OnInit, OnDestroy, ViewWillEnter {
   }
 
   reviewReason(p: Program): string {
-    if (p.reviewStatus !== 'approved') return this.needsReply(p) ? 'New program · question from the athlete' : 'New program';
-    return 'Question from the athlete';
+    const parts: string[] = [];
+    if (p.reviewStatus !== 'approved') parts.push('New program');
+    if (p.proposal) parts.push('Program changes');
+    if (this.needsReply(p)) parts.push('Question from the athlete');
+    return parts.join(' · ');
   }
 
   newProgram() {

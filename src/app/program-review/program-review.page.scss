@@ -31,3 +31,12 @@ textarea { width: 100%; box-sizing: border-box; resize: vertical; }
   label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #88a6bf; }
   .muted { margin: 0; color: #88a6bf; font-size: 13px; }
   .msg { padding: 8px 10px; border: 1px solid #0c2230; border-radius: 8px; span { font-size: 11px; color: #88a6bf; } p { margin: 3px 0 0; white-space: pre-wrap; } &.coach { border-color: rgba(0, 212, 255, 0.4); } } }
+
+.pr-proposal { border: 1px solid rgba(245, 185, 66, 0.5); border-radius: 12px; background: rgba(245, 185, 66, 0.05); padding: 14px; margin-bottom: 18px;
+  .pp-head { display: flex; gap: 14px; justify-content: space-between; flex-wrap: wrap; margin-bottom: 10px; h2 { margin: 0 0 4px; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: #f5b942; } p { margin: 0; color: #88a6bf; font-size: 13px; } }
+  .pp-actions { display: flex; gap: 8px; align-items: flex-start; }
+  .muted { margin: 4px 0 0; color: #88a6bf; font-size: 13px; } }
+.chg { border: 1px solid #133748; border-radius: 8px; background: #070b12; padding: 10px; margin-top: 8px; }
+.chg-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.chg-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; span { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #88a6bf; } p { margin: 3px 0 0; font-size: 13px; i { font-style: normal; color: #00d4ff; font-size: 12px; } } .muted { color: #88a6bf; } }
+.ghost-btn.small { padding: 5px 12px; font-size: 12px; }

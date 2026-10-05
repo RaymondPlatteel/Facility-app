@@ -6,6 +6,7 @@ import { IonContent, IonIcon, AlertController, ToastController } from '@ionic/an
 import { addIcons } from 'ionicons';
 import { arrowBack, arrowUp, arrowDown, closeOutline, checkmarkCircle } from 'ionicons/icons';
 import { FirebaseService, Program, ProgramDay, ProgramExercise } from '../services/firebase.service';
+import { ProgramReviewCountService } from '../services/program-review-count.service';
 
 // A coach's review of an athlete's generated program: see every week at once, move exercises, swap days,
 // write notes, answer the athlete's questions and approve. Edits go straight to the program document.
@@ -31,7 +32,8 @@ export class ProgramReviewPage implements OnInit {
     private router: Router,
     private firebase: FirebaseService,
     private alertController: AlertController,
-    private toastController: ToastController
+    private toastController: ToastController,
+    private reviewCount: ProgramReviewCountService
   ) {
     addIcons({ arrowBack, arrowUp, arrowDown, closeOutline, checkmarkCircle });
   }
@@ -71,7 +73,62 @@ export class ProgramReviewPage implements OnInit {
     const rir = get('RIR')?.val; if (rir) parts.push(`${rir} RIR`);
     const dur = get('Duration')?.val; if (dur) parts.push(`${Math.round(Number(dur) / 60)} min`);
     const hr = get('HR')?.val; if (hr) parts.push(`HR ${hr}`);
+    const cols = attrs.map(a => a.type).filter(x => x !== 'Sets');
+    if (cols.length) parts.push(`Columns: ${cols.join(', ')}`);
     return parts.join(' · ');
+  }
+
+  // What a coach would notice about an exercise: if this matches, the exercise reads the same.
+  private sig(list: ProgramExercise[]): string {
+    return list.map(e => `${e.name}|${this.summary(e)}|${e.instructions || ''}|${JSON.stringify(e.setPlan || [])}`).join('\n');
+  }
+
+  // ---- a proposed update from the generator, after the athlete's results or schedule changed ----
+  get proposal() { return this.program?.proposal ?? null; }
+
+  // The days where the proposed version differs from the current program.
+  get changes(): Array<{ week: number; day: number; current: ProgramExercise[]; proposed: ProgramExercise[] }> {
+    const p = this.proposal;
+    if (!p || !this.program) return [];
+    const out: Array<{ week: number; day: number; current: ProgramExercise[]; proposed: ProgramExercise[] }> = [];
+    for (let w = 0; w < this.weeks.length; w++) {
+      for (let d = 0; d < 7; d++) {
+        const cur = this.day(w, d)?.exercises ?? [];
+        const prop = p.schedule[w * 7 + d]?.exercises ?? [];
+        if (this.sig(cur) !== this.sig(prop)) out.push({ week: w, day: d, current: cur, proposed: prop });
+      }
+    }
+    return out;
+  }
+
+  useProposedDay(w: number, d: number) {
+    const prop = this.proposal?.schedule[w * 7 + d];
+    if (!prop) return;
+    const day = this.day(w, d);
+    day.exercises = JSON.parse(JSON.stringify(prop.exercises));
+    day.isRestDay = prop.isRestDay;
+    this.touch();
+  }
+
+  useProposedAll() {
+    for (const c of this.changes) this.useProposedDay(c.week, c.day);
+  }
+
+  // Done with the proposal: save the schedule as it now stands and clear the proposal.
+  async finishProposal() {
+    if (!this.program?.id) return;
+    this.saving = true;
+    try {
+      await this.firebase.saveProgramReview(this.program.id, { schedule: this.program.schedule }, true);
+      this.program.proposal = undefined;
+      this.dirty = false;
+      this.reviewCount.refresh();
+      await this.toast('Update reviewed');
+    } catch (err) {
+      console.error('Program review: could not finish the update', err);
+      await this.toast('Could not save', 'danger');
+    }
+    this.saving = false;
   }
 
   // ---- edits (each applies to this week or to every week) ----
@@ -158,6 +215,7 @@ export class ProgramReviewPage implements OnInit {
       await this.firebase.saveProgramReview(this.program.id, fields);
       Object.assign(this.program, fields);
       this.dirty = false;
+      this.reviewCount.refresh();
       await this.toast(approve ? 'Program approved' : 'Changes saved');
     } catch (err) {
       console.error('Program review: save failed', err);
@@ -173,6 +231,7 @@ export class ProgramReviewPage implements OnInit {
       await this.firebase.addProgramSupportReply(this.program.id, text);
       this.program.support = [...(this.program.support || []), { from: 'coach', text, at: new Date().toISOString() }];
       this.reply = '';
+      this.reviewCount.refresh();
     } catch (err) {
       console.error('Program review: reply failed', err);
       await this.toast('Could not send the reply', 'danger');

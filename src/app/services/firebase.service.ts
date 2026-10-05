@@ -716,6 +716,11 @@ export interface Program {
   reviewedBy?: string;
   reviewedAt?: string;
   reviewNote?: string;
+  // Optional. A newer version of a generated program, waiting for a coach to review it. The athlete keeps their
+  // current program, with any coach edits, until the coach applies it or keeps the current one.
+  proposal?: { schedule: ProgramDay[]; createdAt: string; reason: string };
+  // Optional. A fingerprint of what the generator last wrote, to tell whether the program would change.
+  baselineHash?: string;
   // Optional. Questions and problems from the athlete, and the coach's replies.
   support?: ProgramSupportMessage[];
   // Optional. The day the athlete actually got the program (startDate is the Monday that anchors its weeks).
@@ -2433,8 +2438,10 @@ export class FirebaseService {
   }
 
   // Review edits touch only their own fields, so a message the athlete sends meanwhile is not overwritten.
-  async saveProgramReview(id: string, fields: Partial<Program>): Promise<void> {
-    await updateDoc(doc(this.db, 'programs', id), this.cleanForFirestore({ ...fields, updatedAt: new Date().toISOString() }));
+  async saveProgramReview(id: string, fields: Partial<Program>, clearProposal = false): Promise<void> {
+    const payload: Record<string, any> = this.cleanForFirestore({ ...fields, updatedAt: new Date().toISOString() });
+    if (clearProposal) payload['proposal'] = deleteField();
+    await updateDoc(doc(this.db, 'programs', id), payload);
   }
 
   async addProgramSupportReply(id: string, text: string): Promise<void> {

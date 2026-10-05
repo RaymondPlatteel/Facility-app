@@ -21,6 +21,30 @@
     <div *ngIf="!loading && !program" class="state-msg">This program could not be found.</div>
 
     <ng-container *ngIf="program">
+      <div class="pr-proposal" *ngIf="proposal">
+        <div class="pp-head">
+          <div>
+            <h2>Program changes to review</h2>
+            <p>The athlete's results or schedule changed. They keep the program below, with your edits, until you decide.</p>
+          </div>
+          <div class="pp-actions">
+            <button class="ghost-btn" [disabled]="saving" (click)="finishProposal()">{{ changes.length ? 'Keep current program' : 'Done' }}</button>
+            <button class="primary-btn" *ngIf="changes.length" [disabled]="saving" (click)="useProposedAll()">Use all changes</button>
+          </div>
+        </div>
+        <p class="muted" *ngIf="!changes.length">Every proposed day now matches the program. Press Done to finish.</p>
+        <div class="chg" *ngFor="let c of changes">
+          <div class="chg-head">
+            <b>Week {{ c.week + 1 }} · {{ weekdays[c.day] }}</b>
+            <button class="ghost-btn small" (click)="useProposedDay(c.week, c.day)">Use proposed</button>
+          </div>
+          <div class="chg-cols">
+            <div><span>Current</span><p *ngFor="let e of c.current">{{ e.name }} <i>{{ summary(e) }}</i></p><p *ngIf="!c.current.length" class="muted">Rest</p></div>
+            <div><span>Proposed</span><p *ngFor="let e of c.proposed">{{ e.name }} <i>{{ summary(e) }}</i></p><p *ngIf="!c.proposed.length" class="muted">Rest</p></div>
+          </div>
+        </div>
+      </div>
+
       <div class="pr-controls">
         <div class="tabs">
           <button *ngFor="let w of weeks" [class.on]="week === w" (click)="week = w">Week {{ w + 1 }}</button>

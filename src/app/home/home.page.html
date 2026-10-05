@@ -167,6 +167,7 @@
       <a class="quick-btn" [routerLink]="['/programs']">
         <ion-icon name="barbell-outline"></ion-icon>
         <span>Programs</span>
+        <span class="quick-badge" *ngIf="programReviews.count > 0">{{ programReviews.count }}</span>
       </a>
       <a class="quick-btn" [routerLink]="['/packages']">
         <ion-icon name="cube-outline"></ion-icon>

@@ -71,9 +71,10 @@
         <ion-icon name="trophy-outline"></ion-icon>
         <span>Events</span>
       </a>
-      <a routerLink="/programs" routerLinkActive="active" class="sidebar-link">
+      <a routerLink="/programs" routerLinkActive="active" class="sidebar-link sidebar-link--pending">
         <ion-icon name="fitness-outline"></ion-icon>
         <span>Programs</span>
+        <span class="nav-badge" *ngIf="programReviews.count > 0">{{ programReviews.count }}</span>
       </a>
       <a routerLink="/packages" routerLinkActive="active" class="sidebar-link">
         <ion-icon name="cube-outline"></ion-icon>

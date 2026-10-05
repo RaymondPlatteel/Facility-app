@@ -1,3 +1,4 @@
+import { ProgramReviewCountService } from '../services/program-review-count.service';
 import { Component, OnInit } from '@angular/core';
 import { IonContent, IonIcon } from '@ionic/angular/standalone';
 import { RouterModule, Router } from '@angular/router';
@@ -78,7 +79,7 @@ export class HomePage implements OnInit {
   scoreUpdates: ScoreUpdate[] = [];
   loadingScores = true;
 
-  constructor(private authService: AuthService, private firebase: FirebaseService, private router: Router) {
+  constructor(private authService: AuthService, private firebase: FirebaseService, private router: Router, public programReviews: ProgramReviewCountService) {
     addIcons({
       calendarOutline,
       peopleOutline,

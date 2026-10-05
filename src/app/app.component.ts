@@ -3,6 +3,7 @@ import { IonApp, IonRouterOutlet, IonIcon, IonModal } from '@ionic/angular/stand
 import { RouterModule, Router, ActivatedRoute, NavigationEnd } from '@angular/router';
 import { CommonModule, Location } from '@angular/common';
 import { AuthService, Trainer } from './services/auth.service';
+import { ProgramReviewCountService } from './services/program-review-count.service';
 import { FirebaseService } from './services/firebase.service';
 import { CalendarSyncService } from './services/calendar-sync.service';
 import { TopBarActionService, TopBarAction } from './services/top-bar-action.service';
@@ -95,7 +96,8 @@ export class AppComponent implements OnInit, OnDestroy {
     private activatedRoute: ActivatedRoute,
     private location: Location,
     private topBarActionService: TopBarActionService,
-    private calendarSync: CalendarSyncService
+    private calendarSync: CalendarSyncService,
+    public programReviews: ProgramReviewCountService
   ) {
     addIcons({
       lockClosedOutline,
@@ -198,6 +200,7 @@ export class AppComponent implements OnInit, OnDestroy {
   // link requests, and swap requests — so the sidebar badge matches what's
   // actually waiting instead of just one of the three queues.
   private async refreshPendingReviewCount() {
+    this.programReviews.refresh();
     try {
       const [assessments, links, swaps] = await Promise.all([
         this.firebase.listPendingAssessments(),
