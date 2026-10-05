@@ -6,7 +6,7 @@ import { IonContent, IonIcon, ViewWillEnter, ToastController, AlertController } 
 import { addIcons } from 'ionicons';
 import {
   arrowBack, add, barbellOutline, createOutline, trashOutline, copyOutline,
-  peopleOutline, calendarOutline, clipboardOutline, readerOutline
+  peopleOutline, calendarOutline, clipboardOutline, readerOutline, gitCompareOutline
 } from 'ionicons/icons';
 import { FirebaseService, Program, WorkoutLog } from '../services/firebase.service';
 import { TopBarActionService } from '../services/top-bar-action.service';
@@ -32,7 +32,7 @@ export class ProgramsPage implements OnInit, OnDestroy, ViewWillEnter {
   ) {
     addIcons({
       arrowBack, add, barbellOutline, createOutline, trashOutline, copyOutline,
-      peopleOutline, calendarOutline, clipboardOutline, readerOutline
+      peopleOutline, calendarOutline, clipboardOutline, readerOutline, gitCompareOutline
     });
   }
 
@@ -98,6 +98,8 @@ export class ProgramsPage implements OnInit, OnDestroy, ViewWillEnter {
   openLog(log: WorkoutLog) {
     this.router.navigate(['/workout-log'], { queryParams: { logId: log.id } });
   }
+
+  openChangeLog() { this.router.navigateByUrl('/program-changes'); }
 
   openLogPage() {
     this.router.navigateByUrl('/workout-log');

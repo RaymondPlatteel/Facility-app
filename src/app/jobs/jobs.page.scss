@@ -1,6 +1,6 @@
 ion-content {
-  --background: #01070f;
-  --color: #dceaf6;
+  --background: var(--hud-bg, #01070f);
+  --color: var(--hud-text, #dceaf6);
 }
 
 .jobs-page {
@@ -24,12 +24,12 @@ ion-content {
     margin: 0;
     font-size: 26px;
     font-weight: 700;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
   }
 
   p {
     margin: 2px 0 0;
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
     font-size: 13px;
   }
 }
@@ -38,9 +38,9 @@ ion-content {
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   background: #070b12;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 20px;
   display: flex;
   align-items: center;
@@ -49,8 +49,8 @@ ion-content {
   flex-shrink: 0;
 
   &:hover {
-    color: #00d4ff;
-    border-color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
+    border-color: var(--hud-accent, #00d4ff);
   }
 }
 
@@ -61,16 +61,16 @@ ion-content {
   gap: 8px;
   padding: 11px 20px;
   border-radius: 10px;
-  background: rgba(0, 212, 255, 0.14);
-  border: 1px solid rgba(0, 212, 255, 0.55);
-  color: #00d4ff;
+  background: color-mix(in srgb, var(--hud-accent, #00d4ff) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hud-accent, #00d4ff) 55%, transparent);
+  color: var(--hud-accent, #00d4ff);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
   flex-shrink: 0;
 
-  &:hover:not(:disabled) { background: rgba(0, 212, 255, 0.22); }
+  &:hover:not(:disabled) { background: color-mix(in srgb, var(--hud-accent, #00d4ff) 22%, transparent); }
   &:disabled { opacity: 0.5; cursor: default; }
   ion-icon { font-size: 17px; }
 }
@@ -83,18 +83,18 @@ ion-content {
   padding: 10px 18px;
   border-radius: 10px;
   background: transparent;
-  border: 1px solid #133748;
-  color: #88a6bf;
+  border: 1px solid var(--hud-border, #133748);
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 14px;
   cursor: pointer;
 
-  &:hover { color: #dceaf6; border-color: #88a6bf; }
+  &:hover { color: var(--hud-text, #dceaf6); border-color: var(--hud-text-dim, #88a6bf); }
   ion-icon { font-size: 16px; }
 }
 
 .state-msg {
   text-align: center;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   padding: 60px 0;
 }
 
@@ -117,26 +117,26 @@ ion-content {
     font-weight: 600;
     letter-spacing: 0.6px;
     text-transform: uppercase;
-    color: #4a6378;
+    color: var(--hud-text-faint, #4a6378);
   }
 
   input {
     background: #0a1018;
-    border: 1px solid #133748;
+    border: 1px solid var(--hud-border, #133748);
     border-radius: 8px;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     font-size: 14.5px;
     padding: 10px 12px;
     outline: none;
     width: 100%;
 
-    &:focus { border-color: #00d4ff; }
+    &:focus { border-color: var(--hud-accent, #00d4ff); }
   }
 }
 
 .job-form-card {
   background: #070b12;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 12px;
   padding: 18px;
   margin-bottom: 20px;
@@ -144,7 +144,7 @@ ion-content {
   h3 {
     margin: 0 0 14px;
     font-size: 15px;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
   }
 }
 
@@ -164,7 +164,7 @@ ion-content {
 
 .job-card {
   background: #070b12;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 12px;
   padding: 16px;
   display: flex;
@@ -183,15 +183,15 @@ ion-content {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: #00d4ff;
-  border: 1px solid rgba(0, 212, 255, 0.5);
+  color: var(--hud-accent, #00d4ff);
+  border: 1px solid color-mix(in srgb, var(--hud-accent, #00d4ff) 50%, transparent);
   border-radius: 5px;
   padding: 3px 8px;
 }
 
 .job-qty {
   font-size: 12px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 
   &.empty { color: #ff6b6b; }
 }
@@ -200,20 +200,20 @@ ion-content {
   margin: 0;
   font-size: 15px;
   font-weight: 700;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
 }
 
 .job-desc {
   margin: 0;
   font-size: 13px;
   line-height: 1.4;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 }
 
 .job-cap {
   margin: 0;
   font-size: 11px;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 }
 
 .accepted-toggle {
@@ -222,13 +222,13 @@ ion-content {
   gap: 6px;
   background: none;
   border: none;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
   font-size: 12px;
   cursor: pointer;
   padding: 4px 0;
   width: fit-content;
 
-  &:hover { color: #88a6bf; }
+  &:hover { color: var(--hud-text-dim, #88a6bf); }
 
   .chevron {
     transition: transform 0.15s ease;
@@ -242,7 +242,7 @@ ion-content {
   gap: 4px;
   padding: 8px 10px;
   background: #0a1018;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 8px;
 }
 
@@ -250,9 +250,9 @@ ion-content {
   display: flex;
   justify-content: space-between;
   font-size: 12.5px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
 
-  .sub { color: #4a6378; }
+  .sub { color: var(--hud-text-faint, #4a6378); }
 }
 
 .job-card-actions {

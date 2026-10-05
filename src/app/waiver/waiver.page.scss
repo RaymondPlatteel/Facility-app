@@ -1,13 +1,13 @@
 ion-content {
-  --background: #01070f;
-  --color: #dceaf6;
+  --background: var(--hud-bg, #01070f);
+  --color: var(--hud-text, #dceaf6);
 }
 
 ion-header {
   ion-toolbar {
     --background: #070b12;
-    --color: #dceaf6;
-    --border-color: #133748;
+    --color: var(--hud-text, #dceaf6);
+    --border-color: var(--hud-border, #133748);
   }
 }
 
@@ -15,9 +15,9 @@ ion-header {
   padding: 20px;
   max-width: 800px;
   margin: 0 auto;
-  background: #01070f;
+  background: var(--hud-bg, #01070f);
   min-height: 100vh;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
 }
 
 .waiver-selection {
@@ -25,14 +25,14 @@ ion-header {
   margin-bottom: 30px;
   
   h2 {
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
     margin-bottom: 10px;
     font-size: 1.8rem;
     font-weight: 600;
   }
   
   p {
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
     margin-bottom: 30px;
     font-size: 1rem;
   }
@@ -48,8 +48,8 @@ ion-header {
 
 .selection-btn {
   background: #070b12;
-  color: #dceaf6;
-  border: 1px solid #133748;
+  color: var(--hud-text, #dceaf6);
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 12px;
   padding: 20px;
   cursor: pointer;
@@ -61,18 +61,18 @@ ion-header {
     margin: 0 0 8px 0;
     font-size: 1.1rem;
     font-weight: 600;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
   }
   
   p {
     margin: 0;
     font-size: 0.9rem;
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
   }
   
   &:hover {
     background: #0a1018;
-    border-color: #00d4ff;
+    border-color: var(--hud-accent, #00d4ff);
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
   }
@@ -94,7 +94,7 @@ ion-header {
 
 h1 {
   text-align: center;
-  color: #00d4ff;
+  color: var(--hud-accent, #00d4ff);
   font-weight: 600;
 }
 
@@ -102,7 +102,7 @@ label {
   display: block;
   margin-top: 15px;
   font-weight: 500;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
 }
 
 .checkbox-container {
@@ -117,7 +117,7 @@ label {
   width: auto;
   margin: 0;
   transform: scale(1.2);
-  accent-color: #00d4ff;
+  accent-color: var(--hud-accent, #00d4ff);
 }
 
 .checkbox-container label {
@@ -125,31 +125,31 @@ label {
   font-weight: 500;
   cursor: pointer;
   flex: 1;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
 }
 
 input[type="text"], input[type="tel"], input[type="email"] {
   width: 100%;
   padding: 12px 16px;
   margin-bottom: 15px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 8px;
   background: #0a1018;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-size: 1rem;
   font-family: inherit;
   transition: all 0.2s ease;
   box-sizing: border-box;
   
   &::placeholder {
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
     opacity: 1;
   }
   
   &:focus {
     outline: none;
-    border-color: #00d4ff;
-    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+    border-color: var(--hud-accent, #00d4ff);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--hud-accent, #00d4ff) 10%, transparent);
     background: #0a1018;
   }
   
@@ -158,7 +158,7 @@ input[type="text"], input[type="tel"], input[type="email"] {
   &:-webkit-autofill:focus,
   &:-webkit-autofill:active {
     -webkit-box-shadow: 0 0 0 30px #0a1018 inset !important;
-    -webkit-text-fill-color: #dceaf6 !important;
+    -webkit-text-fill-color: var(--hud-text, #dceaf6) !important;
     transition: background-color 5000s ease-in-out 0s;
   }
 }
@@ -168,22 +168,22 @@ input, select, textarea {
   padding: 12px 16px;
   margin-top: 8px;
   border-radius: 8px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   background: #0a1018;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   transition: all 0.2s ease;
   
   &:focus {
     outline: none;
-    border-color: #00d4ff;
-    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+    border-color: var(--hud-accent, #00d4ff);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--hud-accent, #00d4ff) 10%, transparent);
     background: #0a1018;
   }
 }
 
 button {
   margin-top: 20px;
-  background: #00d4ff;
+  background: var(--hud-accent, #00d4ff);
   color: #ffffff;
   padding: 12px 24px;
   border: none;
@@ -208,9 +208,9 @@ button {
   margin-top: 40px;
   font-size: 1.2rem;
   font-weight: 600;
-  border-bottom: 2px solid #00d4ff;
+  border-bottom: 2px solid var(--hud-accent, #00d4ff);
   padding-bottom: 8px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
 }
 
 .signature-modal {
@@ -232,17 +232,17 @@ button {
 
 .signature-box {
   background: #070b12;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   padding: 24px;
   border-radius: 12px;
   max-width: 500px;
   width: 90%;
   text-align: center;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   
   h3 {
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
     margin-bottom: 16px;
   }
 }
@@ -250,7 +250,7 @@ button {
 .signature-box canvas {
   width: 100%;
   height: 150px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 8px;
   margin-top: 10px;
   background: #ffffff;

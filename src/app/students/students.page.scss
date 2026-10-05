@@ -1,6 +1,6 @@
 ion-content {
-  --background: #01070f;
-  --color: #dceaf6;
+  --background: var(--hud-bg, #01070f);
+  --color: var(--hud-text, #dceaf6);
 }
 
 .clients-page {
@@ -24,12 +24,12 @@ ion-content {
     margin: 0;
     font-size: 26px;
     font-weight: 700;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
   }
 
   p {
     margin: 2px 0 0;
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
     font-size: 13px;
   }
 }
@@ -38,9 +38,9 @@ ion-content {
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   background: #070b12;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 20px;
   display: flex;
   align-items: center;
@@ -49,8 +49,8 @@ ion-content {
   flex-shrink: 0;
 
   &:hover {
-    color: #00d4ff;
-    border-color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
+    border-color: var(--hud-accent, #00d4ff);
   }
 }
 
@@ -61,16 +61,16 @@ ion-content {
   gap: 8px;
   padding: 11px 20px;
   border-radius: 10px;
-  background: rgba(0, 212, 255, 0.14);
-  border: 1px solid rgba(0, 212, 255, 0.55);
-  color: #00d4ff;
+  background: color-mix(in srgb, var(--hud-accent, #00d4ff) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hud-accent, #00d4ff) 55%, transparent);
+  color: var(--hud-accent, #00d4ff);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
 
   &:hover:not(:disabled) {
-    background: rgba(0, 212, 255, 0.22);
+    background: color-mix(in srgb, var(--hud-accent, #00d4ff) 22%, transparent);
   }
 
   &:disabled {
@@ -96,14 +96,14 @@ ion-content {
   padding: 10px 18px;
   border-radius: 10px;
   background: transparent;
-  border: 1px solid #133748;
-  color: #88a6bf;
+  border: 1px solid var(--hud-border, #133748);
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 14px;
   cursor: pointer;
 
   &:hover {
-    color: #dceaf6;
-    border-color: #88a6bf;
+    color: var(--hud-text, #dceaf6);
+    border-color: var(--hud-text-dim, #88a6bf);
   }
 
   &.full {
@@ -145,17 +145,17 @@ ion-content {
   display: flex;
   align-items: center;
   background: #070b12;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 10px;
   padding: 0 14px;
 
   &:focus-within {
-    border-color: #00d4ff;
+    border-color: var(--hud-accent, #00d4ff);
   }
 
   > ion-icon {
     font-size: 17px;
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
   }
 }
 
@@ -164,19 +164,19 @@ ion-content {
   background: transparent;
   border: none;
   outline: none;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-size: 14.5px;
   padding: 12px 10px;
 
   &::placeholder {
-    color: #4a6378;
+    color: var(--hud-text-faint, #4a6378);
   }
 }
 
 .search-clear {
   background: transparent;
   border: none;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 19px;
   cursor: pointer;
   display: flex;
@@ -191,29 +191,29 @@ ion-content {
 .chip {
   padding: 8px 16px;
   border-radius: 999px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   background: transparent;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.12s ease;
 
   &:hover {
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
   }
 
   &.on {
-    background: rgba(0, 212, 255, 0.12);
-    border-color: rgba(0, 212, 255, 0.5);
-    color: #00d4ff;
+    background: color-mix(in srgb, var(--hud-accent, #00d4ff) 12%, transparent);
+    border-color: color-mix(in srgb, var(--hud-accent, #00d4ff) 50%, transparent);
+    color: var(--hud-accent, #00d4ff);
   }
 }
 
 /* ---------- Table ---------- */
 .table-card {
   background: #070b12;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 14px;
   overflow: hidden;
 }
@@ -229,8 +229,8 @@ ion-content {
     font-weight: 700;
     letter-spacing: 1.2px;
     text-transform: uppercase;
-    color: #4a6378;
-    border-bottom: 1px solid #133748;
+    color: var(--hud-text-faint, #4a6378);
+    border-bottom: 1px solid var(--hud-border, #133748);
     white-space: nowrap;
   }
 
@@ -238,7 +238,7 @@ ion-content {
     padding: 14px 18px;
     border-bottom: 1px solid rgba(19, 55, 72, 0.5);
     font-size: 14.5px;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     vertical-align: middle;
   }
 
@@ -266,9 +266,9 @@ ion-content {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: rgba(0, 212, 255, 0.12);
-  border: 1px solid rgba(0, 212, 255, 0.35);
-  color: #00d4ff;
+  background: color-mix(in srgb, var(--hud-accent, #00d4ff) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hud-accent, #00d4ff) 35%, transparent);
+  color: var(--hud-accent, #00d4ff);
   font-weight: 700;
   font-size: 13px;
   display: flex;
@@ -285,21 +285,21 @@ ion-content {
 
 .name {
   font-weight: 600;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
 }
 
 .sub {
   font-size: 12.5px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   margin-top: 1px;
 }
 
 .muted {
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 }
 
 .chev {
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
   font-size: 16px;
   width: 30px;
 }
@@ -312,19 +312,19 @@ ion-content {
   font-weight: 700;
   text-transform: capitalize;
   background: rgba(136, 166, 191, 0.12);
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   border: 1px solid rgba(136, 166, 191, 0.3);
 
   &[data-status='active'] {
     background: rgba(45, 211, 111, 0.1);
-    color: #2dd36f;
+    color: var(--hud-success, #2dd36f);
     border-color: rgba(45, 211, 111, 0.35);
   }
 
   &[data-status='prospect'] {
-    background: rgba(0, 212, 255, 0.1);
-    color: #00d4ff;
-    border-color: rgba(0, 212, 255, 0.35);
+    background: color-mix(in srgb, var(--hud-accent, #00d4ff) 10%, transparent);
+    color: var(--hud-accent, #00d4ff);
+    border-color: color-mix(in srgb, var(--hud-accent, #00d4ff) 35%, transparent);
   }
 
   &[data-status='paused'] {
@@ -340,9 +340,9 @@ ion-content {
   border-radius: 8px;
   font-weight: 700;
   font-size: 14px;
-  background: rgba(0, 212, 255, 0.1);
-  color: #00d4ff;
-  border: 1px solid rgba(0, 212, 255, 0.3);
+  background: color-mix(in srgb, var(--hud-accent, #00d4ff) 10%, transparent);
+  color: var(--hud-accent, #00d4ff);
+  border: 1px solid color-mix(in srgb, var(--hud-accent, #00d4ff) 30%, transparent);
 
   .of {
     font-weight: 500;
@@ -365,7 +365,7 @@ ion-content {
 
 .state-msg {
   text-align: center;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 15px;
   padding: 48px 20px;
 }
@@ -386,7 +386,7 @@ ion-content {
   bottom: 0;
   width: min(520px, 100vw);
   background: #04070c;
-  border-left: 1px solid #133748;
+  border-left: 1px solid var(--hud-border, #133748);
   box-shadow: -20px 0 60px rgba(0, 0, 0, 0.6);
   z-index: 1001;
   transform: translateX(100%);
@@ -405,7 +405,7 @@ ion-content {
   justify-content: space-between;
   gap: 12px;
   padding: 20px 22px;
-  border-bottom: 1px solid #133748;
+  border-bottom: 1px solid var(--hud-border, #133748);
   flex-shrink: 0;
 }
 
@@ -418,7 +418,7 @@ ion-content {
     margin: 0;
     font-size: 20px;
     font-weight: 700;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
   }
 }
 
@@ -445,16 +445,16 @@ ion-content {
     font-weight: 700;
     letter-spacing: 1.5px;
     text-transform: uppercase;
-    color: #4a6378;
+    color: var(--hud-text-faint, #4a6378);
 
     ion-icon {
       font-size: 15px;
-      color: #00d4ff;
+      color: var(--hud-accent, #00d4ff);
     }
 
     .total {
       margin-left: auto;
-      color: #2dd36f;
+      color: var(--hud-success, #2dd36f);
       letter-spacing: 0;
       text-transform: none;
       font-size: 13px;
@@ -487,32 +487,32 @@ ion-content {
     font-weight: 600;
     letter-spacing: 0.6px;
     text-transform: uppercase;
-    color: #4a6378;
+    color: var(--hud-text-faint, #4a6378);
   }
 
   input,
   select {
     background: #0a1018;
-    border: 1px solid #133748;
+    border: 1px solid var(--hud-border, #133748);
     border-radius: 8px;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     font-size: 14.5px;
     padding: 10px 12px;
     outline: none;
     width: 100%;
 
     &:focus {
-      border-color: #00d4ff;
+      border-color: var(--hud-accent, #00d4ff);
     }
 
     &::placeholder {
-      color: #4a6378;
+      color: var(--hud-text-faint, #4a6378);
     }
   }
 
   select option {
     background: #0a1018;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
   }
 
   input[type='date'] {
@@ -521,7 +521,7 @@ ion-content {
 }
 
 .empty-note {
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
   font-size: 13.5px;
   padding: 4px 0 8px;
 }
@@ -532,16 +532,16 @@ ion-content {
   gap: 8px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid #133748;
+  border-top: 1px solid var(--hud-border, #133748);
   font-size: 12.5px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   cursor: pointer;
 
-  input[type="checkbox"] { width: 16px; height: 16px; accent-color: #00d4ff; cursor: pointer; flex-shrink: 0; }
+  input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--hud-accent, #00d4ff); cursor: pointer; flex-shrink: 0; }
 }
 
 .sub-hint {
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 13px;
   line-height: 1.5;
   margin: 0 0 12px;
@@ -553,7 +553,7 @@ ion-content {
   .sub-buy-name {
     font-size: 13px;
     font-weight: 600;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     margin-bottom: 8px;
   }
 }
@@ -566,7 +566,7 @@ ion-content {
   gap: 12px;
   padding: 12px 14px;
   background: #0a1018;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 12px;
   margin-bottom: 10px;
 }
@@ -582,12 +582,12 @@ ion-content {
 
     strong {
       font-size: 18px;
-      color: #00d4ff;
+      color: var(--hud-accent, #00d4ff);
     }
 
     .of {
       font-size: 12px;
-      color: #4a6378;
+      color: var(--hud-text-faint, #4a6378);
     }
   }
 }
@@ -596,9 +596,9 @@ ion-content {
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   background: #070b12;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 17px;
   display: flex;
   align-items: center;
@@ -606,8 +606,8 @@ ion-content {
   cursor: pointer;
 
   &:hover {
-    color: #00d4ff;
-    border-color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
+    border-color: var(--hud-accent, #00d4ff);
   }
 }
 
@@ -628,7 +628,7 @@ ion-content {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #2dd36f;
+    background: var(--hud-success, #2dd36f);
     flex-shrink: 0;
 
     &.warn {
@@ -637,12 +637,12 @@ ion-content {
   }
 
   .when {
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
     min-width: 130px;
   }
 
   .what {
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
 
     &.warn {
       color: #ffc409;
@@ -665,13 +665,13 @@ ion-content {
     background: transparent;
     border: none;
     border-radius: 6px;
-    color: #4a6378;
+    color: var(--hud-text-faint, #4a6378);
     cursor: pointer;
     transition: color 0.15s, background 0.15s;
 
     ion-icon { font-size: 14px; }
 
-    &:hover { color: #ff5a6a; background: rgba(255, 90, 106, 0.1); }
+    &:hover { color: var(--hud-danger, #ff5a6a); background: rgba(255, 90, 106, 0.1); }
     &:disabled { opacity: 0.4; cursor: default; }
   }
 }
@@ -689,17 +689,17 @@ ion-content {
   cursor: pointer;
 
   &:last-of-type { border-bottom: none; }
-  &:hover { background: rgba(0, 212, 255, 0.06); }
+  &:hover { background: color-mix(in srgb, var(--hud-accent, #00d4ff) 6%, transparent); }
 
   .dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #00d4ff;
+    background: var(--hud-accent, #00d4ff);
     flex-shrink: 0;
 
     // Being done right now — tapping opens it live.
-    &.live { background: #2dd36f; box-shadow: 0 0 0 3px rgba(45, 211, 111, 0.2); }
+    &.live { background: var(--hud-success, #2dd36f); box-shadow: 0 0 0 3px rgba(45, 211, 111, 0.2); }
   }
 
   .w-main {
@@ -710,7 +710,7 @@ ion-content {
     min-width: 0;
   }
   .w-title {
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     font-size: 13.5px;
     font-weight: 600;
     white-space: nowrap;
@@ -718,11 +718,11 @@ ion-content {
     text-overflow: ellipsis;
   }
   .w-sub {
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
     font-size: 12px;
   }
   .w-chevron {
-    color: #4a6378;
+    color: var(--hud-text-faint, #4a6378);
     font-size: 16px;
     flex-shrink: 0;
   }
@@ -732,7 +732,7 @@ ion-content {
   margin-top: 12px;
   padding: 14px;
   background: #0a1018;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 12px;
 }
 
@@ -806,7 +806,7 @@ ion-content {
 
   .when {
     font-size: 12px;
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
   }
 }
 
@@ -815,7 +815,7 @@ ion-content {
   cursor: pointer;
 
   &:hover {
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
     text-decoration: underline;
   }
 }
@@ -824,7 +824,7 @@ ion-content {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #00d4ff;
+  color: var(--hud-accent, #00d4ff);
 
   ion-icon {
     font-size: 13px;
@@ -852,7 +852,7 @@ ion-content {
   display: flex;
   flex-direction: column;
   background: #060e17;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -873,14 +873,14 @@ ion-content {
   gap: 12px;
   padding: 12px 14px;
   background: #0a1620;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 8px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   cursor: pointer;
   text-align: left;
 
   &:hover {
-    border-color: #00d4ff;
+    border-color: var(--hud-accent, #00d4ff);
   }
 
   .name {
@@ -893,7 +893,7 @@ ion-content {
 
   ion-icon {
     font-size: 18px;
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
     flex-shrink: 0;
   }
 }
@@ -922,8 +922,8 @@ ion-content {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: #01070f;
-  border-bottom: 1px solid #133748;
+  background: var(--hud-bg, #01070f);
+  border-bottom: 1px solid var(--hud-border, #133748);
   flex-shrink: 0;
 }
 .pdf-toolbar-label {
@@ -939,7 +939,7 @@ ion-content {
   display: flex;
   align-items: center;
   gap: 7px;
-  background: #00d4ff;
+  background: var(--hud-accent, #00d4ff);
   border: none;
   color: #0a0a0b;
   font-family: 'Bebas Neue', sans-serif;
@@ -958,7 +958,7 @@ ion-content {
   gap: 7px;
   background: none;
   border: 1px solid #1d4d68;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-family: 'Bebas Neue', sans-serif;
   font-size: 12px;
   letter-spacing: 0.2em;
@@ -966,7 +966,7 @@ ion-content {
   cursor: pointer;
   border-radius: 6px;
 
-  &:hover { border-color: #00d4ff; color: #00d4ff; }
+  &:hover { border-color: var(--hud-accent, #00d4ff); color: var(--hud-accent, #00d4ff); }
   ion-icon { font-size: 13px; }
 }
 .pdf-scroll {
@@ -1031,7 +1031,7 @@ ion-content {
 }
 
 .mw-exercise-name {
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-size: 12.5px;
   font-weight: 600;
   margin-bottom: 3px;
@@ -1043,12 +1043,12 @@ ion-content {
   gap: 8px;
   padding: 2px 0;
   font-size: 12px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 }
 
 .mw-set-idx {
   width: 16px;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 }
 
 .mw-set-line {
@@ -1056,7 +1056,7 @@ ion-content {
 }
 
 .mw-set-done {
-  color: #2dd36f;
+  color: var(--hud-success, #2dd36f);
   font-size: 13px;
 }
 
@@ -1070,7 +1070,7 @@ ion-content {
 .mw-notes {
   margin-top: 8px;
   font-size: 12.5px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-style: italic;
 }
 
@@ -1103,7 +1103,7 @@ ion-content {
 }
 
 .dc-when {
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-size: 13px;
   font-weight: 600;
 }
@@ -1112,7 +1112,7 @@ ion-content {
   display: flex;
   gap: 12px;
   font-size: 12px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 }
 
 .dc-notes {

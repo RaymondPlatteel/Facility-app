@@ -3,7 +3,7 @@
   padding: 20px;
   max-width: 1200px;
   margin: 0 auto;
-  background: #01070f;
+  background: var(--hud-bg, #01070f);
   min-height: 100vh;
 }
 
@@ -13,10 +13,10 @@
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 24px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   
   h2 {
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     font-size: 1.8rem;
     font-weight: 600;
     margin: 0 0 24px 0;
@@ -33,7 +33,7 @@
   
   label {
     display: block;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     font-size: 0.9rem;
     font-weight: 600;
     margin-bottom: 8px;
@@ -54,19 +54,19 @@
   width: 100%;
   padding: 12px 16px;
   background: #0a1018;
-  border: 2px solid #133748;
+  border: 2px solid var(--hud-border, #133748);
   border-radius: 8px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-size: 1rem;
   transition: all 0.2s ease;
   
   &::placeholder {
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
   }
   
   &:focus {
     outline: none;
-    border-color: #00d4ff;
+    border-color: var(--hud-accent, #00d4ff);
     background: #0a1018;
   }
 }
@@ -75,21 +75,21 @@
   width: 100%;
   padding: 12px 16px;
   background: #0a1018;
-  border: 2px solid #133748;
+  border: 2px solid var(--hud-border, #133748);
   border-radius: 8px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-size: 1rem;
   font-family: inherit;
   resize: vertical;
   transition: all 0.2s ease;
   
   &::placeholder {
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
   }
   
   &:focus {
     outline: none;
-    border-color: #00d4ff;
+    border-color: var(--hud-accent, #00d4ff);
     background: #0a1018;
   }
 }
@@ -102,7 +102,7 @@
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 24px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   
   .sections-header {
     display: flex;
@@ -111,7 +111,7 @@
     margin-bottom: 24px;
     
     h3 {
-      color: #dceaf6;
+      color: var(--hud-text, #dceaf6);
       font-size: 1.4rem;
       font-weight: 600;
       margin: 0;
@@ -120,7 +120,7 @@
 }
 
 .add-section-btn {
-  background: #00d4ff;
+  background: var(--hud-accent, #00d4ff);
   border: none;
   border-radius: 8px;
   color: white;
@@ -145,7 +145,7 @@
 .empty-sections {
   text-align: center;
   padding: 40px 20px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   
   ion-icon {
     font-size: 3rem;
@@ -167,7 +167,7 @@
 // Section cards
 .section-card {
   background: #0a1018;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 12px;
   padding: 20px;
   margin-bottom: 16px;
@@ -185,14 +185,14 @@
   
   .section-title {
     h4 {
-      color: #dceaf6;
+      color: var(--hud-text, #dceaf6);
       font-size: 1.2rem;
       font-weight: 600;
       margin: 0 0 4px 0;
     }
     
     .exercise-count {
-      color: #88a6bf;
+      color: var(--hud-text-dim, #88a6bf);
       font-size: 0.9rem;
     }
   }
@@ -207,7 +207,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 0.9rem;
   margin-bottom: 12px;
   
@@ -232,10 +232,10 @@
 
 // Icon buttons
 .icon-btn {
-  background: #133748;
+  background: var(--hud-border, #133748);
   border: none;
   border-radius: 6px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   padding: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -249,7 +249,7 @@
   }
   
   &.edit-btn:hover {
-    background: #00d4ff;
+    background: var(--hud-accent, #00d4ff);
     color: white;
   }
   
@@ -287,7 +287,7 @@
   margin-bottom: 12px;
   
   h5 {
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     font-size: 1.1rem;
     font-weight: 600;
     margin: 0;
@@ -311,13 +311,13 @@
     align-items: center;
     
     .label {
-      color: #88a6bf;
+      color: var(--hud-text-dim, #88a6bf);
       font-size: 0.9rem;
       font-weight: 500;
     }
     
     .value {
-      color: #dceaf6;
+      color: var(--hud-text, #dceaf6);
       font-size: 0.9rem;
       font-weight: 600;
     }
@@ -325,7 +325,7 @@
 }
 
 .exercise-notes {
-  background: #01070f;
+  background: var(--hud-bg, #01070f);
   border-radius: 6px;
   padding: 10px;
   
@@ -340,7 +340,7 @@
 .empty-exercises {
   text-align: center;
   padding: 20px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   
   p {
     margin: 0 0 12px 0;
@@ -350,9 +350,9 @@
 
 .add-exercise-btn {
   background: transparent;
-  border: 2px dashed #133748;
+  border: 2px dashed var(--hud-border, #133748);
   border-radius: 8px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   padding: 12px 16px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -361,9 +361,9 @@
   gap: 8px;
   
   &:hover {
-    border-color: #00d4ff;
-    color: #00d4ff;
-    background: rgba(0, 212, 255, 0.05);
+    border-color: var(--hud-accent, #00d4ff);
+    color: var(--hud-accent, #00d4ff);
+    background: color-mix(in srgb, var(--hud-accent, #00d4ff) 5%, transparent);
   }
   
   ion-icon {
@@ -380,7 +380,7 @@
   padding: 24px;
   background: #070b12;
   border-radius: 16px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   
   @media (max-width: 480px) {
     flex-direction: column;
@@ -394,9 +394,9 @@
 
 .cancel-btn {
   background: transparent;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 8px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   padding: 12px 24px;
   font-weight: 500;
   cursor: pointer;
@@ -404,13 +404,13 @@
   
   &:hover {
     background: #0a1018;
-    border-color: #88a6bf;
-    color: #dceaf6;
+    border-color: var(--hud-text-dim, #88a6bf);
+    color: var(--hud-text, #dceaf6);
   }
 }
 
 .save-btn {
-  background: #00d4ff;
+  background: var(--hud-accent, #00d4ff);
   border: none;
   border-radius: 8px;
   color: white;
@@ -428,7 +428,7 @@
   }
   
   &:disabled {
-    background: #133748;
+    background: var(--hud-border, #133748);
     color: #6a8aa3;
     cursor: not-allowed;
     transform: none;
@@ -448,7 +448,7 @@
 
 .modal-save-btn {
   width: 100%;
-  background: #00d4ff;
+  background: var(--hud-accent, #00d4ff);
   border: none;
   border-radius: 8px;
   color: white;
@@ -463,7 +463,7 @@
   }
   
   &:disabled {
-    background: #133748;
+    background: var(--hud-border, #133748);
     color: #6a8aa3;
     cursor: not-allowed;
   }
@@ -472,13 +472,13 @@
 .section-type-select {
   width: 100%;
   background: #0a1018;
-  border: 2px solid #133748;
+  border: 2px solid var(--hud-border, #133748);
   border-radius: 8px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   
   --background: #0a1018;
-  --color: #dceaf6;
-  --placeholder-color: #88a6bf;
+  --color: var(--hud-text, #dceaf6);
+  --placeholder-color: var(--hud-text-dim, #88a6bf);
   --padding-start: 16px;
   --padding-end: 16px;
 }

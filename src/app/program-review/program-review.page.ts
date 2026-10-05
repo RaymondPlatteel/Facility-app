@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { IonContent, IonIcon, AlertController, ToastController } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import { arrowBack, arrowUp, arrowDown, closeOutline, checkmarkCircle } from 'ionicons/icons';
-import { FirebaseService, Program, ProgramDay, ProgramExercise } from '../services/firebase.service';
+import { FirebaseService, Program, ProgramChange, ProgramDay, ProgramExercise } from '../services/firebase.service';
 import { ProgramReviewCountService } from '../services/program-review-count.service';
 
 // A coach's review of an athlete's generated program: see every week at once, move exercises, swap days,
@@ -26,6 +26,8 @@ export class ProgramReviewPage implements OnInit {
   reply = '';
   dirty = false;
   saving = false;
+  private pendingLog: Array<Pick<ProgramChange, 'key' | 'kind' | 'summary' | 'detail'>> = [];
+  private savedNote = '';
 
   constructor(
     private route: ActivatedRoute,
@@ -48,6 +50,7 @@ export class ProgramReviewPage implements OnInit {
     const id = this.route.snapshot.paramMap.get('id');
     this.program = id ? await this.firebase.getProgram(id).catch(() => null) : null;
     this.dirty = false;
+    this.savedNote = (this.program?.reviewNote || '').trim();
     this.loading = false;
   }
 
@@ -120,6 +123,7 @@ export class ProgramReviewPage implements OnInit {
     this.saving = true;
     try {
       await this.firebase.saveProgramReview(this.program.id, { schedule: this.program.schedule }, true);
+      await this.flushLog();
       this.program.proposal = undefined;
       this.dirty = false;
       this.reviewCount.refresh();
@@ -133,9 +137,14 @@ export class ProgramReviewPage implements OnInit {
 
   // ---- edits (each applies to this week or to every week) ----
   private touch() { this.dirty = true; }
+  private dayName(d: number): string { return this.weekdays[d] || `Day ${d + 1}`; }
+  private note(kind: ProgramChange['kind'], key: string, summary: string, detail?: string) {
+    this.pendingLog.push({ kind, key: `${kind}:${key}`, summary, detail });
+  }
 
   move(d: number, i: number, dir: -1 | 1) {
     const name = this.day(this.week, d).exercises[i].name;
+    this.note('move', `${name}|${this.dayName(d)}|${dir}`, `Move ${name} ${dir < 0 ? 'earlier' : 'later'} on ${this.dayName(d)}`);
     for (const w of this.scope()) {
       const list = this.day(w, d).exercises;
       const at = list.findIndex(e => e.name === name);
@@ -150,6 +159,7 @@ export class ProgramReviewPage implements OnInit {
     const to = Number(target);
     if (Number.isNaN(to) || to === d) return;
     const name = this.day(this.week, d).exercises[i].name;
+    this.note('moveDay', `${name}|${this.dayName(d)}|${this.dayName(to)}`, `Move ${name} from ${this.dayName(d)} to ${this.dayName(to)}`);
     for (const w of this.scope()) {
       const from = this.day(w, d);
       const at = from.exercises.findIndex(e => e.name === name);
@@ -170,6 +180,7 @@ export class ProgramReviewPage implements OnInit {
       message: `${name} will be removed from ${this.allWeeks ? 'this day in every week' : 'this day'}.`,
       buttons: [{ text: 'Cancel', role: 'cancel' }, {
         text: 'Remove', role: 'destructive', handler: () => {
+          this.note('remove', name, `Remove ${name}`);
           for (const w of this.scope()) {
             const day = this.day(w, d);
             day.exercises = day.exercises.filter(e => e.name !== name);
@@ -185,6 +196,8 @@ export class ProgramReviewPage implements OnInit {
   swapDays(d: number, target: string) {
     const other = Number(target);
     if (Number.isNaN(other) || other === d) return;
+    const pair = [d, other].sort((x, y) => x - y).map(x => this.dayName(x));
+    this.note('swapDays', pair.join('|'), `Swap ${pair[0]} and ${pair[1]}`);
     for (const w of this.scope()) {
       const a = this.day(w, d);
       const b = this.day(w, other);
@@ -196,6 +209,10 @@ export class ProgramReviewPage implements OnInit {
   }
 
   setNote(d: number, text: string) {
+    const day = this.dayName(d);
+    const at = this.pendingLog.findIndex(x => x.kind === 'dayNote' && x.key === `dayNote:${day}`);
+    if (at >= 0) this.pendingLog.splice(at, 1);        // keep only the final wording of a note typed over several keystrokes
+    if (text.trim()) this.note('dayNote', day, `Note on ${day}`, text.trim());
     for (const w of this.scope()) this.day(w, d).notes = text;
     this.touch();
   }
@@ -213,6 +230,10 @@ export class ProgramReviewPage implements OnInit {
         fields.reviewedAt = new Date().toISOString();
       }
       await this.firebase.saveProgramReview(this.program.id, fields);
+      const noteNow = (fields.reviewNote || '');
+      if (noteNow && noteNow !== this.savedNote) this.note('reviewNote', noteNow.toLowerCase(), 'Note to the athlete', noteNow);
+      this.savedNote = noteNow;
+      await this.flushLog();
       Object.assign(this.program, fields);
       this.dirty = false;
       this.reviewCount.refresh();
@@ -222,6 +243,18 @@ export class ProgramReviewPage implements OnInit {
       await this.toast('Could not save', 'danger');
     }
     this.saving = false;
+  }
+
+  // Logging is best-effort: a failure here must never block saving the program.
+  private async flushLog() {
+    const entries = this.pendingLog.splice(0);
+    if (!entries.length || !this.program?.id) return;
+    const reviewer = this.reviewer.trim() || 'a coach';
+    try {
+      await this.firebase.logProgramChanges(entries.map(e => ({
+        ...e, programId: this.program!.id!, athlete: this.athlete, reviewer, at: new Date().toISOString()
+      })));
+    } catch (err) { console.error('Program review: change log not saved', err); }
   }
 
   async sendReply() {

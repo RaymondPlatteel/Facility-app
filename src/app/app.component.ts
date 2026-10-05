@@ -7,6 +7,7 @@ import { ProgramReviewCountService } from './services/program-review-count.servi
 import { FirebaseService } from './services/firebase.service';
 import { CalendarSyncService } from './services/calendar-sync.service';
 import { TopBarActionService, TopBarAction } from './services/top-bar-action.service';
+import { ThemeService } from './services/theme.service';
 import { addIcons } from 'ionicons';
 import {
   lockClosedOutline,
@@ -14,6 +15,7 @@ import {
   homeOutline,
   megaphoneOutline,
   trophyOutline,
+  colorPaletteOutline,
   trashOutline,
   analyticsOutline,
   calendarOutline,
@@ -97,14 +99,17 @@ export class AppComponent implements OnInit, OnDestroy {
     private location: Location,
     private topBarActionService: TopBarActionService,
     private calendarSync: CalendarSyncService,
-    public programReviews: ProgramReviewCountService
+    public programReviews: ProgramReviewCountService,
+    private coachTheme: ThemeService
   ) {
+    this.coachTheme.init();
     addIcons({
       lockClosedOutline,
       keypadOutline,
       homeOutline,
       megaphoneOutline,
       trophyOutline,
+      colorPaletteOutline,
       trashOutline,
       analyticsOutline,
       calendarOutline,

@@ -52,6 +52,12 @@ export const routes: Routes = [
     data: { title: 'Events' }
   },
   {
+    path: 'themes',
+    canActivate: [authGuard],
+    loadComponent: () => import('./themes/themes.page').then( m => m.ThemesPage),
+    data: { title: 'Themes' }
+  },
+  {
     path: 'students',
     canActivate: [authGuard],
     loadComponent: () => import('./students/students.page').then( m => m.StudentsPage),
@@ -135,6 +141,12 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./programs/programs.page').then( m => m.ProgramsPage),
     data: { title: 'Programs' }
+  },
+  {
+    path: 'program-changes',
+    canActivate: [authGuard],
+    loadComponent: () => import('./program-changes/program-changes.page').then( m => m.ProgramChangesPage),
+    data: { title: 'Change Log' }
   },
   {
     path: 'program-review/:id',

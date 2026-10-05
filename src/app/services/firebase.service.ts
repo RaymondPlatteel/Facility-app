@@ -343,6 +343,10 @@ export interface Member {
   // the athlete app shows them Schedule and Membership; everyone else (the
   // competition's remote athletes) doesn't get those.
   inPerson?: boolean;
+  // Set by the coach only. The athlete gets their program without paying for it.
+  freeProgram?: boolean;
+  // Written only by the payments worker from Apple's signed receipts: the program is paid for until this time.
+  programExpiresAt?: string;
   cell: number | null;
   generation: number | null;
   cohort: number | null;
@@ -1022,6 +1026,38 @@ export interface DailyQuestCompletion {
   clientName: string;
   nameKey: string;
   completedAt: string;
+}
+
+export interface ProgramChange {
+  id?: string;
+  key: string;            // what makes two changes "the same" (kind + exercise + days), used for grouping
+  kind: 'move' | 'moveDay' | 'remove' | 'swapDays' | 'dayNote' | 'reviewNote';
+  summary: string;        // plain-English line, e.g. "Remove Barbell Squat"
+  detail?: string;        // the note text, where relevant
+  programId: string;
+  athlete: string;
+  reviewer: string;
+  at: string;
+  resolved?: boolean;
+}
+
+// A theme made on the Themes page. One accent builds the palette; `tokens` are hand-set colours that replace derived ones.
+export interface ThemeDoc {
+  id?: string;
+  name: string;
+  accent: string;
+  unlockRank: 'NONE' | 'D-RANK' | 'C-RANK' | 'B-RANK' | 'A-RANK' | 'S-RANK';
+  mode: 'dark' | 'light';
+  kind?: 'base' | 'rank';
+  rank?: string;
+  config?: any;                       // the editor's settings, so a theme can be reopened
+  colors?: Record<string, string>;    // compiled: what the athlete app reads
+  style?: Record<string, string>;
+  fonts?: string[];
+  swatch?: string[];
+  tokens?: Record<string, string>;
+  published: boolean;
+  order?: number;
 }
 
 @Injectable({
@@ -2444,6 +2480,27 @@ export class FirebaseService {
     await updateDoc(doc(this.db, 'programs', id), payload);
   }
 
+  // ---- change log: every correction a coach makes to a generated program, kept so the generator can be tuned ----
+  async logProgramChanges(entries: ProgramChange[]): Promise<void> {
+    if (!entries.length) return;
+    const batch = writeBatch(this.db);
+    for (const e of entries) batch.set(doc(collection(this.db, 'programChanges')), this.cleanForFirestore({ ...e, resolved: false }));
+    await batch.commit();
+  }
+
+  async getProgramChanges(): Promise<ProgramChange[]> {
+    const snap = await getDocs(collection(this.db, 'programChanges'));
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as ProgramChange));
+  }
+
+  async setProgramChangesResolved(ids: string[], resolved: boolean): Promise<void> {
+    for (let i = 0; i < ids.length; i += 400) {
+      const batch = writeBatch(this.db);
+      for (const id of ids.slice(i, i + 400)) batch.update(doc(this.db, 'programChanges', id), { resolved });
+      await batch.commit();
+    }
+  }
+
   async addProgramSupportReply(id: string, text: string): Promise<void> {
     const message: ProgramSupportMessage = { from: 'coach', text: text.trim(), at: new Date().toISOString() };
     await updateDoc(doc(this.db, 'programs', id), { support: arrayUnion(message) });
@@ -3283,6 +3340,10 @@ export class FirebaseService {
     await setDoc(doc(this.db, 'members', nameKey), { nameKey, clientName, ...designation }, { merge: true });
   }
 
+  async setMemberFreeProgram(nameKey: string, clientName: string, freeProgram: boolean): Promise<void> {
+    await setDoc(doc(this.db, 'members', nameKey), { nameKey, clientName, freeProgram }, { merge: true });
+  }
+
   async setMemberInPerson(nameKey: string, clientName: string, inPerson: boolean): Promise<void> {
     await setDoc(doc(this.db, 'members', nameKey), { nameKey, clientName, inPerson }, { merge: true });
   }
@@ -3440,6 +3501,23 @@ export class FirebaseService {
     const ref = await addDoc(collection(this.db, 'events'), { ...data, createdAt: now });
     return ref.id;
   }
+
+  // ---- themes (published ones appear in the athlete app's Settings > Theme) ----
+  async getThemes(): Promise<ThemeDoc[]> {
+    const snap = await getDocs(collection(this.db, 'themes'));
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<ThemeDoc, 'id'>) })).sort((a, b) => (a.order ?? 999) - (b.order ?? 999) || a.name.localeCompare(b.name));
+  }
+
+  async saveTheme(t: ThemeDoc): Promise<string> {
+    const now = new Date().toISOString();
+    const { id, ...rest } = t;
+    const data = stripUndefined({ ...rest, updatedAt: now });
+    if (id) { await setDoc(doc(this.db, 'themes', id), data, { merge: true }); return id; }
+    const ref = await addDoc(collection(this.db, 'themes'), { ...data, createdAt: now });
+    return ref.id;
+  }
+
+  async deleteTheme(id: string): Promise<void> { await deleteDoc(doc(this.db, 'themes', id)); }
 
   async deleteEvent(id: string): Promise<void> {
     const regs = await getDocs(collection(this.db, 'events', id, 'registrations'));

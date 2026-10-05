@@ -1,0 +1,13 @@
+ion-content { --background: var(--hud-bg, #01070f); --color: var(--hud-text, #dceaf6); }
+.pc-page { padding: 24px clamp(12px, 2.5vw, 36px) 60px; max-width: 900px; margin: 0 auto; }
+.state-msg { color: var(--hud-text-dim, #88a6bf); padding: 40px 0; text-align: center; }
+.pc-header { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+.pc-title { flex: 1; min-width: 220px; h1 { margin: 0; font-size: 26px; font-weight: 700; } p { margin: 4px 0 0; color: var(--hud-text-dim, #88a6bf); font-size: 13px; } }
+.icon-btn { width: 42px; height: 42px; border-radius: 10px; border: 1px solid var(--hud-border, #133748); background: #070b12; color: var(--hud-text-dim, #88a6bf); font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; &:hover { color: var(--hud-accent, #00d4ff); border-color: var(--hud-accent, #00d4ff); } }
+.ghost-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 10px; border: 1px solid var(--hud-border, #133748); background: transparent; color: var(--hud-text-dim, #88a6bf); font-size: 13px; font-weight: 700; cursor: pointer; &:hover { color: var(--hud-accent, #00d4ff); border-color: var(--hud-accent, #00d4ff); } }
+.pc-tabs { display: flex; gap: 6px; button { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--hud-border, #133748); background: #070b12; color: var(--hud-text-dim, #88a6bf); font-weight: 600; cursor: pointer; &.on { border-color: var(--hud-accent, #00d4ff); color: var(--hud-text, #dceaf6); background: color-mix(in srgb, var(--hud-accent, #00d4ff) 10%, transparent); } } }
+.pc-row { display: flex; align-items: flex-start; gap: 14px; padding: 12px 14px; margin-bottom: 8px; border: 1px solid var(--hud-border, #133748); border-radius: 12px; background: #070b12; }
+.pc-count { flex: 0 0 auto; min-width: 38px; text-align: center; padding: 4px 0; border-radius: 8px; border: 1px solid var(--hud-accent, #00d4ff); color: var(--hud-accent, #00d4ff); font-weight: 700; font-size: 16px; }
+.pc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; b { font-size: 15px; } }
+.pc-sub { color: var(--hud-text-dim, #88a6bf); font-size: 12px; }
+.pc-notes { margin: 6px 0 0; padding-left: 18px; color: #b9cfe2; font-size: 13px; li { margin-bottom: 3px; } }

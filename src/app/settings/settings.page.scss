@@ -1,6 +1,6 @@
 ion-content {
-  --background: #01070f;
-  --color: #dceaf6;
+  --background: var(--hud-bg, #01070f);
+  --color: var(--hud-text, #dceaf6);
 }
 
 .settings-page {
@@ -24,12 +24,12 @@ ion-content {
     margin: 0;
     font-size: 26px;
     font-weight: 700;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
   }
 
   p {
     margin: 2px 0 0;
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
     font-size: 13px;
   }
 }
@@ -38,9 +38,9 @@ ion-content {
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   background: #070b12;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 20px;
   display: flex;
   align-items: center;
@@ -49,8 +49,8 @@ ion-content {
   flex-shrink: 0;
 
   &:hover {
-    color: #00d4ff;
-    border-color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
+    border-color: var(--hud-accent, #00d4ff);
   }
 }
 
@@ -66,7 +66,7 @@ ion-content {
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 }
 
 .setting-row {
@@ -75,7 +75,7 @@ ion-content {
   justify-content: space-between;
   gap: 16px;
   background: #070b12;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 12px;
   padding: 16px 18px;
 }
@@ -92,7 +92,7 @@ ion-content {
 
   ion-icon {
     font-size: 20px;
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
     flex-shrink: 0;
     margin-top: 2px;
   }
@@ -101,14 +101,14 @@ ion-content {
 .setting-row-title {
   font-size: 15px;
   font-weight: 700;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
 }
 
 .setting-row-detail {
   margin-top: 3px;
   font-size: 12px;
   line-height: 1.5;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 }
 
 /* ---------- Toggle switch ---------- */
@@ -117,7 +117,7 @@ ion-content {
   width: 48px;
   height: 28px;
   border-radius: 999px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   background: #04070c;
   padding: 2px;
   cursor: pointer;
@@ -129,8 +129,8 @@ ion-content {
   }
 
   &.on {
-    background: rgba(0, 212, 255, 0.25);
-    border-color: #00d4ff;
+    background: color-mix(in srgb, var(--hud-accent, #00d4ff) 25%, transparent);
+    border-color: var(--hud-accent, #00d4ff);
   }
 }
 
@@ -139,12 +139,12 @@ ion-content {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #88a6bf;
+  background: var(--hud-text-dim, #88a6bf);
   transition: transform 0.15s ease, background 0.15s ease;
 }
 
 .toggle-switch.on .toggle-knob {
-  background: #00d4ff;
+  background: var(--hud-accent, #00d4ff);
   transform: translateX(20px);
 }
 
@@ -167,7 +167,7 @@ ion-content {
   margin-top: 10px;
   padding: 16px;
   background: #070b12;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 12px;
 }
 
@@ -184,7 +184,7 @@ ion-content {
   padding: 9px 16px;
   border: none;
   border-radius: 8px;
-  background: #00d4ff;
+  background: var(--hud-accent, #00d4ff);
   color: #04121a;
   font-size: 12.5px;
   font-weight: 700;
@@ -196,15 +196,15 @@ ion-content {
 
   &--ghost {
     background: none;
-    color: #88a6bf;
-    box-shadow: inset 0 0 0 1px #133748;
+    color: var(--hud-text-dim, #88a6bf);
+    box-shadow: inset 0 0 0 1px var(--hud-border, #133748);
   }
 }
 
 .migrate-status {
   margin: 12px 0 0;
   font-size: 13px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 }
 
 .migrate-table-wrap {
@@ -216,7 +216,7 @@ ion-content {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
 
   th {
     text-align: left;
@@ -225,8 +225,8 @@ ion-content {
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #88a6bf;
-    border-bottom: 1px solid #133748;
+    color: var(--hud-text-dim, #88a6bf);
+    border-bottom: 1px solid var(--hud-border, #133748);
     white-space: nowrap;
   }
 
@@ -247,12 +247,12 @@ ion-content {
 .migrate-clients {
   display: block;
   font-size: 11.5px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 }
 
 .migrate-note {
   font-size: 12px;
-  color: #f5b942;
+  color: var(--hud-warn, #f5b942);
 }
 
 .migrate-actions {
@@ -265,5 +265,5 @@ ion-content {
 
 .migrate-total {
   font-size: 13px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 }

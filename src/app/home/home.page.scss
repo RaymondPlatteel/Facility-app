@@ -1,6 +1,6 @@
 ion-content {
-  --background: #01070f;
-  --color: #dceaf6;
+  --background: var(--hud-bg, #01070f);
+  --color: var(--hud-text, #dceaf6);
 }
 
 /* =========================================================================
@@ -30,17 +30,17 @@ ion-content {
   font-size: 12px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 }
 
 .dash-greeting {
   margin: 0;
   font-size: 30px;
   font-weight: 700;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
 
   span {
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
   }
 }
 
@@ -50,10 +50,10 @@ ion-content {
   align-items: center;
   gap: 10px;
   padding: 14px 24px;
-  background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(0, 212, 255, 0.08));
-  border: 1px solid rgba(0, 212, 255, 0.55);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--hud-accent, #00d4ff) 20%, transparent), color-mix(in srgb, var(--hud-accent, #00d4ff) 8%, transparent));
+  border: 1px solid color-mix(in srgb, var(--hud-accent, #00d4ff) 55%, transparent);
   border-radius: 12px;
-  color: #00d4ff;
+  color: var(--hud-accent, #00d4ff);
   font-size: 15px;
   font-weight: 700;
   text-decoration: none;
@@ -62,7 +62,7 @@ ion-content {
   ion-icon { font-size: 20px; }
 
   &:hover {
-    background: linear-gradient(135deg, rgba(0, 212, 255, 0.3), rgba(0, 212, 255, 0.12));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--hud-accent, #00d4ff) 30%, transparent), color-mix(in srgb, var(--hud-accent, #00d4ff) 12%, transparent));
     transform: translateY(-1px);
   }
 }
@@ -80,7 +80,7 @@ ion-content {
   display: flex;
   flex-direction: column;
   background: #070b12;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 14px;
   overflow: hidden;
 }
@@ -91,7 +91,7 @@ ion-content {
   justify-content: space-between;
   gap: 10px;
   padding: 14px 18px;
-  border-bottom: 1px solid #133748;
+  border-bottom: 1px solid var(--hud-border, #133748);
 }
 
 .card-title {
@@ -102,11 +102,11 @@ ion-content {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 
   ion-icon {
     font-size: 15px;
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
   }
 }
 
@@ -114,15 +114,15 @@ ion-content {
   min-width: 22px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(0, 212, 255, 0.12);
-  color: #00d4ff;
+  background: color-mix(in srgb, var(--hud-accent, #00d4ff) 12%, transparent);
+  color: var(--hud-accent, #00d4ff);
   font-size: 11px;
   font-weight: 700;
   text-align: center;
 
   &--alert {
     background: rgba(245, 185, 66, 0.14);
-    color: #f5b942;
+    color: var(--hud-warn, #f5b942);
   }
 }
 
@@ -134,7 +134,7 @@ ion-content {
 .card-empty {
   padding: 26px 18px;
   text-align: center;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 13px;
 }
 
@@ -156,8 +156,8 @@ ion-content {
   justify-content: center;
   gap: 6px;
   padding: 11px;
-  border-top: 1px solid #133748;
-  color: #00d4ff;
+  border-top: 1px solid var(--hud-border, #133748);
+  color: var(--hud-accent, #00d4ff);
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -167,7 +167,7 @@ ion-content {
 
   ion-icon { font-size: 13px; }
 
-  &:hover { background: rgba(0, 212, 255, 0.06); }
+  &:hover { background: color-mix(in srgb, var(--hud-accent, #00d4ff) 6%, transparent); }
 }
 
 /* Shared row treatment across all three panels */
@@ -192,7 +192,7 @@ ion-content {
   width: 76px;
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   font-size: 12.5px;
-  color: #00d4ff;
+  color: var(--hud-accent, #00d4ff);
 }
 
 .sched-info {
@@ -206,7 +206,7 @@ ion-content {
 .sched-name {
   font-size: 13.5px;
   font-weight: 600;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -214,7 +214,7 @@ ion-content {
 
 .sched-sub {
   font-size: 11.5px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -223,13 +223,13 @@ ion-content {
 .sched-type {
   flex-shrink: 0;
   padding: 3px 9px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 999px;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 }
 
 /* ---------- Needs Attention ---------- */
@@ -243,9 +243,9 @@ ion-content {
   border-radius: 9px;
   font-size: 15px;
 
-  &--low    { background: rgba(245, 185, 66, 0.13); color: #f5b942; }
+  &--low    { background: rgba(245, 185, 66, 0.13); color: var(--hud-warn, #f5b942); }
   &--unpaid { background: rgba(255, 107, 107, 0.13); color: #ff6b6b; }
-  &--review { background: rgba(0, 212, 255, 0.13);  color: #00d4ff; }
+  &--review { background: color-mix(in srgb, var(--hud-accent, #00d4ff) 13%, transparent);  color: var(--hud-accent, #00d4ff); }
 }
 
 .att-info {
@@ -259,7 +259,7 @@ ion-content {
 .att-label {
   font-size: 13.5px;
   font-weight: 600;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -269,15 +269,15 @@ ion-content {
   font-size: 11.5px;
   font-weight: 600;
 
-  &--low    { color: #f5b942; }
+  &--low    { color: var(--hud-warn, #f5b942); }
   &--unpaid { color: #ff6b6b; }
-  &--review { color: #00d4ff; }
+  &--review { color: var(--hud-accent, #00d4ff); }
 }
 
 .att-arrow {
   flex-shrink: 0;
   font-size: 13px;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 }
 
 /* ---------- Recent Activity ---------- */
@@ -297,10 +297,10 @@ ion-content {
   border-radius: 50%;
   font-size: 14px;
 
-  &--cyan   { background: rgba(0, 212, 255, 0.13);  color: #00d4ff; }
+  &--cyan   { background: color-mix(in srgb, var(--hud-accent, #00d4ff) 13%, transparent);  color: var(--hud-accent, #00d4ff); }
   &--green  { background: rgba(6, 214, 160, 0.13);  color: #06d6a0; }
   &--red    { background: rgba(255, 107, 107, 0.13); color: #ff6b6b; }
-  &--amber  { background: rgba(245, 185, 66, 0.13); color: #f5b942; }
+  &--amber  { background: rgba(245, 185, 66, 0.13); color: var(--hud-warn, #f5b942); }
   &--violet { background: rgba(199, 125, 255, 0.13); color: #c77dff; }
 
   &--red ion-icon { transform: rotate(180deg); }
@@ -316,12 +316,12 @@ ion-content {
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   font-size: 11.5px;
   font-weight: 700;
-  background: rgba(0, 212, 255, 0.1);
-  color: #00d4ff;
+  background: color-mix(in srgb, var(--hud-accent, #00d4ff) 10%, transparent);
+  color: var(--hud-accent, #00d4ff);
 
   &--up   { background: rgba(6, 214, 160, 0.14);  color: #06d6a0; }
   &--down { background: rgba(255, 107, 107, 0.14); color: #ff6b6b; }
-  &--flat { background: rgba(120, 160, 190, 0.1);  color: #88a6bf; }
+  &--flat { background: rgba(120, 160, 190, 0.1);  color: var(--hud-text-dim, #88a6bf); }
 }
 
 .act-info {
@@ -334,7 +334,7 @@ ion-content {
 
 .act-text {
   font-size: 13.5px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -342,7 +342,7 @@ ion-content {
 
 .act-detail {
   font-size: 11.5px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -351,7 +351,7 @@ ion-content {
 .act-time {
   flex-shrink: 0;
   font-size: 11px;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
   white-space: nowrap;
 }
 
@@ -362,7 +362,7 @@ ion-content {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 }
 
 .quick-row {
@@ -377,9 +377,9 @@ ion-content {
   gap: 10px;
   padding: 14px 16px;
   background: #070b12;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 12px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-size: 13.5px;
   font-weight: 600;
   text-decoration: none;
@@ -387,13 +387,13 @@ ion-content {
 
   ion-icon {
     font-size: 19px;
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
     flex-shrink: 0;
   }
 
   &:hover {
     background: #0a1018;
-    border-color: #00d4ff;
+    border-color: var(--hud-accent, #00d4ff);
     transform: translateY(-2px);
   }
 
@@ -441,9 +441,9 @@ ion-content {
 
 .quest-date {
   background: #0d1520;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 8px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-size: 13px;
   padding: 5px 8px;
   color-scheme: dark;
@@ -459,16 +459,16 @@ ion-content {
 .quest-input {
   width: 100%;
   background: #0d1520;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 8px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-size: 14px;
   padding: 10px 12px;
   outline: none;
   font-family: inherit;
 
-  &:focus { border-color: #00d4ff; }
-  &::placeholder { color: #4a6378; }
+  &:focus { border-color: var(--hud-accent, #00d4ff); }
+  &::placeholder { color: var(--hud-text-faint, #4a6378); }
 }
 
 .quest-desc {
@@ -485,14 +485,14 @@ ion-content {
 .quest-status {
   flex: 1;
   font-size: 12px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 }
 
 .quest-btn {
   padding: 8px 16px;
   border-radius: 8px;
   border: none;
-  background: #00d4ff;
+  background: var(--hud-accent, #00d4ff);
   color: #04121a;
   font-size: 12.5px;
   font-weight: 700;
@@ -504,8 +504,8 @@ ion-content {
 
   &--ghost {
     background: none;
-    color: #88a6bf;
-    box-shadow: inset 0 0 0 1px #133748;
+    color: var(--hud-text-dim, #88a6bf);
+    box-shadow: inset 0 0 0 1px var(--hud-border, #133748);
   }
 }
 
@@ -514,7 +514,7 @@ ion-content {
   flex-direction: column;
   gap: 3px;
   padding: 11px 18px 14px;
-  border-top: 1px solid #133748;
+  border-top: 1px solid var(--hud-border, #133748);
 }
 
 .quest-done-label {
@@ -527,7 +527,7 @@ ion-content {
 
 .quest-done-names {
   font-size: 13px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
 }
 
-.quick-badge { margin-left: auto; min-width: 20px; padding: 1px 7px; border-radius: 999px; background: #f5b942; color: #01070f; font-size: 12px; font-weight: 800; text-align: center; }
+.quick-badge { margin-left: auto; min-width: 20px; padding: 1px 7px; border-radius: 999px; background: var(--hud-warn, #f5b942); color: var(--hud-bg, #01070f); font-size: 12px; font-weight: 800; text-align: center; }

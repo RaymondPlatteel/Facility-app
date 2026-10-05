@@ -1,6 +1,6 @@
 ion-content {
-  --background: #01070f;
-  --color: #dceaf6;
+  --background: var(--hud-bg, #01070f);
+  --color: var(--hud-text, #dceaf6);
 }
 
 .pending-page {
@@ -23,12 +23,12 @@ ion-content {
     margin: 0;
     font-size: 26px;
     font-weight: 700;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
   }
 
   p {
     margin: 2px 0 0;
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
     font-size: 13px;
   }
 }
@@ -37,9 +37,9 @@ ion-content {
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   background: #070b12;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 20px;
   display: flex;
   align-items: center;
@@ -48,15 +48,15 @@ ion-content {
   flex-shrink: 0;
 
   &:hover {
-    color: #00d4ff;
-    border-color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
+    border-color: var(--hud-accent, #00d4ff);
   }
 }
 
 .empty-state {
   padding: 40px 20px;
   text-align: center;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 14px;
 
   &.small {
@@ -74,7 +74,7 @@ ion-content {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 }
 
 .pending-list {
@@ -85,7 +85,7 @@ ion-content {
 
 .pending-item {
   border-radius: 12px;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   background: #070b12;
   overflow: hidden;
 }
@@ -112,7 +112,7 @@ ion-content {
 .pending-name {
   font-size: 15px;
   font-weight: 700;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   // Long names now truncate instead of forcing the row wide.
   overflow: hidden;
   text-overflow: ellipsis;
@@ -124,9 +124,9 @@ ion-content {
   margin-left: 8px;
   padding: 1px 7px;
   border-radius: 999px;
-  background: rgba(0, 212, 255, 0.14);
-  border: 1px solid rgba(0, 212, 255, 0.4);
-  color: #00d4ff;
+  background: color-mix(in srgb, var(--hud-accent, #00d4ff) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hud-accent, #00d4ff) 40%, transparent);
+  color: var(--hud-accent, #00d4ff);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -137,13 +137,13 @@ ion-content {
 .pending-lift {
   margin-top: 2px;
   font-size: 14px;
-  color: #00d4ff;
+  color: var(--hud-accent, #00d4ff);
 }
 
 .pending-meta {
   margin-top: 2px;
   font-size: 12px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 }
 
 .pending-actions {
@@ -168,12 +168,12 @@ ion-content {
   }
 
   &.review {
-    background: rgba(0, 212, 255, 0.14);
-    border-color: rgba(0, 212, 255, 0.55);
-    color: #00d4ff;
+    background: color-mix(in srgb, var(--hud-accent, #00d4ff) 14%, transparent);
+    border-color: color-mix(in srgb, var(--hud-accent, #00d4ff) 55%, transparent);
+    color: var(--hud-accent, #00d4ff);
 
     &:hover {
-      background: rgba(0, 212, 255, 0.22);
+      background: color-mix(in srgb, var(--hud-accent, #00d4ff) 22%, transparent);
     }
 
     ion-icon {
@@ -188,7 +188,7 @@ ion-content {
   &.reject {
     background: rgba(255, 90, 106, 0.1);
     border-color: rgba(255, 90, 106, 0.4);
-    color: #ff5a6a;
+    color: var(--hud-danger, #ff5a6a);
 
     &:hover {
       background: rgba(255, 90, 106, 0.18);
@@ -198,7 +198,7 @@ ion-content {
   &.approve {
     background: rgba(45, 211, 111, 0.14);
     border-color: rgba(45, 211, 111, 0.5);
-    color: #2dd36f;
+    color: var(--hud-success, #2dd36f);
 
     &:hover {
       background: rgba(45, 211, 111, 0.22);
@@ -209,7 +209,7 @@ ion-content {
 // ---------- review panel: read-only diff against the previous assessment ----------
 .review-panel {
   padding: 4px 18px 18px;
-  border-top: 1px solid #133748;
+  border-top: 1px solid var(--hud-border, #133748);
 }
 
 .review-video {
@@ -237,7 +237,7 @@ ion-content {
 
   // unchanged fields fade into the background — only what actually moved
   // should draw the eye
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 
   .diff-old,
   .diff-arrow {
@@ -250,23 +250,23 @@ ion-content {
   }
 
   &.changed {
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
 
     .diff-label {
-      color: #dceaf6;
+      color: var(--hud-text, #dceaf6);
     }
 
     .diff-old {
-      color: #6b7d8c;
+      color: var(--hud-text-mute, #6b7d8c);
       text-decoration: line-through;
     }
 
     .diff-arrow {
-      color: #4a6378;
+      color: var(--hud-text-faint, #4a6378);
     }
 
     .diff-new {
-      color: #00d4ff;
+      color: var(--hud-accent, #00d4ff);
       font-weight: 700;
     }
   }
@@ -299,7 +299,7 @@ ion-content {
   border-radius: 10px;
   border: 1px solid rgba(45, 211, 111, 0.55);
   background: rgba(45, 211, 111, 0.14);
-  color: #2dd36f;
+  color: var(--hud-success, #2dd36f);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -431,7 +431,7 @@ ion-content {
   padding: 5px 0;
   font-family: 'Barlow', sans-serif;
   font-size: 13px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
 
   &.blank { opacity: 0.45; }
 }

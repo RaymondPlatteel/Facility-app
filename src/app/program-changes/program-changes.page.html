@@ -1,0 +1,32 @@
+<ion-content [fullscreen]="true" class="content-no-header">
+  <div class="pc-page">
+    <div class="pc-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back"><ion-icon name="arrow-back"></ion-icon></button>
+      <div class="pc-title">
+        <h1>Change Log</h1>
+        <p>Corrections made while reviewing programs, most frequent first. Resolve one once the generator no longer needs it.</p>
+      </div>
+      <div class="pc-tabs">
+        <button [class.on]="!showResolved" (click)="showResolved = false">Open</button>
+        <button [class.on]="showResolved" (click)="showResolved = true">Resolved ({{ resolvedCount }})</button>
+      </div>
+    </div>
+
+    <div *ngIf="loading" class="state-msg">Loading…</div>
+    <div *ngIf="!loading && !groups.length" class="state-msg">{{ showResolved ? 'Nothing resolved yet.' : 'No changes logged yet. They appear here as you save program reviews.' }}</div>
+
+    <div class="pc-row" *ngFor="let g of groups">
+      <span class="pc-count">{{ g.count }}</span>
+      <div class="pc-main">
+        <b>{{ g.summary }}</b>
+        <span class="pc-sub">{{ g.athletes.length }} athlete{{ g.athletes.length === 1 ? '' : 's' }} · last {{ when(g.last) }}</span>
+        <ul class="pc-notes" *ngIf="g.notes.length">
+          <li *ngFor="let n of g.notes">{{ n }}</li>
+        </ul>
+      </div>
+      <button class="ghost-btn" (click)="toggle(g)">
+        <ion-icon name="checkmark-circle"></ion-icon> {{ showResolved ? 'Reopen' : 'Resolve' }}
+      </button>
+    </div>
+  </div>
+</ion-content>

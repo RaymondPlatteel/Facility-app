@@ -32,8 +32,8 @@
   text-decoration: none;
 
   &:hover, &.active {
-    color: #00d4ff;
-    border-color: rgba(0, 212, 255, 0.3);
+    color: var(--hud-accent, #00d4ff);
+    border-color: color-mix(in srgb, var(--hud-accent, #00d4ff) 30%, transparent);
   }
 
   &--admin {
@@ -54,7 +54,7 @@
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  color: #00d4ff;
+  color: var(--hud-accent, #00d4ff);
   white-space: nowrap;
 
   ion-icon { font-size: 14px; }
@@ -133,7 +133,7 @@ ion-app.has-sidebar {
   display: flex;
   flex-direction: column;
   background: #050505;
-  border-right: 1px solid rgba(0, 212, 255, 0.12);
+  border-right: 1px solid color-mix(in srgb, var(--hud-accent, #00d4ff) 12%, transparent);
   padding: calc(18px + env(safe-area-inset-top)) 0 calc(14px + env(safe-area-inset-bottom));
   box-sizing: border-box;
   overflow-y: auto;
@@ -152,7 +152,7 @@ ion-app.has-sidebar {
     font-size: 15px;
     font-weight: 700;
     letter-spacing: 4px;
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
     text-transform: uppercase;
   }
 }
@@ -204,8 +204,8 @@ ion-app.has-sidebar {
   }
 
   &.active {
-    color: #00d4ff;
-    background: rgba(0, 212, 255, 0.1);
+    color: var(--hud-accent, #00d4ff);
+    background: color-mix(in srgb, var(--hud-accent, #00d4ff) 10%, transparent);
   }
 
   &--pending .nav-badge {
@@ -223,7 +223,7 @@ ion-app.has-sidebar {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 
   .nav-trainer {
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
   }
 
   .nav-btn {
@@ -303,7 +303,7 @@ ion-app.has-sidebar {
     padding: env(safe-area-inset-top) calc(16px + env(safe-area-inset-right)) 0 calc(12px + env(safe-area-inset-left));
     z-index: 9998;
     background: rgba(8, 8, 16, 0.96);
-    border-bottom: 1px solid rgba(0, 212, 255, 0.12);
+    border-bottom: 1px solid color-mix(in srgb, var(--hud-accent, #00d4ff) 12%, transparent);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     box-sizing: border-box;
@@ -319,7 +319,7 @@ ion-app.has-sidebar {
     border-radius: 8px;
     border: none;
     background: transparent;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     font-size: 22px;
     cursor: pointer;
 
@@ -335,7 +335,7 @@ ion-app.has-sidebar {
     font-size: 13px;
     font-weight: 700;
     letter-spacing: 3px;
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
     text-transform: uppercase;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -351,9 +351,9 @@ ion-app.has-sidebar {
     gap: 5px;
     padding: 6px 10px;
     border-radius: 8px;
-    border: 1px solid rgba(0, 212, 255, 0.3);
-    background: rgba(0, 212, 255, 0.08);
-    color: #00d4ff;
+    border: 1px solid color-mix(in srgb, var(--hud-accent, #00d4ff) 30%, transparent);
+    background: color-mix(in srgb, var(--hud-accent, #00d4ff) 8%, transparent);
+    color: var(--hud-accent, #00d4ff);
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
     font-size: 12px;
     font-weight: 600;
@@ -362,7 +362,7 @@ ion-app.has-sidebar {
 
     ion-icon { font-size: 15px; flex-shrink: 0; }
 
-    &:active { background: rgba(0, 212, 255, 0.16); }
+    &:active { background: color-mix(in srgb, var(--hud-accent, #00d4ff) 16%, transparent); }
   }
 
   .sidebar-backdrop {
@@ -437,7 +437,7 @@ ion-app.has-sidebar {
 
 /* Global admin PIN keypad */
 .keypad-modal {
-  --background: #01070f;
+  --background: var(--hud-bg, #01070f);
   --width: 420px;
   --height: 560px;
   --border-radius: 16px;
@@ -459,8 +459,8 @@ ion-app.has-sidebar {
   align-items: center;
   justify-content: center;
   height: 100%;
-  background: #01070f;
-  border: 1px solid #133748;
+  background: var(--hud-bg, #01070f);
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 16px;
 }
 
@@ -471,9 +471,9 @@ ion-app.has-sidebar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   background: transparent;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 18px;
   display: flex;
   align-items: center;
@@ -481,8 +481,8 @@ ion-app.has-sidebar {
   cursor: pointer;
 
   &:hover {
-    color: #dceaf6;
-    border-color: #00d4ff;
+    color: var(--hud-text, #dceaf6);
+    border-color: var(--hud-accent, #00d4ff);
   }
 }
 
@@ -492,7 +492,7 @@ ion-app.has-sidebar {
   font-weight: 700;
   letter-spacing: 4px;
   text-transform: uppercase;
-  color: #00d4ff;
+  color: var(--hud-accent, #00d4ff);
   margin-bottom: 18px;
 }
 
@@ -512,14 +512,14 @@ ion-app.has-sidebar {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 2px solid #133748;
+  border: 2px solid var(--hud-border, #133748);
   background: transparent;
   transition: all 0.2s ease;
 
   &.filled {
-    background: #00d4ff;
-    border-color: #00d4ff;
-    box-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
+    background: var(--hud-accent, #00d4ff);
+    border-color: var(--hud-accent, #00d4ff);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--hud-accent, #00d4ff) 30%, transparent);
   }
 
   &.error {
@@ -553,9 +553,9 @@ ion-app.has-sidebar {
   width: 76px;
   height: 76px;
   border-radius: 50%;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   background: #070b12;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-size: 1.5rem;
   font-weight: 600;
   cursor: pointer;
@@ -566,8 +566,8 @@ ion-app.has-sidebar {
 
   &:hover:not(.disabled) {
     background: #0a1018;
-    border-color: #00d4ff;
-    color: #00d4ff;
+    border-color: var(--hud-accent, #00d4ff);
+    color: var(--hud-accent, #00d4ff);
   }
 
   &:active:not(.disabled) {

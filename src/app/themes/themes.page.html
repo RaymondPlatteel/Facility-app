@@ -1,0 +1,407 @@
+<ion-content [fullscreen]="true" class="content-no-header">
+<ng-template #row let-c>
+  <div class="ctl-row">
+    <span class="ctl-name">{{ c.label }}</span>
+    <ng-container [ngSwitch]="c.type">
+      <input *ngSwitchCase="'color'" type="color" [ngModel]="val(c)" (ngModelChange)="set(c, $event)" />
+      <ng-container *ngSwitchCase="'range'">
+        <input type="range" [min]="c.min" [max]="c.max" [step]="c.step" [ngModel]="val(c)" (ngModelChange)="set(c, $event)" />
+        <span class="ctl-val">{{ show(c) }}</span>
+      </ng-container>
+      <select *ngSwitchCase="'select'" [ngModel]="val(c)" (ngModelChange)="set(c, $event)"><option *ngFor="let o of c.options" [value]="o">{{ o }}</option></select>
+      <input *ngSwitchCase="'toggle'" type="checkbox" [ngModel]="val(c)" (ngModelChange)="set(c, $event)" />
+    </ng-container>
+  </div>
+</ng-template>
+  <div class="th-page">
+
+    <div class="th-head">
+      <h2>Themes</h2>
+      <p>Build the looks athletes can pick in Settings. Pick one to three colours and a whole theme is built for you, then change anything: background, corners, buttons, text. The frames on the right are the real app, showing Raymond's account.</p>
+    </div>
+
+    <div class="th-controls">
+      <div class="seg-row">
+        <button class="base" [class.on]="isBase" (click)="openBase()">Base style<em>every theme</em></button>
+        <button *ngFor="let t of saved" [class.on]="editing?.id === t.id" (click)="edit(t)">
+          <span class="sw3"><i *ngFor="let c of (t.swatch?.length ? t.swatch : [t.accent])" [style.background]="c"></i></span>{{ t.name }}<em *ngIf="!t.published">draft</em>
+        </button>
+        <button class="add" (click)="newTheme()"><ion-icon name="add-outline"></ion-icon> New theme</button>
+      </div>
+      <div class="seg-row rank-row">
+        <span class="row-label">Rank colours</span>
+        <button *ngFor="let r of ranks" [class.on]="isRank && editing?.rank === r.key" (click)="openRank(r.key)" [style.--dot]="rankSwatch(r.key)"><i></i>{{ r.key === 'UNRANKED' ? 'Unranked' : r.letter }}<em *ngIf="rankEdited(r.key)">edited</em></button>
+      </div>
+      <div class="coach-use">
+        <button *ngIf="editing && !isBase" (click)="useInCoachApp()">Use in coach app</button>
+        <button *ngIf="coachTheme.active" (click)="resetCoachApp()">Reset coach app</button>
+      </div>
+    </div>
+
+    <div class="work">
+      <!-- ===== editor ===== -->
+      <section class="editor">
+        <!-- what was just clicked in the app -->
+        <div class="ins" *ngIf="inspectInfo as ins">
+          <div class="ins-head"><div><b>{{ ins.title }}</b><code>{{ ins.classes }}</code></div><button class="x" (click)="inspect(inspecting!, false)" aria-label="Clear">×</button></div>
+          <ng-container *ngIf="editing; else needOpen">
+            <ng-container *ngFor="let c of inspectCtl; trackBy: trackKey"><ng-container *ngTemplateOutlet="row; context: { $implicit: c }"></ng-container></ng-container>
+            <div class="ins-colors" *ngIf="inspectColors.length">
+              <div class="ins-sub">Colours</div>
+              <div class="ed-token" *ngFor="let r of inspectColors; trackBy: trackName">
+                <input type="color" [ngModel]="r.value" (ngModelChange)="setColor(r.name, $event)" />
+                <span><b>{{ r.use || r.name }}</b><em>{{ r.name }}</em></span>
+                <button *ngIf="isOverridden(r.name)" (click)="resetColor(r.name)">reset</button>
+              </div>
+            </div>
+          </ng-container>
+          <ng-template #needOpen>
+            <p class="ed-hint">Open a theme to change this. Everything you tap in the app frames lands here.</p>
+            <div class="ed-actions"><button class="primary" (click)="newTheme()">New theme</button><button (click)="openBase()">Base style</button></div>
+          </ng-template>
+        </div>
+
+        <div class="ed-empty" *ngIf="!editing && !inspectInfo">
+          <b>Tap anything in the app to change it.</b>
+          <p>Or start from a look:</p>
+          <div class="preset-grid">
+            <button *ngFor="let p of colorPresets" (click)="newFromPreset(p)"><span class="sw3 big"><i *ngFor="let c of p.colors" [style.background]="c"></i></span>{{ p.name }}</button>
+          </div>
+          <p><strong>Rank colours</strong> (top bar) are the colours athletes get from their rank. You can restyle those too. <strong>Base style</strong> is the shape and fonts under everything.</p>
+        </div>
+
+        <ng-container *ngIf="editing">
+          <div class="ed-bar">
+            <div class="ed-name" *ngIf="!isBase && !isRank"><input type="text" maxlength="24" [(ngModel)]="editing.name" placeholder="Theme name, e.g. Deep Ocean" /></div>
+            <h3 *ngIf="isBase">Base style</h3><h3 *ngIf="isRank">{{ editing.name }} colour</h3>
+            <button class="x" (click)="close()" aria-label="Close"><ion-icon name="close-outline"></ion-icon></button>
+          </div>
+
+          <div class="ed-meta" *ngIf="!isBase && !isRank">
+            <label class="ed-field"><span>Unlocks at</span>
+              <select [(ngModel)]="editing.unlockRank"><option *ngFor="let u of unlockChoices" [value]="u">{{ u === 'NONE' ? 'Everyone' : u.replace('-RANK', '-Rank') }}</option></select>
+            </label>
+            <label class="ed-check"><input type="checkbox" [(ngModel)]="editing.published" /> Published</label>
+          </div>
+          <p class="ed-hint" *ngIf="isRank">Athletes at this rank (and anyone who picks it) get this look. {{ editing.rank === "S-RANK" ? "S-Rank keeps its moving chrome colour; only the shape, background and text apply." : "" }}</p>
+          <p class="ed-hint" *ngIf="isBase">Shape, buttons and text only. Colours and backgrounds belong to a rank or a theme.</p>
+
+          <!-- quick tweaks: the few things that change the most -->
+          <div class="quick" *ngIf="!isBase">
+            <div class="quick-head" *ngIf="!isRank"><b>Colours</b><span>Pick 1 to 3, or start from a look. The theme builds itself.</span></div>
+            <div class="quick-row" *ngIf="!isRank">
+              <input *ngFor="let c of quick; let i = index; trackBy: trackIndex" type="color" [ngModel]="c" (ngModelChange)="setQuick(i, $event)" />
+              <button *ngIf="quick.length < 3" class="mini" (click)="addQuick()">+ colour</button>
+              <button *ngIf="quick.length > 1" class="mini" (click)="removeQuick()">− colour</button>
+            </div>
+            <div class="preset-grid small" *ngIf="!isRank">
+              <button *ngFor="let p of colorPresets" (click)="applyPreset(p.colors)"><span class="sw3"><i *ngFor="let c of p.colors" [style.background]="c"></i></span>{{ p.name }}</button>
+            </div>
+          </div>
+          <div class="quick">
+            <div class="quick-head"><b>Corners</b></div>
+            <div class="chip-row"><button *ngFor="let sp of shapePresets" [class.on]="sameShape(sp.set)" (click)="applyShape(sp.set)">{{ sp.name }}</button></div>
+            <div class="quick-head"><b>Text</b></div>
+            <div class="chip-row"><button *ngFor="let f of fontPresets" [class.on]="sameFonts(f)" (click)="applyFonts(f)" [style.font-family]="'\'' + f.d + '\''">{{ f.name }}</button></div>
+          </div>
+          <div class="adv-title">Fine-tune everything</div>
+
+          <ng-container *ngFor="let g of groups">
+            <details class="grp" *ngIf="!(isBase && (g.id === 'colors' || g.id === 'background'))" >
+              <summary>{{ g.title }} <em>{{ g.hint }}</em></summary>
+              <ng-container *ngFor="let c of ctl[g.id]; trackBy: trackKey"><ng-container *ngTemplateOutlet="row; context: { $implicit: c }"></ng-container></ng-container>
+              <div class="ctl-row" *ngIf="g.id === 'background' && cfg.bgType === 'image'">
+                <span class="ctl-name">Photo</span>
+                <input type="file" accept="image/*" (change)="pickImage($event)" />
+              </div>
+              <div class="ctl-row" *ngIf="g.id === 'background' && cfg.bgType === 'image' && !cfg.bgImage"><span class="ed-hint">Choose a photo. It is shrunk to phone size.</span></div>
+            </details>
+          </ng-container>
+
+          <details class="grp" *ngIf="!isBase">
+            <summary>Every colour <em>Fine-tune any colour the app uses.</em></summary>
+            <div class="ed-tokens">
+              <div class="ed-token" *ngFor="let r of paletteRows; trackBy: trackName">
+                <input type="color" [ngModel]="r.value" (ngModelChange)="setColor(r.name, $event)" />
+                <span><b>{{ r.name }}</b><em>{{ r.use }}</em></span>
+                <button *ngIf="isOverridden(r.name)" (click)="resetColor(r.name)">reset</button>
+              </div>
+            </div>
+          </details>
+
+          <div class="ed-actions">
+            <button class="primary" [disabled]="busy" (click)="save()">{{ isBase ? 'Save base style' : isRank ? 'Save rank colour' : editing.id ? 'Save changes' : 'Save theme' }}</button>
+            <button class="danger" *ngIf="isRank && rankEdited(editing.rank!)" [disabled]="busy" (click)="resetRank()">Reset to default</button>
+            <button class="danger" *ngIf="editing.id && !isBase && !isRank" [disabled]="busy" (click)="remove()"><ion-icon name="trash-outline"></ion-icon> Delete</button>
+            <span class="ed-msg" *ngIf="message">{{ message }}</span>
+          </div>
+        </ng-container>
+      </section>
+
+      <!-- ===== the real app ===== -->
+      <aside class="preview">
+        <div class="pv-bar">
+          <div class="chips"><button *ngFor="let s of screens" [class.on]="on.has(s.id)" (click)="toggleScreen(s.id)">{{ s.label }}</button></div>
+          <label class="pv-server"><span>App address</span><input type="text" [ngModel]="previewBase" (ngModelChange)="setBase($event)" /></label>
+        </div>
+        <p class="pv-note">These frames are the real app, so the athlete app must be running (<code>npm start</code> in Project-000, port 4200). They are look-only. Raymond's account is read, never changed.</p>
+        <div class="frames">
+          <div class="frame-wrap" *ngFor="let s of shown">
+            <div class="frame-title">{{ s.label }}</div>
+            <div class="frame-box"><iframe #frame [src]="src(s) | safeUrl" title="{{ s.label }}" (load)="onFrameLoad()"></iframe></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <details class="catalog-wrap">
+      <summary>Component reference <em>A catalogue of every piece. Click one to edit it.</em></summary>
+      <div class="th-controls ref-controls">
+        <div class="ctl"><span class="ctl-label">Rank</span>
+          <div class="seg-row"><button *ngFor="let r of ranks" [class.on]="rank === r.key" (click)="pickRank(r.key)" [style.--dot]="r.key === 'S-RANK' ? '#dbe2ec' : shade(r.key, 'mid')"><i></i>{{ r.key === 'UNRANKED' ? 'Unranked' : r.letter }}</button></div>
+        </div>
+        <div class="ctl ctl-range" *ngIf="!isS"><span class="ctl-label">Position in rank <b>{{ position }}</b></span><input type="range" min="0" max="100" [value]="position" (input)="position = +$any($event.target).value" /></div>
+      </div>
+      <div class="stage" [class.rank-s]="isS" [ngStyle]="vars">
+       <div class="cols">
+        <div class="catalog">
+<!-- ===== Tokens ===== -->
+      <section class="sec">
+        <h3 class="sec-title">1 · Colour tokens</h3>
+        <p class="sec-sub">The whole palette is derived from one accent colour (the rank). Click a swatch to change that colour.</p>
+        <div class="token-grid">
+          <div class="token" *ngFor="let t of tokenRows; trackBy: trackName" (click)="!editing && needTheme()">
+            <input type="color" [ngModel]="t.value" [disabled]="!editing || isBase" (ngModelChange)="setColor(t.name, $event)" />
+            <span class="tk-main"><b>{{ t.name }}</b><em>{{ t.use }}</em></span>
+            <span class="tk-val">{{ t.value }}</span>
+            <button class="tk-reset" *ngIf="isOverridden(t.name)" (click)="resetColor(t.name)">reset</button>
+          </div>
+        </div>
+        <div class="item">
+          <div class="item-head"><b>Rank ladder</b><code>levelColor() · RANK_SHADES</code><span>Every rank, light to dark end of its band</span></div>
+          <div class="ladder">
+            <div *ngFor="let r of ranks" class="ladder-col">
+              <span class="ladder-letter" [style.color]="r.key === 'S-RANK' ? '#dbe2ec' : r.light">{{ r.letter }}</span>
+              <span class="ladder-sw" [style.background]="r.key === 'S-RANK' ? grad : 'linear-gradient(' + r.light + ',' + r.dark + ')'"></span>
+              <em>{{ r.key === 'S-RANK' ? 'chroma' : r.light }}</em>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Typography ===== -->
+      <section class="sec">
+        <h3 class="sec-title">2 · Text</h3>
+        <div class="item click" [class.sel]="inspecting === 'text'" (click)="inspect('text')">
+          <div class="item-head"><b>Display</b><code>--font-display · Bebas Neue</code><span>Timer, big numbers, titles</span></div>
+          <div class="t-display">0:42 · OVERVIEW · 1,250</div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'text'" (click)="inspect('text')">
+          <div class="item-head"><b>Label</b><code>--font-label · Barlow Condensed</code><span>Eyebrows, field labels, meta</span></div>
+          <div class="t-label">Exercise 02 / 06</div>
+          <div class="t-meta">Sat, Oct 4 · 3 sets</div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'text'" (click)="inspect('text')">
+          <div class="item-head"><b>Body</b><code>--font-body · Barlow</code><span>Paragraphs, row titles</span></div>
+          <p class="t-body">Build to full speed over the distance. Walk back for about two minutes of rest between runs.</p>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'text'" (click)="inspect('text')">
+          <div class="item-head"><b>Section title</b><code>.hud-section-title</code></div>
+          <div class="hud-section-title">Recent updates</div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'text'" (click)="inspect('text')">
+          <div class="item-head"><b>Status text</b><code>.hud-status-text · .hud-error-text · .hud-saved-text</code></div>
+          <p class="hud-status-text">loading…</p>
+          <p class="hud-error-text">Could not save. Try again.</p>
+          <p class="hud-saved-text">Saved</p>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'text'" (click)="inspect('text')">
+          <div class="item-head"><b>Accent text</b><code>var(--hud-accent) · .chroma-text at S-Rank</code></div>
+          <span class="t-accent">12 reps × 135 lb</span>
+        </div>
+      </section>
+
+      <!-- ===== Buttons ===== -->
+      <section class="sec">
+        <h3 class="sec-title">3 · Buttons</h3>
+        <div class="item click" [class.sel]="inspecting === 'button'" (click)="inspect('button')">
+          <div class="item-head"><b>Primary</b><code>.hud-btn .hud-btn-solid</code><span>Save workout, Continue</span></div>
+          <button class="hud-btn hud-btn-solid">Save workout</button>
+          <button class="hud-btn hud-btn-solid" disabled>Disabled</button>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'button'" (click)="inspect('button')">
+          <div class="item-head"><b>Secondary</b><code>.hud-btn .hud-btn-outline</code><span>Discard, Cancel</span></div>
+          <button class="hud-btn hud-btn-outline">Discard workout</button>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'button'" (click)="inspect('button')">
+          <div class="item-head"><b>Hero pill</b><code>.hero-cta .hero-cta-reserve</code><span>Reserve your spot, announcement actions</span></div>
+          <button class="pill-cta">Reserve your spot</button>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'button'" (click)="inspect('button')">
+          <div class="item-head"><b>Get Started pill</b><code>.hero-cta.get-started-cta</code><span class="warn">Fixed cyan on purpose (unranked). Not part of the rank kit.</span></div>
+          <button class="pill-cta fixed-cyan">Get started</button>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'button'" (click)="inspect('button')">
+          <div class="item-head"><b>Small pill</b><code>.due-payment-btn</code><span class="warn">Hard-coded #041018 background</span></div>
+          <button class="mini-pill">Pay now</button>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'button'" (click)="inspect('button')">
+          <div class="item-head"><b>Icon button</b><code>.hud-icon-btn</code></div>
+          <button class="hud-icon-btn"><ion-icon name="copy-outline"></ion-icon></button>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'button'" (click)="inspect('button')">
+          <div class="item-head"><b>Filter chips</b><code>.cmp · .cmp.on</code><span>Same reps / Last session</span></div>
+          <div class="chips"><button class="cmp on">Same reps</button><button class="cmp">Last session</button><button class="cmp">Oct 2</button></div>
+        </div>
+      </section>
+
+      <!-- ===== Fields ===== -->
+      <section class="sec">
+        <h3 class="sec-title">4 · Fields</h3>
+        <div class="item click" [class.sel]="inspecting === 'field'" (click)="inspect('field')">
+          <div class="item-head"><b>Text field</b><code>.hud-field · .hud-field-label · .hud-input</code></div>
+          <div class="hud-field"><label class="hud-field-label">Workout name</label><input class="hud-input" placeholder="e.g. Leg Day" /></div>
+          <div class="hud-field"><label class="hud-field-label">Notes</label><textarea class="hud-input" rows="2" placeholder="Optional"></textarea></div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'field'" (click)="inspect('field')">
+          <div class="item-head"><b>1–10 scale</b><code>.hud-scale · .hud-scale-btn.selected</code><span>Daily check-in</span></div>
+          <div class="hud-scale"><button *ngFor="let n of scale" class="hud-scale-btn" [class.selected]="n === scaleOn" (click)="scaleOn = n">{{ n }}</button></div>
+          <div class="hud-scale-anchors"><span>Depleted</span><span>Primed</span></div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'field'" (click)="inspect('field')">
+          <div class="item-head"><b>Slider</b><code>.hud-slider</code></div>
+          <input type="range" class="hud-slider" min="1" max="10" value="6" />
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'field'" (click)="inspect('field')">
+          <div class="item-head"><b>Set tile</b><code>.tile · .tile-input</code><span>Weight / reps / RIR in the workout log</span></div>
+          <div class="tiles"><label class="tile"><em>Weight</em><input value="135" /></label><label class="tile"><em>Reps</em><input value="8" /></label><label class="tile"><em>RIR</em><input placeholder="—" /></label></div>
+        </div>
+      </section>
+
+      <!-- ===== Cards & panels ===== -->
+      <section class="sec">
+        <h3 class="sec-title">5 · Cards, panels and rows</h3>
+        <div class="item click" [class.sel]="inspecting === 'card'" (click)="inspect('card')">
+          <div class="item-head"><b>Card</b><code>.hud-card · .hud-card-intro</code></div>
+          <div class="hud-card"><div class="hud-card-intro"><h3>Daily check-in</h3><p>Two minutes. It helps your program adapt.</p></div></div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'card'" (click)="inspect('card')">
+          <div class="item-head"><b>Panel</b><code>.hud-panel</code></div>
+          <div class="hud-panel">Flat panel for lists and secondary content.</div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'card'" (click)="inspect('card')">
+          <div class="item-head"><b>Row</b><code>.hud-row · .hud-row-title · .hud-row-meta</code></div>
+          <div class="hud-row"><div class="hud-row-main"><span class="hud-row-title">Back Squat</span><span class="hud-row-meta">Oct 2 · 3 × 5 · 225 lb</span></div><span class="t-accent">PR</span></div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'card'" (click)="inspect('card')">
+          <div class="item-head"><b>Stat tile</b><code>.stat · .stat-grid</code><span>Overview, workout summary</span></div>
+          <div class="stat-grid"><div class="stat"><span>Exercises</span><b>6</b></div><div class="stat"><span>Sets</span><b>19</b></div></div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'card'" (click)="inspect('card')">
+          <div class="item-head"><b>Plan list</b><code>.plan-item · .plan-name · .plan-line · .plan-note</code></div>
+          <div class="hud-panel plan"><div class="plan-item"><span class="plan-name">Weighted Pull-up</span><span class="plan-line">3 × 8 · RIR 1</span><span class="plan-note">Pause at the top.</span></div><div class="plan-item"><span class="plan-name">Broad Jump</span><span class="plan-line">1 × 15</span></div></div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'card'" (click)="inspect('card')">
+          <div class="item-head"><b>Rank tile</b><code>.rank-tile</code><span>World · Competitors</span></div>
+          <div class="tile-rail"><div *ngFor="let r of ranks.slice(1)" class="rank-tile" [style.--tile]="r.key === 'S-RANK' ? '#dbe2ec' : shade(r.key, 'mid')"><span class="rank-tile-letter">{{ r.letter }}</span><span class="rank-tile-count">12</span><span class="rank-tile-label">{{ r.letter }}-Rank</span></div></div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'card'" (click)="inspect('card')">
+          <div class="item-head"><b>Rank split bar</b><code>.hero-split-bar</code></div>
+          <div class="split"><span *ngFor="let r of ranks; let i = index" [style.flex-grow]="6 - i" [style.background]="r.key === 'S-RANK' ? '#dbe2ec' : shade(r.key, 'mid')"></span></div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'card'" (click)="inspect('card')">
+          <div class="item-head"><b>Payment banner</b><code>.due-payment-banner</code></div>
+          <div class="banner"><div><b>Your coach approved your session</b><em>Oct 6 at 5:00 PM · $60</em></div><button class="mini-pill">Pay now</button></div>
+        </div>
+      </section>
+
+      <!-- ===== Badges & indicators ===== -->
+      <section class="sec">
+        <h3 class="sec-title">6 · Badges and indicators</h3>
+        <div class="item click" [class.sel]="inspecting === 'badge'" (click)="inspect('badge')">
+          <div class="item-head"><b>Rank badge</b><code>.hud-badge</code></div>
+          <span class="hud-badge" [style.color]="'var(--hud-accent)'">{{ rank === 'UNRANKED' ? 'UNRANKED' : rank }}</span>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'badge'" (click)="inspect('badge')">
+          <div class="item-head"><b>Workout badges</b><code>.badge · .badge.pr · .badge.bench</code></div>
+          <span class="badge pr"><ion-icon name="trophy"></ion-icon> New PR</span> <span class="badge bench">Heavy</span>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'badge'" (click)="inspect('badge')">
+          <div class="item-head"><b>New tag</b><code>.hero-new</code></div>
+          <span class="kicker">Official Announcement <b class="new-tag">New</b></span>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'badge'" (click)="inspect('badge')">
+          <div class="item-head"><b>Pager dots</b><code>.hero-dot · .on · .unread</code><span>Unread pulses in the rank colour</span></div>
+          <div class="dots"><span class="dot"></span><span class="dot on"></span><span class="dot unread"></span><span class="dot"></span></div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'badge'" (click)="inspect('badge')">
+          <div class="item-head"><b>Workout progress</b><code>.seg · .seg.full · .seg.here</code></div>
+          <div class="segs"><span class="sg full"></span><span class="sg full"></span><span class="sg here"></span><span class="sg"></span><span class="sg"></span></div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'badge'" (click)="inspect('badge')">
+          <div class="item-head"><b>Progress bar</b><code>.adherence-track · .adherence-fill</code></div>
+          <div class="track"><div class="fill" style="width: 72%"></div></div>
+        </div>
+      </section>
+
+      <!-- ===== Navigation ===== -->
+      <section class="sec">
+        <h3 class="sec-title">7 · Navigation</h3>
+        <div class="item click" [class.sel]="inspecting === 'nav'" (click)="inspect('nav')">
+          <div class="item-head"><b>Bottom nav</b><code>.bottom-nav · .bn-tab</code></div>
+          <div class="bnav">
+            <span class="bn-tab"><span class="bn-avatar">RP</span></span>
+            <span class="bn-tab active"><ion-icon name="globe-outline"></ion-icon><b class="bn-badge">1</b></span>
+            <span class="bn-tab"><ion-icon name="barbell-outline"></ion-icon></span>
+          </div>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'nav'" (click)="inspect('nav')">
+          <div class="item-head"><b>Link row</b><code>.w-heading-link</code><span>Leaderboard ›</span></div>
+          <span class="w-link">Leaderboard <ion-icon name="chevron-forward"></ion-icon></span>
+        </div>
+      </section>
+
+      <!-- ===== Charts ===== -->
+      <section class="sec">
+        <h3 class="sec-title">8 · Charts</h3>
+        <div class="item click" [class.sel]="inspecting === 'chart'" (click)="inspect('chart')">
+          <div class="item-head"><b>Line chart card</b><code>app-line-chart · .chart-card</code><span>Frame follows the rank (chroma at S)</span></div>
+          <div class="chart-card">
+            <div class="chart-head"><div class="chart-id"><span class="chart-rank">{{ rank === 'UNRANKED' ? '–' : rank.charAt(0) }}</span><div><div class="chart-label">Back Squat</div><div class="chart-sub">Estimated 1RM</div></div></div><div class="chart-latest">265 <small>lb</small></div></div>
+            <svg viewBox="0 0 300 90" preserveAspectRatio="none" class="chart-svg">
+              <line class="grid" x1="0" x2="300" y1="20" y2="20"/><line class="grid" x1="0" x2="300" y1="55" y2="55"/>
+              <path d="M0,70 L50,62 L100,64 L150,44 L200,38 L250,24 L300,16" fill="none" stroke="var(--hud-accent)" stroke-width="2.5" stroke-linejoin="round"/>
+              <circle cx="300" cy="16" r="3.5" fill="var(--hud-accent)"/>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Feedback ===== -->
+      <section class="sec">
+        <h3 class="sec-title">9 · Notes, alerts and empty states</h3>
+        <div class="item click" [class.sel]="inspecting === 'text'" (click)="inspect('text')">
+          <div class="item-head"><b>Gentle note</b><code>.plan-review · .tr-review</code></div>
+          <p class="t-note">This program hasn't been reviewed by a coach yet. There may be minor adjustments.</p>
+        </div>
+        <div class="item click" [class.sel]="inspecting === 'text'" (click)="inspect('text')">
+          <div class="item-head"><b>Warning · Danger · Success</b><code>--hud-warn · --hud-danger · --hud-success</code></div>
+          <div class="status"><span style="color: var(--hud-warn)">Warning</span><span style="color: var(--hud-danger)">Danger</span><span style="color: var(--hud-success)">Success</span></div>
+        </div>
+      </section>
+      
+        </div>
+       </div>
+      </div>
+
+      <section class="audit">
+        <h3>Where the app strays from the kit</h3>
+        <div class="audit-grid">
+          <div><b>{{ audit.tokenUses | number }}</b><span>colour uses that follow the tokens</span></div>
+          <div><b>{{ audit.hardcodedColours }}</b><span>hard-coded colours</span></div>
+          <div><b>{{ audit.buttonLikeClasses }}</b><span>separate button classes — the kit has 3</span></div>
+        </div>
+      </section>
+    </details>
+  </div>
+</ion-content>

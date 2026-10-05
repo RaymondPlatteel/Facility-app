@@ -1,10 +1,10 @@
 ion-content {
-  --background: #01070f;
+  --background: var(--hud-bg, #01070f);
 }
 
 ion-toolbar {
   --background: #04070c;
-  --color: #dceaf6;
+  --color: var(--hud-text, #dceaf6);
 }
 
 .feedback-admin-container {
@@ -24,14 +24,14 @@ ion-toolbar {
 
 .crm-title h2 {
   margin: 0;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-size: 1.5rem;
   font-weight: 700;
 }
 
 .crm-title .subtitle {
   margin: 4px 0 0;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 0.9rem;
 }
 
@@ -42,7 +42,7 @@ ion-toolbar {
 
 .stat-chip {
   background: #04070c;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 10px;
   padding: 10px 18px;
   display: flex;
@@ -52,7 +52,7 @@ ion-toolbar {
 }
 
 .stat-value {
-  color: #00d4ff;
+  color: var(--hud-accent, #00d4ff);
   font-size: 1.3rem;
   font-weight: 700;
   display: flex;
@@ -60,13 +60,13 @@ ion-toolbar {
   gap: 4px;
 
   .avg-star {
-    color: #f5b942;
+    color: var(--hud-warn, #f5b942);
     font-size: 1rem;
   }
 }
 
 .stat-label {
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -83,9 +83,9 @@ ion-toolbar {
 .filter-search,
 .filter-select {
   background: #070b12;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 8px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   padding: 10px 12px;
   font-size: 0.9rem;
   outline: none;
@@ -100,7 +100,7 @@ ion-toolbar {
   min-width: 220px;
 
   &::placeholder {
-    color: #4a6378;
+    color: var(--hud-text-faint, #4a6378);
   }
 }
 
@@ -110,7 +110,7 @@ ion-toolbar {
 }
 
 .loading-state {
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   text-align: center;
   padding: 48px 0;
 }
@@ -118,24 +118,24 @@ ion-toolbar {
 .empty-state {
   text-align: center;
   padding: 56px 16px;
-  border: 1px dashed #133748;
+  border: 1px dashed var(--hud-border, #133748);
   border-radius: 12px;
   background: #04070c;
 
   ion-icon {
     font-size: 2.4rem;
-    color: #4a6378;
+    color: var(--hud-text-faint, #4a6378);
   }
 
   h3 {
     margin: 12px 0 4px;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     font-weight: 600;
   }
 
   p {
     margin: 0;
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
     font-size: 0.9rem;
   }
 }
@@ -148,7 +148,7 @@ ion-toolbar {
 
 .feedback-card {
   background: #04070c;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 12px;
   padding: 16px 18px;
   transition: border-color 0.15s ease;
@@ -173,13 +173,13 @@ ion-toolbar {
 }
 
 .student-name {
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-weight: 600;
   font-size: 1rem;
 }
 
 .session-name {
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
   font-size: 0.8rem;
 }
 
@@ -195,24 +195,24 @@ ion-toolbar {
 
   ion-icon {
     font-size: 0.95rem;
-    color: #4a6378;
+    color: var(--hud-text-faint, #4a6378);
 
     &.filled {
-      color: #f5b942;
+      color: var(--hud-warn, #f5b942);
     }
   }
 }
 
 .date {
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 0.8rem;
 }
 
 .delete-btn {
   background: transparent;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 8px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   padding: 6px 8px;
   cursor: pointer;
   display: flex;
@@ -224,14 +224,14 @@ ion-toolbar {
   }
 
   &:hover {
-    color: #ff5a6a;
-    border-color: #ff5a6a;
+    color: var(--hud-danger, #ff5a6a);
+    border-color: var(--hud-danger, #ff5a6a);
   }
 }
 
 .card-comment {
   margin: 12px 0 0;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-size: 0.95rem;
   line-height: 1.55;
   white-space: pre-wrap;

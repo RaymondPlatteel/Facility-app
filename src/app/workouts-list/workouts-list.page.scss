@@ -1,6 +1,6 @@
 .linking-header {
   background: #0a1018;
-  border-bottom: 1px solid #00d4ff;
+  border-bottom: 1px solid var(--hud-accent, #00d4ff);
   padding: 16px;
   margin-bottom: 8px;
   
@@ -10,19 +10,19 @@
     gap: 12px;
     
     ion-icon {
-      color: #00d4ff;
+      color: var(--hud-accent, #00d4ff);
       font-size: 1.5rem;
     }
     
     h4 {
-      color: #dceaf6;
+      color: var(--hud-text, #dceaf6);
       font-size: 1rem;
       font-weight: 600;
       margin: 0 0 4px 0;
     }
     
     p {
-      color: #00d4ff;
+      color: var(--hud-accent, #00d4ff);
       font-size: 1.1rem;
       font-weight: 500;
       margin: 0;
@@ -32,14 +32,14 @@
 
 .workouts-container {
   padding: 16px;
-  background: #01070f;
+  background: var(--hud-bg, #01070f);
   min-height: 100vh;
 }
 
 .empty-state {
   text-align: center;
   padding: 60px 20px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   
   ion-icon {
     font-size: 4rem;
@@ -48,7 +48,7 @@
   }
   
   h3 {
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     font-size: 1.4rem;
     margin: 0 0 12px 0;
   }
@@ -63,14 +63,14 @@
     --border-radius: 12px;
     --padding-start: 20px;
     --padding-end: 20px;
-    --color: #00d4ff;
-    --border-color: #00d4ff;
+    --color: var(--hud-accent, #00d4ff);
+    --border-color: var(--hud-accent, #00d4ff);
   }
 }
 
 .workout-card {
   background: #070b12;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 16px;
   padding: 20px;
   margin-bottom: 16px;
@@ -91,7 +91,7 @@
     min-width: 0; // Prevent text overflow
     
     h3 {
-      color: #dceaf6;
+      color: var(--hud-text, #dceaf6);
       font-size: 1.3rem;
       font-weight: 600;
       margin: 0 0 8px 0;
@@ -115,7 +115,7 @@
         display: flex;
         align-items: center;
         gap: 4px;
-        color: #88a6bf;
+        color: var(--hud-text-dim, #88a6bf);
         font-size: 0.85rem;
         
         ion-icon {
@@ -123,15 +123,15 @@
         }
         
         &:nth-child(1) ion-icon {
-          color: #00d4ff;
+          color: var(--hud-accent, #00d4ff);
         }
         
         &:nth-child(2) ion-icon {
-          color: #00d4ff;
+          color: var(--hud-accent, #00d4ff);
         }
         
         &:nth-child(3) ion-icon {
-          color: #88a6bf;
+          color: var(--hud-text-dim, #88a6bf);
         }
       }
     }
@@ -159,7 +159,7 @@
   margin-bottom: 16px;
   
   h5 {
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     font-size: 0.9rem;
     font-weight: 600;
     margin: 0 0 8px 0;
@@ -172,16 +172,16 @@
     
     .section-tag {
       background: #0a1018;
-      border: 1px solid #00d4ff;
+      border: 1px solid var(--hud-accent, #00d4ff);
       border-radius: 6px;
       padding: 4px 8px;
-      color: #00d4ff;
+      color: var(--hud-accent, #00d4ff);
       font-size: 0.8rem;
       font-weight: 500;
     }
     
     .more-sections {
-      color: #88a6bf;
+      color: var(--hud-text-dim, #88a6bf);
       font-size: 0.8rem;
       font-style: italic;
       align-self: center;
@@ -191,7 +191,7 @@
 
 .workout-equipment {
   h5 {
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     font-size: 0.9rem;
     font-weight: 600;
     margin: 0 0 8px 0;
@@ -207,13 +207,13 @@
       border: 1px solid #6a8aa3;
       border-radius: 6px;
       padding: 4px 8px;
-      color: #dceaf6;
+      color: var(--hud-text, #dceaf6);
       font-size: 0.8rem;
       font-weight: 500;
     }
     
     .more-equipment {
-      color: #88a6bf;
+      color: var(--hud-text-dim, #88a6bf);
       font-size: 0.8rem;
       font-style: italic;
       align-self: center;
@@ -231,29 +231,29 @@
     text-align: left;
     max-height: 400px;
     overflow-y: auto;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
   }
   
   .alert-wrapper {
     --background: #070b12;
-    --color: #dceaf6;
+    --color: var(--hud-text, #dceaf6);
     max-width: 90vw;
     max-height: 80vh;
   }
   
   .alert-head {
     background: #0a1018;
-    border-bottom: 1px solid #133748;
+    border-bottom: 1px solid var(--hud-border, #133748);
   }
   
   .alert-title {
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
     font-weight: 600;
   }
   
   .alert-button {
-    --color: #00d4ff;
-    --background-hover: #133748;
+    --color: var(--hud-accent, #00d4ff);
+    --background-hover: var(--hud-border, #133748);
   }
 }
 

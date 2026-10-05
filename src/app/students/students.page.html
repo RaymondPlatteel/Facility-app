@@ -177,6 +177,13 @@
               </select>
             </label>
             <label class="field">
+              <span>Free program</span>
+              <select [ngModel]="freeProgram ? 'yes' : 'no'" (ngModelChange)="freeProgram = $event === 'yes'">
+                <option value="yes">Yes — program at no charge</option>
+                <option value="no">No — pays for the program</option>
+              </select>
+            </label>
+            <label class="field">
               <span>Sex</span>
               <select [(ngModel)]="groupSex">
                 <option value="male">Male</option>

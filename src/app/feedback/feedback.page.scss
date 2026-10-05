@@ -1,14 +1,14 @@
 // Dark theme matching the rest of the app
 ion-content {
-  --background: #01070f;
-  --color: #dceaf6;
+  --background: var(--hud-bg, #01070f);
+  --color: var(--hud-text, #dceaf6);
 }
 
 ion-header {
   ion-toolbar {
     --background: #070b12;
-    --color: #dceaf6;
-    --border-color: #133748;
+    --color: var(--hud-text, #dceaf6);
+    --border-color: var(--hud-border, #133748);
   }
 }
 
@@ -16,7 +16,7 @@ ion-header {
   padding: 20px;
   max-width: 600px;
   margin: 0 auto;
-  background: #01070f;
+  background: var(--hud-bg, #01070f);
   min-height: 100vh;
 }
 
@@ -26,21 +26,21 @@ ion-header {
   
   h2 {
     margin: 0 0 8px 0;
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
     font-size: 1.8rem;
     font-weight: 600;
   }
   
   .subtitle {
     margin: 0;
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
     font-size: 1rem;
   }
 }
 
 .feedback-card {
   background: #070b12;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   border-radius: 12px;
   
@@ -50,7 +50,7 @@ ion-header {
   }
   
   ion-card-content {
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
   }
 }
 
@@ -60,7 +60,7 @@ ion-header {
   label {
     display: block;
     margin-bottom: 8px;
-    color: #dceaf6;
+    color: var(--hud-text, #dceaf6);
     font-weight: 500;
     font-size: 1rem;
   }
@@ -70,22 +70,22 @@ ion-header {
   width: 100%;
   padding: 12px 16px;
   background: #0a1018;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 8px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   font-size: 1rem;
   transition: all 0.2s ease;
   box-sizing: border-box;
   
   &:focus {
     outline: none;
-    border-color: #00d4ff;
-    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+    border-color: var(--hud-accent, #00d4ff);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--hud-accent, #00d4ff) 10%, transparent);
     background: #0a1018;
   }
   
   &::placeholder {
-    color: #88a6bf;
+    color: var(--hud-text-dim, #88a6bf);
   }
 }
 
@@ -98,7 +98,7 @@ ion-header {
 .star-btn {
   background: none;
   border: none;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-size: 1.5rem;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -106,42 +106,42 @@ ion-header {
   border-radius: 4px;
   
   &:hover {
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
     transform: scale(1.1);
   }
   
   &.active {
-    color: #00d4ff;
+    color: var(--hud-accent, #00d4ff);
     
     ion-icon {
-      color: #00d4ff;
+      color: var(--hud-accent, #00d4ff);
     }
   }
 }
 
 .rating-text {
   margin-left: 8px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
   font-weight: 500;
 }
 
 .feedback-textarea {
   background: #0a1018;
-  border: 1px solid #133748;
+  border: 1px solid var(--hud-border, #133748);
   border-radius: 8px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
   padding: 12px 16px;
   font-size: 1rem;
   transition: all 0.2s ease;
   
-  --color: #dceaf6;
+  --color: var(--hud-text, #dceaf6);
   --background: #0a1018;
-  --placeholder-color: #88a6bf;
-  --border-color: #133748;
+  --placeholder-color: var(--hud-text-dim, #88a6bf);
+  --border-color: var(--hud-border, #133748);
   
   &:focus-within {
-    border-color: #00d4ff;
-    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+    border-color: var(--hud-accent, #00d4ff);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--hud-accent, #00d4ff) 10%, transparent);
     background: #0a1018;
   }
 }
@@ -151,7 +151,7 @@ ion-header {
 }
 
 .submit-btn {
-  --background: #00d4ff;
+  --background: var(--hud-accent, #00d4ff);
   --background-hover: #00b6e6;
   --color: #ffffff;
   height: 48px;
@@ -160,7 +160,7 @@ ion-header {
   border-radius: 8px;
   
   &[disabled] {
-    --background: #88a6bf;
+    --background: var(--hud-text-dim, #88a6bf);
     --color: #0a1018;
   }
 }

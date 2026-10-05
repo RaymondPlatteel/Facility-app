@@ -52,7 +52,7 @@
   text-transform: uppercase;
   letter-spacing: 0.42em;
   font-size: 10px;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 }
 
 .lu-titles {
@@ -70,7 +70,7 @@
   text-transform: uppercase;
   letter-spacing: 0.28em;
   font-size: 10px;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
   animation: lu-pulse 2s ease-in-out infinite;
 }
 
@@ -85,7 +85,7 @@
   font-family: 'Bebas Neue', 'Impact', sans-serif;
   font-size: 30px;
   letter-spacing: 0.3em;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 }
 
 .lu-big-num {
@@ -114,7 +114,7 @@
 .lu-from {
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 13px;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 }
 
 /* ------------------------------ rank up ----------------------------- */
@@ -145,14 +145,14 @@
   font-family: 'Bebas Neue', 'Impact', sans-serif;
   font-size: 96px;
   line-height: 1;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 }
 
 .lu-old-label {
   font-family: 'Courier New', monospace;
   letter-spacing: 0.3em;
   font-size: 10px;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 }
 
 // The new rank letter, landing hard. Deliberately enormous — this is the
@@ -220,7 +220,7 @@
   text-transform: uppercase;
   letter-spacing: 0.34em;
   font-size: 12px;
-  color: #88a6bf;
+  color: var(--hud-text-dim, #88a6bf);
 }
 
 .lu-lvl-line {
@@ -234,13 +234,13 @@
   text-transform: uppercase;
   letter-spacing: 0.28em;
   font-size: 10px;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 }
 
 .lu-lvl-num {
   font-family: 'Bebas Neue', 'Impact', sans-serif;
   font-size: 34px;
-  color: #dceaf6;
+  color: var(--hud-text, #dceaf6);
 }
 
 // Reduced motion: every step still lands, nothing travels or spins. The
@@ -311,7 +311,7 @@
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-size: 9px;
-  color: #4a6378;
+  color: var(--hud-text-faint, #4a6378);
 
   // The percentage in the middle is the number actually changing, so it
   // gets the rank colour while the two endpoints stay quiet.
