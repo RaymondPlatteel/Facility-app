@@ -624,6 +624,7 @@
                 <div class="result-name">{{ panel.resultName || '—' }}</div>
                 <div class="rank-badge" [style.color]="panel.rankColor">
                   <span class="rank-letter" [class.chroma-text]="panel.isChroma">{{ rankLetter(panel.rank) }}</span>
+                  <span class="rank-tier" *ngIf="tierNumeral(panel.result.lvl, panel.rank, panel.sex)">{{ tierNumeral(panel.result.lvl, panel.rank, panel.sex) }}</span>
                   <span class="rank-caption">{{ rankLabel(panel.rank) }}</span>
                 </div>
               </div>

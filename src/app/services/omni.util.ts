@@ -257,6 +257,16 @@ export function rankLetter(rank: OmniRank): string {
   return rank === 'UNRANKED' ? '—' : rank.split('-')[0];
 }
 
+// Each rank's band is split in four: A (80-99) is AI, AII, AIII, AIV. S and Unranked have no tiers.
+const TIERS = ['I', 'II', 'III', 'IV'];
+export function tierNumeral(level: number, rank: OmniRank, sex: Sex = 'male'): string {
+  if (rank === 'S-RANK' || rank === 'UNRANKED' || !isFinite(level)) return '';
+  const { floor, ceil } = rankBandBounds(level, sex);
+  const span = ceil - floor;
+  if (span <= 0) return '';
+  return TIERS[Math.max(0, Math.min(3, Math.floor(((level - floor) / span) * 4)))];
+}
+
 export function rankLabel(rank: OmniRank): string {
   return rank === 'UNRANKED' ? 'UNRANKED' : 'RANK';
 }

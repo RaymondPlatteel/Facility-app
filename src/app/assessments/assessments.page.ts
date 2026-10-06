@@ -19,7 +19,7 @@ import {
   getOmniRank, levelColor, levelBgColor, SpeedUnit, kmToSpeedDisplay, speedDisplayToKm,
   calcStrength, calcPower, calcEndurance, calcCardio, calcFlex, computeOmni,
   overrideScore, isCurveTest, CURVE_TEST_DEFAULTS, RATIO_TEST_DEFAULTS,
-  rankLetter, getCategoryRank, categoryRankPct, categoryColor, categoryBgColor, isCategorySRank,
+  rankLetter, tierNumeral, getCategoryRank, categoryRankPct, categoryColor, categoryBgColor, isCategorySRank,
   getTestRank, testColor, testBgColor,
   RESILIENCE_TESTS, RESILIENCE_REPS, blankResilienceInputs, calcResilience, resilienceTestPct,
   RESILIENCE_GROUPS, calcResilienceGroup, getResilienceRank, resilienceColor, resilienceBgColor
@@ -1144,6 +1144,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   // rank badge display. UNRANKED has no letter to show, so an em dash stands
   // in as the glyph instead of leaving it blank. Public so the template can
   // call them directly.
+  tierNumeral = tierNumeral;
   rankLetter(rank: OmniRank): string {
     return rank === 'UNRANKED' ? '—' : rank.split('-')[0];
   }

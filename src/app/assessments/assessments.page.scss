@@ -775,7 +775,7 @@ $rank-tint-cards: true;
 
 .result-name {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(26px, 4vw, 40px);
+  font-size: clamp(22px, 3vw, 30px);
   letter-spacing: 0.04em;
   line-height: 1;
   color: var(--hud-text, #dceaf6);
@@ -1763,3 +1763,6 @@ $rank-tint-cards: true;
     grid-template-columns: repeat(4, 1fr);
   }
 }
+
+.rank-badge .rank-caption { order: -1; margin: 0 0 2px; padding-left: 0.25em; }
+.rank-tier { margin-top: 4px; padding-left: 0.1em; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 22px; letter-spacing: 0.12em; line-height: 1; text-align: center; }

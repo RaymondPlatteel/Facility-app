@@ -40,7 +40,7 @@ import {
   WaiverData,
   DailyCheckIn,
   localDateString, Sex } from '../services/firebase.service';
-import { rankLetter, rankLabel, levelColor as omniLevelColor } from '../services/omni.util';
+import { rankLetter, rankLabel, tierNumeral, levelColor as omniLevelColor } from '../services/omni.util';
 import { isSRank } from '../services/level-color.util';
 import { ChromaMotionService } from '../services/chroma-motion.service';
 import { TopBarActionService } from '../services/top-bar-action.service';
@@ -118,6 +118,7 @@ export class StudentsPage implements OnInit, OnDestroy {
   clientDailyCheckIns: DailyCheckIn[] = [];
   clientLatestAssessment: FitnessAssessment | null = null;
   rankLetter = rankLetter;
+  tierNumeral = tierNumeral;
   rankLabel = rankLabel;
   // levelColor stays flat — omniLevelColor already returns a static white
   // for S-Rank, same as every other rank returns its static hue. The
