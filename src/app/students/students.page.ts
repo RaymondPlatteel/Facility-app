@@ -613,6 +613,23 @@ export class StudentsPage implements OnInit, OnDestroy {
       </div>`;
   }
 
+  async addLogin() {
+    const uid = this.linkUid.trim();
+    const profile = this.selected?.profile;
+    if (!uid || !profile) return;
+    this.linking = true;
+    try {
+      await this.firebase.linkAccountToClient(uid, profile.nameKey, profile.fullName);
+      this.linkUid = '';
+      this.toast('Login added');
+    } catch (err) {
+      console.error('Clients: link login failed', err);
+      this.toast(err instanceof Error ? err.message : 'Could not add that login', 'danger');
+    } finally {
+      this.linking = false;
+    }
+  }
+
   async saveProfile() {
     const name = (this.form.fullName || '').trim();
     if (!name) {
