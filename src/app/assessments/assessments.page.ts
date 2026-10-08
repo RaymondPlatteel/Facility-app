@@ -18,6 +18,7 @@ import {
 import {
   getOmniRank, levelColor, levelBgColor, SpeedUnit, kmToSpeedDisplay, speedDisplayToKm,
   calcStrength, calcPower, calcEndurance, calcCardio, calcFlex, computeOmni,
+  effectiveRun800, formatRunTime,
   overrideScore, isCurveTest, CURVE_TEST_DEFAULTS, RATIO_TEST_DEFAULTS,
   rankLetter, tierNumeral, getCategoryRank, categoryRankPct, categoryColor, categoryBgColor, isCategorySRank,
   getTestRank, testColor, testBgColor,
@@ -117,7 +118,7 @@ interface Opportunity {
 }
 
 interface StrengthLift {
-  key: 'deadlift' | 'squat' | 'bench' | 'pullup1rm';
+  key: 'deadlift' | 'squat' | 'bench';
   label: string;
   weightField: keyof AssessForm;
   repsField: keyof AssessForm;
@@ -135,8 +136,6 @@ interface AssessForm {
   squatReps: number | null;
   benchWeight: number | null;
   benchReps: number | null;
-  pullup1rmWeight: number | null;
-  pullup1rmReps: number | null;
   longjump: number | null;
   sprint: number | null;
   pushups: number | null;
@@ -144,9 +143,10 @@ interface AssessForm {
   run30: number | null;
   run30Unit: SpeedUnit;
   run30Display: number | null;
-  speed2: number | null;
-  speed2Unit: SpeedUnit;
-  speed2Display: number | null;
+  // The 800 m run: total seconds, entered as minutes and seconds.
+  run800: number | null;
+  run800Min: number | null;
+  run800Sec: number | null;
   pike: number | null;
   backbend: number | null;
   straddle: number | null;
@@ -318,16 +318,15 @@ const ASSESSMENT_META = [
   { key: 'deadlift', label: 'Deadlift', unit: 'lbs', step: 20, min: 0, max: 2000, decimals: 0 },
   { key: 'squat', label: 'Squat', unit: 'lbs', step: 20, min: 0, max: 2000, decimals: 0 },
   { key: 'bench', label: 'Bench', unit: 'lbs', step: 20, min: 0, max: 2000, decimals: 0 },
-  { key: 'pullup1rm', label: 'Pull-up 1RM', unit: 'lbs', step: 20, min: 0, max: 2000, decimals: 0 },
   { key: 'longjump', label: 'Long Jump', unit: 'in', step: 3, min: 0, max: 300, decimals: 0 },
   { key: 'sprint', label: '100m Sprint', unit: 'sec', step: 0.1, min: 0, max: 60, decimals: 2 },
   { key: 'pushups', label: 'Pushups', unit: 'reps', step: 5, min: 0, max: 1000, decimals: 0 },
   { key: 'pullups', label: 'Pull-ups', unit: 'reps', step: 3, min: 0, max: 1000, decimals: 0 },
   { key: 'run30', label: '30 Min Run', unit: 'km', step: 0.32, min: 0, max: 50, decimals: 2 },
-  { key: 'speed2', label: '2 Min Speed', unit: 'km', step: 0.016, min: 0, max: 0.805, decimals: 3 },
+  { key: 'run800', label: '800 M Run', unit: 'sec', step: 5, min: 60, max: 1200, decimals: 0 },
   { key: 'pike', label: 'Pike', unit: '', step: 1, min: 0, max: 10, decimals: 0 },
   { key: 'backbend', label: 'Backbend', unit: '', step: 1, min: 0, max: 10, decimals: 0 },
-  { key: 'straddle', label: 'Straddle', unit: 'deg', step: 10, min: 0, max: 180, decimals: 0 }
+  { key: 'straddle', label: 'Middle Split', unit: 'deg', step: 10, min: 0, max: 180, decimals: 0 }
 ] as const;
 
 @Component({
@@ -490,8 +489,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   strengthLifts: StrengthLift[] = [
     { key: 'deadlift', label: 'Deadlift', weightField: 'deadliftWeight', repsField: 'deadliftReps', weightUnit: 'LBS', oneRmId: 'deadlift' },
     { key: 'squat', label: 'Squat', weightField: 'squatWeight', repsField: 'squatReps', weightUnit: 'LBS', oneRmId: 'squat' },
-    { key: 'bench', label: 'Bench', weightField: 'benchWeight', repsField: 'benchReps', weightUnit: 'LBS', oneRmId: 'bench' },
-    { key: 'pullup1rm', label: 'Pull-up', weightField: 'pullup1rmWeight', repsField: 'pullup1rmReps', weightUnit: 'ADDED LBS', oneRmId: 'pullup1rm' }
+    { key: 'bench', label: 'Bench', weightField: 'benchWeight', repsField: 'benchReps', weightUnit: 'LBS', oneRmId: 'bench' }
   ];
 
   constructor(
@@ -738,11 +736,10 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       deadliftWeight: null, deadliftReps: null,
       squatWeight: null, squatReps: null,
       benchWeight: null, benchReps: null,
-      pullup1rmWeight: null, pullup1rmReps: null,
       longjump: null, sprint: null,
       pushups: null, pullups: null,
       run30: null, run30Unit: 'mph', run30Display: null,
-      speed2: null, speed2Unit: 'mph', speed2Display: null,
+      run800: null, run800Min: null, run800Sec: null,
       pike: null, backbend: null, straddle: null
     };
   }
@@ -1090,12 +1087,6 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   }
 
   private get1RM(form: AssessForm, key: StrengthLift['key']): number {
-    if (key === 'pullup1rm') {
-      const bw = this.n(form.bodyWeight);
-      const added = this.n(form.pullup1rmWeight);
-      const r = this.n(form.pullup1rmReps) || 1;
-      return this.brzycki(bw + added, r);
-    }
     const w = this.n(form[(key + 'Weight') as keyof AssessForm] as number | null);
     const r = this.n(form[(key + 'Reps') as keyof AssessForm] as number | null) || 1;
     return this.brzycki(w, r);
@@ -1104,16 +1095,8 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   // Live "1RM ≈ x lbs" hint shown under each strength lift.
   oneRmLabel(panel: Panel, lift: StrengthLift): string {
     const form = panel.form;
-    let w: number, r: number;
-    if (lift.key === 'pullup1rm') {
-      const bw = this.n(form.bodyWeight);
-      const added = this.n(form.pullup1rmWeight);
-      w = bw + added;
-      r = this.n(form.pullup1rmReps) || 1;
-    } else {
-      w = this.n(form[lift.weightField] as number | null);
-      r = this.n(form[lift.repsField] as number | null) || 1;
-    }
+    const w = this.n(form[lift.weightField] as number | null);
+    const r = this.n(form[lift.repsField] as number | null) || 1;
     if (w > 0 && r > 1) return '1RM ≈ ' + this.brzycki(w, r).toFixed(1) + ' lbs';
     if (w > 0) return '1RM = ' + w.toFixed(0) + ' lbs (1 rep)';
     return '';
@@ -1157,20 +1140,20 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   // continuous level so shading within a band still moves smoothly between
   // whole-level ticks, even though crossing a band's floor always snaps.
 
-  // The two timed-distance tests (30 Min Run, 2 Min Speed) let the coach
+  // The two timed-distance tests (30 Min Run) let the coach
   // pick whichever unit they think in — mph, raw km, or min/km pace — and
   // enter ONE number; the canonical km value that actually drives scoring
   // is derived from it via omni.util's conversions. windowMinutes is what
   // tells the conversion "this distance was covered in how long."
-  private speedWindow(field: 'run30' | 'speed2'): number {
-    return field === 'run30' ? 30 : 2;
+  private speedWindow(field: 'run30'): number {
+    return 30;
   }
 
   // Typing in the display field (whatever unit is currently selected)
   // recomputes the canonical km value that's actually saved/scored.
-  onSpeedDisplayChanged(panel: Panel, field: 'run30' | 'speed2', val: number | null) {
-    const unitField = field === 'run30' ? 'run30Unit' : 'speed2Unit';
-    const displayField = field === 'run30' ? 'run30Display' : 'speed2Display';
+  onSpeedDisplayChanged(panel: Panel, field: 'run30', val: number | null) {
+    const unitField = 'run30Unit';
+    const displayField = 'run30Display';
     panel.form[displayField] = val;
     panel.form[field] = val != null && val >= 0
       ? Math.round(speedDisplayToKm(val, panel.form[unitField], this.speedWindow(field)) * 1000) / 1000
@@ -1180,13 +1163,19 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   // Switching units re-derives the display value from the unchanged
   // canonical km — the underlying test result doesn't move, only how it's
   // shown.
-  onSpeedUnitChanged(panel: Panel, field: 'run30' | 'speed2', unit: SpeedUnit) {
-    const displayField = field === 'run30' ? 'run30Display' : 'speed2Display';
-    panel.form[field === 'run30' ? 'run30Unit' : 'speed2Unit'] = unit;
+  onSpeedUnitChanged(panel: Panel, field: 'run30', unit: SpeedUnit) {
+    const displayField = 'run30Display';
+    panel.form.run30Unit = unit;
     const km = panel.form[field];
     panel.form[displayField] = km != null
       ? Math.round(kmToSpeedDisplay(km, unit, this.speedWindow(field)) * 1000) / 1000
       : null;
+  }
+
+  // Minutes and seconds typed for the 800 m run become the total seconds that are scored.
+  onRun800Changed(panel: Panel) {
+    const total = this.n(panel.form.run800Min) * 60 + this.n(panel.form.run800Sec);
+    panel.form.run800 = total > 0 ? total : null;
   }
 
   private rankGradientColor(level: number, sex: Sex = 'male'): string {
@@ -1226,15 +1215,15 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       bench: this.get1RM(form, 'bench'),
       benchWeight: this.n(form.benchWeight),
       benchReps: this.n(form.benchReps) || 1,
-      pullup1rm: this.get1RM(form, 'pullup1rm'),
-      pullup1rmWeight: this.n(form.pullup1rmWeight),
-      pullup1rmReps: this.n(form.pullup1rmReps) || 1,
+      // The weighted pull-up is no longer asked or scored.
+      pullup1rm: 0, pullup1rmWeight: 0, pullup1rmReps: 1,
       longjump: this.n(form.longjump),
       sprint: this.n(form.sprint),
       pushups: this.n(form.pushups),
       pullups: this.n(form.pullups),
       run30: this.n(form.run30),
-      speed2: this.n(form.speed2),
+      run800: this.n(form.run800),
+      speed2: 0,
       pike: this.n(form.pike),
       backbend: this.n(form.backbend),
       straddle: this.n(form.straddle)
@@ -1315,17 +1304,10 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       deadliftWeight: liftW(i.deadliftWeight, i.deadlift), deadliftReps: liftR(i.deadliftReps, i.deadlift),
       squatWeight: liftW(i.squatWeight, i.squat), squatReps: liftR(i.squatReps, i.squat),
       benchWeight: liftW(i.benchWeight, i.bench), benchReps: liftR(i.benchReps, i.bench),
-      // pullup1rm is stored as bodyweight + added; without a stored bodyweight
-      // the whole 1RM goes in the "added" field (bw counts as 0 in the calc).
-      pullup1rmWeight: liftW(
-        i.pullup1rmWeight,
-        i.pullup1rm != null ? i.pullup1rm - (i.bodyWeight ?? 0) : undefined
-      ),
-      pullup1rmReps: liftR(i.pullup1rmReps, i.pullup1rm),
       longjump: this.orNull(i.longjump), sprint: this.orNull(i.sprint),
       pushups: this.orNull(i.pushups), pullups: this.orNull(i.pullups),
       run30: this.orNull(i.run30), run30Unit: 'mph', run30Display: null,
-      speed2: this.orNull(i.speed2), speed2Unit: 'mph', speed2Display: null,
+      run800: null, run800Min: null, run800Sec: null,
       pike: this.orNull(i.pike), backbend: this.orNull(i.backbend), straddle: this.orNull(i.straddle)
     };
     // Derive the mph display from the stored km for both timed-distance
@@ -1333,9 +1315,11 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     panel.form.run30Display = panel.form.run30 != null
       ? Math.round(kmToSpeedDisplay(panel.form.run30, 'mph', this.speedWindow('run30')) * 1000) / 1000
       : null;
-    panel.form.speed2Display = panel.form.speed2 != null
-      ? Math.round(kmToSpeedDisplay(panel.form.speed2, 'mph', this.speedWindow('speed2')) * 1000) / 1000
-      : null;
+    // A record that only carries the old 2-minute distance shows the 800 m time it scores as.
+    const t800 = Math.round(effectiveRun800(i));
+    panel.form.run800 = t800 > 0 ? t800 : null;
+    panel.form.run800Min = t800 > 0 ? Math.floor(t800 / 60) : null;
+    panel.form.run800Sec = t800 > 0 ? t800 % 60 : null;
   }
 
   private orNull(v: number | undefined): number | null {
@@ -1703,10 +1687,10 @@ export class AssessmentsPage implements OnInit, OnDestroy {
 
   // The raw value that will actually feed the score for this slot — same
   // 1RM computation the standard form uses for the strength lifts, the
-  // form field directly for everything else (run30/speed2 are already
+  // form field directly for everything else (run30 is already
   // stored in their canonical km, matching AssessmentInputs).
   private overrideCurrentRaw(panel: Panel, key: TestKey): number {
-    const strengthKeys: ReadonlyArray<string> = ['deadlift', 'squat', 'bench', 'pullup1rm'];
+    const strengthKeys: ReadonlyArray<string> = ['deadlift', 'squat', 'bench'];
     if (strengthKeys.includes(key)) {
       return this.get1RM(panel.form, key as StrengthLift['key']);
     }
@@ -1717,7 +1701,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   // description — so a coach can see precisely what will drive the score
   // before committing to it, and watch it change live as they edit any
   // constant. Ratio-type slots (the strength lifts, long jump) have one
-  // editable constant; curve-type slots (sprint, 30 Min Run, 2 Min Speed)
+  // editable constant; curve-type slots (sprint, 30 Min Run, 800 M Run)
   // have two — the record and the spread that controls how fast the score
   // falls off past it.
   overrideFormulaText(panel: Panel): string {
@@ -1989,10 +1973,10 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       const i = prevEntry.inputs;
       const ov = prevEntry.testOverrides;
       prev = [
-        calcStrength(i.deadlift, i.squat, i.bench, i.pullup1rm, ov),
+        calcStrength(i.deadlift, i.squat, i.bench, ov),
         calcPower(i.longjump, i.sprint, ov),
         calcEndurance(i.pushups, i.pullups, ov),
-        calcCardio(i.run30, i.speed2, ov),
+        calcCardio(i.run30, effectiveRun800(i), ov),
         calcFlex(i.pike, i.backbend, i.straddle, ov)
       ];
       const d = new Date(prevEntry.timestamp);
@@ -2099,10 +2083,10 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     const i = prevEntry.inputs;
     const ov = prevEntry.testOverrides;
     let prev = 0;
-    if (type === 'H') prev = calcStrength(i.deadlift, i.squat, i.bench, i.pullup1rm, ov);
+    if (type === 'H') prev = calcStrength(i.deadlift, i.squat, i.bench, ov);
     else if (type === 'K') prev = calcPower(i.longjump, i.sprint, ov);
     else if (type === 'N') prev = calcEndurance(i.pushups, i.pullups, ov);
-    else if (type === 'Q') prev = calcCardio(i.run30, i.speed2, ov);
+    else if (type === 'Q') prev = calcCardio(i.run30, effectiveRun800(i), ov);
     else if (type === 'U') prev = calcFlex(i.pike, i.backbend, i.straddle, ov);
     const diff = curr - prev;
     const pct = (diff / (prev || 1)) * 100;
@@ -2116,12 +2100,12 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     const best: Array<{ label: string; unit: string; current: number; nextVal: number; gain: number; projectedLvl: number; decimals: number }> = [];
 
     ASSESSMENT_META.forEach(test => {
-      const current = Number((inputs as any)[test.key] || 0);
+      const current = test.key === 'run800' ? effectiveRun800(inputs) : Number((inputs as any)[test.key] || 0);
       const candidates = [current + test.step, current - test.step].filter(v => v >= test.min && v <= test.max);
       let bestForTest: typeof best[number] | null = null;
       const label = overrides?.[test.key as TestKey]?.name || test.label;
       candidates.forEach(nextVal => {
-        const trialInputs = { ...inputs, [test.key]: nextVal } as AssessmentInputs;
+        const trialInputs = { ...inputs, [test.key]: nextVal, ...(test.key === 'run800' ? { speed2: 0 } : {}) } as AssessmentInputs;
         const trial = computeOmni(trialInputs, overrides);
         const gain = trial.exact - base.exact;
         if (!bestForTest || gain > bestForTest.gain) {
@@ -2229,17 +2213,17 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     const lastFive = panel.history.slice(-5);
 
     const getTestHistory = (key: string): (number | null)[] => {
-      const vals = lastFive.map(e => (e.inputs as any)[key] || 0);
+      const vals = lastFive.map(e => (key === 'run800' ? effectiveRun800(e.inputs) : (e.inputs as any)[key]) || 0);
       return [...Array(5 - vals.length).fill(null), ...vals];
     };
     const getCatHistory = (type: 'H' | 'K' | 'N' | 'Q' | 'U'): (number | null)[] =>
       lastFive.map(e => {
         const i = e.inputs;
         const ov = e.testOverrides;
-        if (type === 'H') return calcStrength(i.deadlift, i.squat, i.bench, i.pullup1rm, ov);
+        if (type === 'H') return calcStrength(i.deadlift, i.squat, i.bench, ov);
         if (type === 'K') return calcPower(i.longjump, i.sprint, ov);
         if (type === 'N') return calcEndurance(i.pushups, i.pullups, ov);
-        if (type === 'Q') return calcCardio(i.run30, i.speed2, ov);
+        if (type === 'Q') return calcCardio(i.run30, effectiveRun800(i), ov);
         return calcFlex(i.pike, i.backbend, i.straddle, ov);
       });
 
@@ -2269,10 +2253,10 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       : `<div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;color:#999999;">Add another assessment to generate top impact recommendations.</div>`;
 
     const testBreakdown = [
-      { l: 'Deadlift', k: 'deadlift', u: ' lbs', d: 0 }, { l: 'Squat', k: 'squat', u: ' lbs', d: 0 }, { l: 'Bench', k: 'bench', u: ' lbs', d: 0 }, { l: 'Pull-up 1RM', k: 'pullup1rm', u: ' lbs', d: 0 },
+      { l: 'Deadlift', k: 'deadlift', u: ' lbs', d: 0 }, { l: 'Squat', k: 'squat', u: ' lbs', d: 0 }, { l: 'Bench', k: 'bench', u: ' lbs', d: 0 },
       { l: 'Long Jump', k: 'longjump', u: ' in', d: 0 }, { l: '100m Sprint', k: 'sprint', u: ' sec', d: 2 }, { l: 'Pushups', k: 'pushups', u: ' reps', d: 0 }, { l: 'Pull-ups', k: 'pullups', u: ' reps', d: 0 },
-      { l: '30 Min Run', k: 'run30', u: ' km', d: 2 }, { l: '2 Min Speed', k: 'speed2', u: ' km', d: 3 }, { l: 'Pike', k: 'pike', u: '', d: 0 }, { l: 'Backbend', k: 'backbend', u: '', d: 0 }, { l: 'Straddle', k: 'straddle', u: ' deg', d: 0 }
-    ].map(t => this.assessmentGraphRow(t.l, (inputs as any)[t.k], getTestHistory(t.k), t.u, c, t.d)).join('');
+      { l: '30 Min Run', k: 'run30', u: ' km', d: 2 }, { l: '800 M Run', k: 'run800', u: ' sec', d: 0 }, { l: 'Pike', k: 'pike', u: '', d: 0 }, { l: 'Backbend', k: 'backbend', u: '', d: 0 }, { l: 'Middle Split', k: 'straddle', u: ' deg', d: 0 }
+    ].map(t => this.assessmentGraphRow(t.l, t.k === 'run800' ? effectiveRun800(inputs) : (inputs as any)[t.k], getTestHistory(t.k), t.u, c, t.d)).join('');
 
     const dateLabel = new Date(panel.assessmentDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 

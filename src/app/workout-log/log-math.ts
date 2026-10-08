@@ -25,7 +25,7 @@ export function exerciseKey(name: string): string {
 
 // Bodyweight lifts log added weight, which says nothing about a max.
 export function tracksMax(name: string): boolean {
-  return !matchAssessmentLift(name)?.bodyweightBased;
+  return !/pull[- ]?up|chin[- ]?up/i.test(name);
 }
 
 export function loadOf(set: SetLog): number | null {

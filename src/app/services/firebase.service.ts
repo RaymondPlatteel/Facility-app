@@ -879,6 +879,7 @@ export interface AssessmentInputs {
   pushups: number;
   pullups: number;
   run30: number;
+  run800?: number;         // 800 m run, seconds; replaces speed2 (older records only carry that)
   speed2: number;
   pike: number;
   backbend: number;
