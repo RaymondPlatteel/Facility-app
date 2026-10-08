@@ -125,5 +125,100 @@
       </div>
     </div>
 
+    <!-- Folds a duplicate athlete record into the real one. Nothing is deleted. -->
+    <div class="settings-section">
+      <h2 class="section-heading">Duplicate athletes</h2>
+
+      <div class="migrate-card">
+        <div class="migrate-head">
+          <div>
+            <div class="setting-row-title">Merge a duplicate into the real athlete</div>
+            <div class="setting-row-detail">
+              Older assessments and goals move to the athlete you keep. Anything newer than their latest result stays
+              behind, so their current level does not change. The duplicate is hidden from the leaderboards, and
+              nothing is deleted. Logins are not changed.
+            </div>
+          </div>
+        </div>
+
+        <div class="merge-pickers">
+          <label>
+            <span class="merge-label">Keep</span>
+            <select class="merge-select" (change)="pickMerge('keep', $any($event.target).value)">
+              <option value="">Choose an athlete</option>
+              <option *ngFor="let m of mergeMembers" [value]="m.nameKey" [selected]="m.nameKey === mergeKeep">{{ m.clientName }} · Level {{ m.latestLvl ?? '—' }}</option>
+            </select>
+          </label>
+          <label>
+            <span class="merge-label">Merge in (the duplicate)</span>
+            <select class="merge-select" (change)="pickMerge('retire', $any($event.target).value)">
+              <option value="">Choose an athlete</option>
+              <option *ngFor="let m of mergeMembers" [value]="m.nameKey" [selected]="m.nameKey === mergeRetire">{{ m.clientName }} · Level {{ m.latestLvl ?? '—' }}</option>
+            </select>
+          </label>
+          <button class="migrate-btn migrate-btn--ghost" [disabled]="mergeBusy || !mergeKeep || !mergeRetire || mergeKeep === mergeRetire" (click)="previewMerge()">Preview</button>
+        </div>
+
+        <p class="migrate-status" *ngIf="mergeStatus">{{ mergeStatus }}</p>
+
+        <div class="migrate-actions" *ngIf="mergePlan">
+          <span class="migrate-total">{{ mergePlan.assessmentIds.length }} assessments · {{ mergePlan.goalIds.length }} goals · {{ mergePlan.leftBehind }} left behind</span>
+          <button class="migrate-btn" [disabled]="mergeBusy" (click)="applyMerge()">Merge</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- One-time: levels were stored under the four-lift strength score. -->
+    <div class="settings-section">
+      <h2 class="section-heading">Scoring</h2>
+
+      <div class="migrate-card">
+        <div class="migrate-head">
+          <div>
+            <div class="setting-row-title">Rescore levels without the weighted pull-up</div>
+            <div class="setting-row-detail">
+              Strength is now the average of deadlift, squat and bench, and cardio uses an 800 m run. This
+              recalculates every saved assessment, pending submission, goal and leaderboard level from its own
+              results. It then adds one record dated today for each athlete, holding their most recent results, so
+              everyone's newest entry shows where they are today. Nothing is deleted: the pull-up and 2-minute run
+              numbers stay on each record, and the previous level and rank are kept beside the new ones. Running it
+              again changes nothing further.
+            </div>
+          </div>
+          <button class="migrate-btn migrate-btn--ghost" [disabled]="rescoreBusy" (click)="previewRescore()">
+            {{ rescorePlan ? 'Refresh preview' : 'Preview' }}
+          </button>
+        </div>
+
+        <p class="migrate-status" *ngIf="rescoreStatus">{{ rescoreStatus }}</p>
+
+        <div class="migrate-table-wrap" *ngIf="rescoreRows.length">
+          <table class="migrate-table">
+            <thead>
+              <tr>
+                <th>Athlete</th>
+                <th>Record</th>
+                <th class="num">Level</th>
+                <th>Rank</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let r of rescoreRows" [class.changed]="r.oldRank !== r.newRank">
+                <td><strong>{{ r.name }}</strong></td>
+                <td class="migrate-note">{{ r.label }}</td>
+                <td class="num">{{ r.oldLvl }} → <strong>{{ r.newLvl }}</strong></td>
+                <td>{{ rankText(r.oldRank) }}<ng-container *ngIf="r.oldRank !== r.newRank"> → <strong>{{ rankText(r.newRank) }}</strong></ng-container></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="migrate-actions" *ngIf="rescorePlan?.changes?.length || rescorePlan?.refresh?.length">
+          <span class="migrate-total">{{ rescorePlan?.changes?.length }} levels updated · {{ rescoreRankChanges }} rank changes · {{ rescorePlan?.refresh?.length }} records dated today</span>
+          <button class="migrate-btn" [disabled]="rescoreBusy" (click)="applyRescore()">Rescore</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </ion-content>

@@ -20,12 +20,20 @@ export function normName(name: string): string {
 export function exerciseKey(name: string): string {
   const lift = matchAssessmentLift(name);
   if (lift) return `lift:${lift.key}`;
+  if (isPullUp(name)) return 'lift:pullup';
   return normName(name).replace(/s$/, '');
+}
+
+// Pull-ups and chin-ups are no longer a scored benchmark, but they still
+// log as one exercise whatever the variation.
+function isPullUp(name: string): boolean {
+  const n = (name || '').toLowerCase();
+  return ['pull-up', 'pullup', 'pull up', 'chin-up', 'chinup', 'chin up'].some(x => n.includes(x));
 }
 
 // Bodyweight lifts log added weight, which says nothing about a max.
 export function tracksMax(name: string): boolean {
-  return !matchAssessmentLift(name)?.bodyweightBased;
+  return !isPullUp(name);
 }
 
 export function loadOf(set: SetLog): number | null {

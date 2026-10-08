@@ -956,7 +956,6 @@ export class LiveSessionPage implements OnInit, OnDestroy {
       return null;
     }
     const latest = history.length ? history[history.length - 1] : null;
-    const bodyWeight = latest?.inputs.bodyWeight || 0;
 
     // Best estimated 1RM per benchmark lift across this session's logged sets.
     const bests = new Map<string, { weight: number; reps: number; est: number; label: string }>();
@@ -967,17 +966,9 @@ export class LiveSessionPage implements OnInit, OnDestroy {
         const load = parseFloat(set.values['Load'] ?? set.values['Weight'] ?? '');
         const reps = parseFloat(set.values['Reps'] ?? '');
         if (!isFinite(reps) || reps < 1) continue;
-        let est: number, recordWeight: number;
-        if (lift.bodyweightBased) {
-          if (!bodyWeight) continue;                       // can't estimate without bodyweight
-          const added = isFinite(load) && load > 0 ? load : 0;
-          est = brzycki(bodyWeight + added, reps);
-          recordWeight = added;
-        } else {
-          if (!isFinite(load) || load <= 0) continue;
-          est = brzycki(load, reps);
-          recordWeight = load;
-        }
+        if (!isFinite(load) || load <= 0) continue;
+        const est = brzycki(load, reps);
+        const recordWeight = load;
         const cur = bests.get(lift.key);
         if (!cur || est > cur.est) bests.set(lift.key, { weight: recordWeight, reps, est, label: lift.label });
       }

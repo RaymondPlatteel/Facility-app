@@ -6,7 +6,7 @@ import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationP
 import type { ScheduleEntry } from './schedule.util';
 import { SYNC_CLIENT_ID, ensureExerciseKeys, isLiveWorkout, isStaleWorkout, staleCloseFields, newExerciseKey, normalizeState, sheetToSync, syncToSheet, WorkoutSyncState } from './workout-sync';
 import { environment } from '../../environments/environment';
-import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank } from './omni.util';
+import { describeAssessmentChange, computeOmni, effectiveRun800, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank } from './omni.util';
 import type { TestOverrides, ResilienceInputs } from './omni.util';
 
 // Local calendar date (YYYY-MM-DD). toISOString() would shift evening check-ins to the next UTC day.
@@ -329,6 +329,53 @@ export interface AssessmentGoal {
   // When they're aiming to hit it — optional, YYYY-MM-DD. Also what
   // distinguishes one of an athlete's goals from another — see id.
   targetDate?: string;
+}
+
+// One stored level the strength change moves (see planRescore).
+export interface RescoreChange {
+  coll: 'assessments' | 'pendingAssessments' | 'assessmentGoals' | 'members';
+  id: string;
+  name: string;
+  label: string;
+  oldLvl: number;
+  newLvl: number;
+  oldRank: OmniRank;
+  newRank: OmniRank;
+}
+
+// A record dated today that carries an athlete's most recent results forward.
+export interface RescoreRefresh {
+  nameKey: string;
+  clientName: string;
+  clientId: string | null;
+  inputs: AssessmentInputs;
+  testOverrides: TestOverrides | null;
+  lvl: number;
+  rank: OmniRank;
+  fromId: string;
+}
+
+// Folding a duplicate athlete record into the real one.
+export interface MemberMergePlan {
+  keep: string;
+  keepName: string;
+  retire: string;
+  retireName: string;
+  keepLevel: number | null;
+  retireLevel: number | null;
+  assessmentIds: string[];
+  goalIds: string[];
+  // Newer than the kept athlete's latest, a refresh record, or on a day the
+  // kept athlete already has: left with the retired record.
+  leftBehind: number;
+  copyCompetitorId: string | null;
+}
+
+export interface RescorePlan {
+  changes: RescoreChange[];
+  refresh: RescoreRefresh[];
+  // Counts of what was read, so the preview can say what was checked.
+  checked: { assessments: number; pending: number; goals: number; members: number };
 }
 
 export interface Member {
@@ -879,6 +926,9 @@ export interface AssessmentInputs {
   pushups: number;
   pullups: number;
   run30: number;
+  // The 800 m run, in seconds. Records made before it existed carry only the
+  // old 2-minute distance below, which is read as an equivalent 800 m time.
+  run800?: number;
   speed2: number;
   pike: number;
   backbend: number;
@@ -3228,6 +3278,236 @@ export class FirebaseService {
     const change = describeAssessmentChange(previousInputs, a.inputs);
     await this.touchMemberActivity(nameKey, a.clientName, change.text, a.lvl, a.rank);
     return id;
+  }
+
+  // ---------- Rescoring after the weighted pull-up left the strength score ----------
+  // Every stored level was computed with four strength lifts. This recomputes
+  // each from its own saved inputs (and test overrides) with three, and
+  // brings the cached member level in line with the newest assessment.
+  // Nothing is deleted: the pull-up numbers stay in each record's inputs, and
+  // the level and rank a record had before are kept beside the new ones as
+  // legacyLvl / legacyRank (members: legacyLatestLvl / legacyLatestRank),
+  // written once and never overwritten by a second run.
+
+  async planRescore(): Promise<RescorePlan> {
+    const [assessSnap, pendingSnap, goalSnap, memberSnap] = await Promise.all([
+      getDocs(this.assessmentsCollection()),
+      getDocs(query(this.pendingAssessmentsCollection(), where('status', '==', 'pending'))),
+      getDocs(collection(this.db, 'assessmentGoals')),
+      getDocs(collection(this.db, 'members'))
+    ]);
+    const sexOf = new Map<string, Sex>();
+    const members = new Map<string, { name: string; lvl: number | null; rank: OmniRank | null }>();
+    memberSnap.forEach(d => {
+      const m = d.data() as { sex?: Sex; clientName?: string; latestLvl?: number; latestRank?: OmniRank };
+      sexOf.set(d.id, m.sex ?? 'male');
+      members.set(d.id, { name: m.clientName ?? d.id, lvl: m.latestLvl ?? null, rank: m.latestRank ?? null });
+    });
+
+    const changes: RescoreChange[] = [];
+    const rescore = (coll: RescoreChange['coll'], id: string, data: any, label: string) => {
+      if (!data?.inputs) return null;
+      const sex = sexOf.get(data.nameKey) ?? 'male';
+      const totals = computeOmni(data.inputs, data.testOverrides ?? undefined);
+      const rank = getOmniRank(totals.lvl, sex);
+      if (totals.lvl !== data.lvl || rank !== data.rank) {
+        changes.push({ coll, id, name: data.clientName ?? data.nameKey, label, oldLvl: data.lvl, newLvl: totals.lvl, oldRank: data.rank, newRank: rank });
+      }
+      return { lvl: totals.lvl, rank };
+    };
+
+    // The newest assessment per athlete decides their cached member level,
+    // and is what the refresh below carries forward.
+    const newest = new Map<string, { ts: string; lvl: number; rank: OmniRank }>();
+    const latestDoc = new Map<string, { ts: string; id: string; data: any; lvl: number; rank: OmniRank }>();
+    const today = this.localDayKey();
+    const hasToday = new Set<string>();
+    assessSnap.forEach(d => {
+      const data = d.data() as any;
+      const r = rescore('assessments', d.id, data, data.dateLabel ?? data.timestamp ?? '');
+      if (!r || !data.nameKey) return;
+      const ts = data.timestamp || '';
+      if (ts.slice(0, 10) === today) hasToday.add(data.nameKey);
+      const cur = newest.get(data.nameKey);
+      if (!cur || ts > cur.ts) {
+        newest.set(data.nameKey, { ts, lvl: r.lvl, rank: r.rank });
+        latestDoc.set(data.nameKey, { ts, id: d.id, data, lvl: r.lvl, rank: r.rank });
+      }
+    });
+
+    // Everyone with real results gets a record dated today holding their
+    // latest results, so each athlete's newest entry reads "where they are
+    // today". Anyone who already has an entry dated today is left alone,
+    // which also makes a second run add nothing.
+    const refresh: RescoreRefresh[] = [];
+    const hasResults = (i: AssessmentInputs) => ['deadlift', 'squat', 'bench', 'longjump', 'sprint', 'pushups', 'pullups', 'run30', 'run800', 'speed2', 'pike', 'backbend', 'straddle']
+      .some(k => Number((i as any)[k]) > 0);
+    latestDoc.forEach((d, key) => {
+      if (hasToday.has(key) || !d.data.inputs || !hasResults(d.data.inputs)) return;
+      const inputs: AssessmentInputs = { ...d.data.inputs };
+      // The 800 m time a 2-minute distance implies, written out so the new
+      // record is in current form. Left off when a coach override applies to
+      // the old test, which only works on the old distance.
+      if (!(d.data.testOverrides && (d.data.testOverrides as any)['speed2'])) inputs.run800 = effectiveRun800(inputs);
+      refresh.push({
+        nameKey: key, clientName: d.data.clientName ?? key, clientId: d.data.clientId ?? null,
+        inputs, testOverrides: d.data.testOverrides ?? null, lvl: d.lvl, rank: d.rank, fromId: d.id
+      });
+    });
+    pendingSnap.forEach(d => { const data = d.data() as any; rescore('pendingAssessments', d.id, data, 'Pending ' + (data.dateLabel ?? '')); });
+    goalSnap.forEach(d => { const data = d.data() as any; rescore('assessmentGoals', d.id, data, 'Goal ' + (data.targetDate || '')); });
+
+    newest.forEach((n, key) => {
+      const m = members.get(key);
+      if (!m) return;
+      if (m.lvl !== n.lvl || m.rank !== n.rank) {
+        changes.push({ coll: 'members', id: key, name: m.name, label: 'Leaderboard level', oldLvl: m.lvl ?? 0, newLvl: n.lvl, oldRank: m.rank ?? 'UNRANKED', newRank: n.rank });
+      }
+    });
+
+    return { changes, refresh, checked: { assessments: assessSnap.size, pending: pendingSnap.size, goals: goalSnap.size, members: memberSnap.size } };
+  }
+
+  // ---------- Merging duplicate athletes ----------
+  // The same person can end up as two member records (a misspelt name, or a
+  // second login that made a new profile). A merge keeps one record and
+  // folds the other into it without deleting anything:
+  //  - Older assessments and goals are re-pointed to the kept athlete, each
+  //    marked with mergedFrom. Anything newer than the kept athlete's latest
+  //    stays behind, so a merge never changes the kept athlete's current level.
+  //  - The retired record is hidden from the leaderboards by clearing its
+  //    level (the old one is kept as legacyLatestLvl) and marked mergedInto.
+  //  - The kept athlete takes the retired record's permanent competitor id if
+  //    it has none.
+  // Logins are not touched.
+
+  async listMembersBasic(): Promise<Array<{ nameKey: string; clientName: string; latestLvl: number | null }>> {
+    const snap = await getDocs(collection(this.db, 'members'));
+    return snap.docs
+      .map(d => ({ nameKey: d.id, clientName: (d.data() as any).clientName ?? d.id, latestLvl: (d.data() as any).latestLvl ?? null }))
+      .sort((a, b) => a.clientName.localeCompare(b.clientName));
+  }
+
+  async planMemberMerge(keep: string, retire: string): Promise<MemberMergePlan> {
+    const [keepDoc, retireDoc, keepA, retireA, retireG] = await Promise.all([
+      getDoc(doc(this.db, 'members', keep)),
+      getDoc(doc(this.db, 'members', retire)),
+      getDocs(query(this.assessmentsCollection(), where('nameKey', '==', keep))),
+      getDocs(query(this.assessmentsCollection(), where('nameKey', '==', retire))),
+      getDocs(query(collection(this.db, 'assessmentGoals'), where('nameKey', '==', retire)))
+    ]);
+    const k = (keepDoc.data() ?? {}) as any, r = (retireDoc.data() ?? {}) as any;
+    let newest = '';
+    const days = new Set<string>();
+    keepA.forEach(d => {
+      const x = d.data() as any;
+      const ts = x.timestamp || '';
+      // A record dated by the rescore refresh says nothing about when they
+      // last tested, so it doesn't count as their newest result.
+      if (!x.refreshedFrom && ts > newest) newest = ts;
+      days.add(ts.slice(0, 10));
+    });
+    const assessmentIds: string[] = [];
+    let leftBehind = 0;
+    retireA.forEach(d => {
+      const x = d.data() as any;
+      const ts = x.timestamp || '';
+      if (x.refreshedFrom || ts > newest || days.has(ts.slice(0, 10))) { leftBehind++; return; }
+      assessmentIds.push(d.id);
+    });
+    return {
+      keep, keepName: k.clientName ?? keep, retire, retireName: r.clientName ?? retire,
+      keepLevel: k.latestLvl ?? null, retireLevel: r.latestLvl ?? null,
+      assessmentIds, goalIds: retireG.docs.map(d => d.id), leftBehind,
+      copyCompetitorId: !k.competitorId && r.competitorId ? r.competitorId : null
+    };
+  }
+
+  async applyMemberMerge(plan: MemberMergePlan): Promise<void> {
+    const retireDoc = (await getDoc(doc(this.db, 'members', plan.retire))).data() as any ?? {};
+    const batch = writeBatch(this.db);
+    for (const id of plan.assessmentIds) {
+      batch.update(doc(this.db, 'assessments', id), { nameKey: plan.keep, clientName: plan.keepName, mergedFrom: plan.retire });
+    }
+    for (const id of plan.goalIds) {
+      batch.update(doc(this.db, 'assessmentGoals', id), { nameKey: plan.keep, clientName: plan.keepName, mergedFrom: plan.retire });
+    }
+    if (plan.copyCompetitorId) batch.update(doc(this.db, 'members', plan.keep), { competitorId: plan.copyCompetitorId });
+    batch.update(doc(this.db, 'members', plan.retire), {
+      legacyLatestLvl: retireDoc.latestLvl ?? null,
+      legacyLatestRank: retireDoc.latestRank ?? null,
+      latestLvl: deleteField(),
+      latestRank: deleteField(),
+      mergedInto: plan.keep
+    });
+    await batch.commit();
+  }
+
+  private localDayKey(): string {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 10);
+  }
+
+  async applyRescore(plan: RescorePlan): Promise<number> {
+    let written = 0;
+    for (let i = 0; i < plan.changes.length; i += 400) {
+      const batch = writeBatch(this.db);
+      const chunk = plan.changes.slice(i, i + 400);
+      // Read the current doc for each so a legacy value is only ever written once.
+      const snaps = await Promise.all(chunk.map(c => getDoc(doc(this.db, c.coll, c.id))));
+      chunk.forEach((c, k) => {
+        const existing = snaps[k].data() as Record<string, unknown> | undefined;
+        if (!existing) return;
+        const ref = doc(this.db, c.coll, c.id);
+        if (c.coll === 'members') {
+          batch.update(ref, {
+            latestLvl: c.newLvl,
+            latestRank: c.newRank,
+            ...(existing['legacyLatestLvl'] === undefined ? { legacyLatestLvl: c.oldLvl, legacyLatestRank: c.oldRank } : {})
+          });
+        } else {
+          batch.update(ref, {
+            lvl: c.newLvl,
+            rank: c.newRank,
+            ...(existing['legacyLvl'] === undefined ? { legacyLvl: c.oldLvl, legacyRank: c.oldRank } : {})
+          });
+        }
+        written++;
+      });
+      await batch.commit();
+    }
+
+    // The records dated today. Nothing here touches the member's activity
+    // time, so no one shows up as having just trained.
+    if (plan.refresh.length) {
+      const now = new Date();
+      const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      const dateLabel = new Date(local).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const iso = now.toISOString();
+      for (let i = 0; i < plan.refresh.length; i += 400) {
+        const batch = writeBatch(this.db);
+        for (const r of plan.refresh.slice(i, i + 400)) {
+          batch.set(doc(this.assessmentsCollection()), this.cleanForFirestore({
+            clientId: r.clientId,
+            clientName: r.clientName,
+            nameKey: r.nameKey,
+            timestamp: local,
+            dateLabel,
+            inputs: r.inputs,
+            testOverrides: r.testOverrides,
+            lvl: r.lvl,
+            rank: r.rank,
+            createdAt: iso,
+            updatedAt: iso,
+            refreshedFrom: r.fromId
+          }));
+          written++;
+        }
+        await batch.commit();
+      }
+    }
+    return written;
   }
 
   async deleteAssessment(id: string): Promise<void> {

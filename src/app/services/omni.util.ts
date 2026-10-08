@@ -5,14 +5,13 @@
 // imports runtime helpers back out of this file.
 import type { AssessmentInputs, OmniRank, Sex } from './firebase.service';
 
-// The four strength benchmarks an in-session lift can set a PR on. `key` matches
+// The three strength benchmarks an in-session lift can set a PR on. `key` matches
 // the AssessmentInputs field (the estimated 1RM); `<key>Weight`/`<key>Reps` hold
 // the entry that produced it. Matching is fuzzy on the exercise name, with
 // excludes so close variants (RDL, split squat, incline bench…) don't false-fire.
 export interface AssessmentLift {
-  key: 'deadlift' | 'squat' | 'bench' | 'pullup1rm';
+  key: 'deadlift' | 'squat' | 'bench';
   label: string;
-  bodyweightBased?: boolean;  // pull-up 1RM = Brzycki(bodyweight + added load, reps)
   includes: string[];
   excludes: string[];
 }
@@ -20,8 +19,7 @@ export interface AssessmentLift {
 export const ASSESSMENT_LIFTS: AssessmentLift[] = [
   { key: 'deadlift', label: 'Deadlift', includes: ['deadlift'], excludes: ['romanian', 'rdl', 'stiff', 'single leg', 'single-leg', 'deficit', 'snatch grip'] },
   { key: 'squat', label: 'Squat', includes: ['squat'], excludes: ['split', 'bulgarian', 'goblet', 'front', 'pistol', 'jump', 'wall', 'hack', 'box', 'overhead', 'zercher', 'sissy'] },
-  { key: 'bench', label: 'Bench', includes: ['bench'], excludes: ['incline', 'decline', 'dumbbell', 'db ', 'single arm', 'single-arm'] },
-  { key: 'pullup1rm', label: 'Pull-up', bodyweightBased: true, includes: ['pull-up', 'pullup', 'pull up', 'chin-up', 'chinup', 'chin up'], excludes: [] }
+  { key: 'bench', label: 'Bench', includes: ['bench'], excludes: ['incline', 'decline', 'dumbbell', 'db ', 'single arm', 'single-arm'] }
 ];
 
 const NOT_A_LIFT = ['adduction', 'abduction', 'jump', 'hop', 'sprint', 'rotation', 'raise', 'bridge'];
@@ -60,7 +58,7 @@ function num(v: number | null | undefined): number {
 //
 // An override always keeps the SAME formula *shape* as the slot it's
 // replacing — a ratio-type slot (the four strength lifts, long jump) stays
-// a ratio; a curve-type slot (sprint, 30 Min Run, 2 Min Speed — the
+// a ratio; a curve-type slot (sprint, 30 Min Run, 800 M Run — the
 // time-based tests, all lower-raw-is-better) stays the same sqrt decay
 // curve calcPower/calcCardio use. What the coach can edit is every real
 // constant in that formula — not just the "world record," but (for
@@ -82,7 +80,7 @@ export interface TestOverride {
 
 export type TestOverrides = Partial<Record<TestKey, TestOverride>>;
 
-const LOWER_IS_BETTER: ReadonlySet<TestKey> = new Set<TestKey>(['sprint']);
+const LOWER_IS_BETTER: ReadonlySet<TestKey> = new Set<TestKey>(['sprint', 'run800']);
 
 // Exposed so the Assessments page can show the coach the exact formula
 // (and a live preview score) while they're picking new constants for a
@@ -102,24 +100,22 @@ export function isLowerIsBetterTest(key: TestKey): boolean {
 export const CURVE_TEST_DEFAULTS: Partial<Record<TestKey, { record: number; spread: number }>> = {
   sprint: { record: 10, spread: 0.125 },
   run30: { record: 11.265408, spread: 0.11265408 },
-  speed2: { record: 0.804672, spread: 0.00804672 },
+  speed2: { record: 0.804672, spread: 0.00804672 },   // legacy 2-minute run, kept for records that carry it
+  run800: { record: 105, spread: 2.4 },
 };
 
 export function isCurveTest(key: TestKey): boolean {
   return key in CURVE_TEST_DEFAULTS;
 }
 
-// Pull-up 1RM's record. Was 500 lb until the test moved to chin over the
-// bar (stricter technique), which costs everyone roughly 10 lb. 484 keeps
-// the 999 group's scores where they were across the switch — Abram
-// 309 -> 299, Roy 302 -> 292, Raymond 299 -> 289 each move by under a
-// tenth of a point.
-export const PULLUP_1RM_RECORD = 484;
+// The weighted pull-up 1RM was removed from the strength score. Records keep
+// the numbers they already hold (pullup1rm*, in AssessmentInputs) so nothing
+// is lost, but nothing reads them for scoring or display.
 
 // Ratio-type slots' real, current built-in "world record" constants —
 // same pre-fill purpose as CURVE_TEST_DEFAULTS above.
 export const RATIO_TEST_DEFAULTS: Partial<Record<TestKey, number>> = {
-  deadlift: 939, squat: 800, bench: 600, pullup1rm: PULLUP_1RM_RECORD, longjump: 147,
+  deadlift: 939, squat: 800, bench: 600, longjump: 147,
 };
 
 export function overrideScore(raw: number, worldRecord: number, key: TestKey, spread?: number): number {
@@ -146,12 +142,11 @@ function slotScore(raw: number, key: TestKey, overrides: TestOverrides | undefin
   return ov ? overrideScore(raw, ov.worldRecord, key, ov.spread) : fallback();
 }
 
-export function calcStrength(dl: number, sq: number, bn: number, pu: number, overrides?: TestOverrides): number {
+export function calcStrength(dl: number, sq: number, bn: number, overrides?: TestOverrides): number {
   const dlScore = slotScore(dl, 'deadlift', overrides, () => dl / 939 * 100);
   const sqScore = slotScore(sq, 'squat', overrides, () => sq / 800 * 100);
   const bnScore = slotScore(bn, 'bench', overrides, () => bn / 600 * 100);
-  const puScore = slotScore(pu, 'pullup1rm', overrides, () => pu / PULLUP_1RM_RECORD * 100);
-  return (dlScore + sqScore + bnScore + puScore) / 4;
+  return (dlScore + sqScore + bnScore) / 3;
 }
 export function calcPower(lj: number, sp: number, overrides?: TestOverrides): number {
   const ljScore = slotScore(lj, 'longjump', overrides, () => lj / 147 * 100);
@@ -163,12 +158,63 @@ export function calcEndurance(pu: number, pulls: number, overrides?: TestOverrid
   const pullsScore = slotScore(pulls, 'pullups', overrides, () => (pulls / 49) * 100);
   return (puScore + pullsScore) / 2;
 }
-export function calcCardio(r30: number, s2: number, overrides?: TestOverrides): number {
+// ---------- 800 m run ----------
+// Cardio's short test is an 800 m run, in seconds (it was a 2-minute run).
+// Same shape as the 100 m sprint: 100 points at the record, falling by a
+// square root. The record is an estimated flat-shoe world record, not
+// Rudisha's 1:40.91 in spikes, and the spread is set so a typical athlete's
+// time reads as a believable 800 m. Keep in step with Project 000's omni.util.
+export const RUN800_RECORD = 105;
+export const RUN800_SPREAD = 2.4;
+
+export function run800Score(seconds: number): number {
+  if (!(seconds > 0)) return 0;
+  const pct = (10 - Math.sqrt(Math.max(0, (seconds - RUN800_RECORD) / RUN800_SPREAD))) * 10;
+  return Math.max(0, Math.min(100, pct));
+}
+
+// What the old 2-minute test scored, so a record that only has a 2-minute
+// distance reads the same score it always did.
+function twoMinuteScore(km: number): number {
+  return (Math.sqrt((0.804672 - km) / 0.00804672) * -1 + 10) * 10;
+}
+
+// The 800 m time that scores exactly what a 2-minute distance scored.
+export function estimate800FromTwoMinute(km: number): number {
+  if (!(km > 0)) return 0;
+  const score = Math.max(0, Math.min(100, twoMinuteScore(km)));
+  return RUN800_RECORD + RUN800_SPREAD * Math.pow(10 - score / 10, 2);
+}
+
+// A recorded 800 m time, else the one implied by the record's 2-minute
+// distance, else 0 (not tested).
+export function effectiveRun800(i: Partial<AssessmentInputs> | null | undefined): number {
+  if (!i) return 0;
+  if ((i.run800 ?? 0) > 0) return i.run800 as number;
+  return estimate800FromTwoMinute(i.speed2 ?? 0);
+}
+
+// 144.87 -> "2:25". Whole seconds, rounded.
+export function formatRunTime(seconds: number): string {
+  const t = Math.round(seconds);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+}
+
+// The short cardio test's 0-100 score. A recorded 800 m time scores on the
+// 800 m curve; a record that only has the old 2-minute distance keeps its
+// old formula, test override included, so nothing already scored moves.
+export function cardioShortScore(i: { run800?: number; speed2?: number }, overrides?: TestOverrides): number {
+  const t = num(i.run800);
+  if (t > 0) return slotScore(t, 'run800', overrides, () => run800Score(t));
+  const s2 = num(i.speed2);
+  return slotScore(s2, 'speed2', overrides, () => twoMinuteScore(s2));
+}
+
+export function calcCardio(r30: number, short: { run800?: number; speed2?: number }, overrides?: TestOverrides): number {
   const rs = slotScore(r30, 'run30', overrides, () => r30 < 4.02336
     ? (Math.sqrt((11.265408 - r30) / 0.11265408) * -1 + 10) * 10
     : r30 / 11.265408 * 100);
-  const s2Score = slotScore(s2, 'speed2', overrides, () => (Math.sqrt((0.804672 - s2) / 0.00804672) * -1 + 10) * 10);
-  return (rs + s2Score) / 2;
+  return (rs + cardioShortScore(short, overrides)) / 2;
 }
 export function calcFlex(pike: number, bb: number, str: number, overrides?: TestOverrides): number {
   // Pike/backbend are entered on a 0-10 scale (see FIELD_LIMITS); clamp
@@ -180,19 +226,35 @@ export function calcFlex(pike: number, bb: number, str: number, overrides?: Test
   return (pikeScore + bbScore + strScore) / 3;
 }
 
+// The level curve. Strength lost the weighted pull-up, which lowered everyone's
+// raw total by a few points; K and p were refitted so that levels stay where
+// athletes already were (the old curve was 1000 * (raw/1000)^2). Raw can dip
+// below zero for a very slow sprint, so it floors at 0 before the power.
+export const LEVEL_K = 987;
+export const LEVEL_P = 1.96;
+
+export function levelFromRaw(raw: number): number {
+  return LEVEL_K * Math.pow(Math.max(0, raw) / 1000, LEVEL_P);
+}
+
+// The raw total a level needs: the curve run backwards.
+export function rawForLevel(level: number): number {
+  return 1000 * Math.pow(level / LEVEL_K, 1 / LEVEL_P);
+}
+
 export interface OmniTotals {
   H: number; K: number; N: number; Q: number; U: number;
   raw: number; exact: number; lvl: number; xpPct: number;
 }
 
 export function computeOmni(i: AssessmentInputs, overrides?: TestOverrides): OmniTotals {
-  const H = calcStrength(num(i.deadlift), num(i.squat), num(i.bench), num(i.pullup1rm), overrides);
+  const H = calcStrength(num(i.deadlift), num(i.squat), num(i.bench), overrides);
   const K = calcPower(num(i.longjump), num(i.sprint), overrides);
   const N = calcEndurance(num(i.pushups), num(i.pullups), overrides);
-  const Q = calcCardio(num(i.run30), num(i.speed2), overrides);
+  const Q = calcCardio(num(i.run30), i, overrides);
   const U = calcFlex(num(i.pike), num(i.backbend), num(i.straddle), overrides);
   const raw = H + K + N + Q + U;
-  const exact = Math.pow(raw / 1000, 2) * 1000;
+  const exact = levelFromRaw(raw);
   const lvl = isFinite(exact) ? Math.floor(exact) : 0;
   const xpPct = isFinite(exact) ? (exact - lvl) * 100 : 0;
   return { H, K, N, Q, U, raw, exact, lvl, xpPct };
@@ -377,7 +439,7 @@ const CATEGORY_FLOOR: Record<OmniCategory, { male: number; female: number }> = {
 // its weight for an S-RANK athlete" — NOT "world record". Derived as the
 // score which, held in every category, lands exactly on the overall S-RANK
 // threshold: computeOmni squares the five-category sum, so level L needs
-// raw = sqrt(L / 1000) * 1000, split five ways — 63.2 for men (level 100),
+// raw = rawForLevel(L), split five ways — about 62.2 for men (level 100),
 // 56.6 for women (level 80). Clear it in one category and that category is
 // doing S-RANK work, whatever the other four are doing.
 //
@@ -412,7 +474,7 @@ const CATEGORY_S_FLOOR_OVERRIDE: Partial<Record<OmniCategory, { male: number; fe
 
 function evenSFloor(sex: Sex): number {
   const sLevel = (RANK_THRESHOLDS[sex] ?? RANK_THRESHOLDS['male'])[0].floor;
-  return (Math.sqrt(sLevel / 1000) * 1000) / 5;
+  return rawForLevel(sLevel) / 5;
 }
 
 // C, B and A split the gap between the two anchors evenly. Highest floor
@@ -499,14 +561,14 @@ export function categoryBgColor(cat: OmniCategory, score: number, sex: Sex = 'ma
 // that good, the category would be B-RANK too — and Project 000's copy of
 // this map ranks it identically.
 export type ScoredTestKey =
-  'deadlift' | 'squat' | 'bench' | 'pullup1rm' | 'longjump' | 'sprint' | 'pushups' |
-  'pullups' | 'run30' | 'speed2' | 'pike' | 'backbend' | 'straddle';
+  'deadlift' | 'squat' | 'bench' | 'longjump' | 'sprint' | 'pushups' |
+  'pullups' | 'run30' | 'run800' | 'pike' | 'backbend' | 'straddle';
 
 export const TEST_CATEGORY: Record<ScoredTestKey, OmniCategory> = {
-  deadlift: 'strength', squat: 'strength', bench: 'strength', pullup1rm: 'strength',
+  deadlift: 'strength', squat: 'strength', bench: 'strength',
   longjump: 'power', sprint: 'power',
   pushups: 'endurance', pullups: 'endurance',
-  run30: 'cardio', speed2: 'cardio',
+  run30: 'cardio', run800: 'cardio',
   pike: 'flexibility', backbend: 'flexibility', straddle: 'flexibility'
 };
 
@@ -519,7 +581,6 @@ export function testScore(key: ScoredTestKey, i: AssessmentInputs, overrides?: T
     case 'deadlift': return slotScore(v, key, overrides, () => v / 939 * 100);
     case 'squat': return slotScore(v, key, overrides, () => v / 800 * 100);
     case 'bench': return slotScore(v, key, overrides, () => v / 600 * 100);
-    case 'pullup1rm': return slotScore(v, key, overrides, () => v / PULLUP_1RM_RECORD * 100);
     case 'longjump': return slotScore(v, key, overrides, () => v / 147 * 100);
     case 'sprint': return slotScore(v, key, overrides, () => (Math.sqrt((v - 10) / 0.125) * -1 + 10) * 10);
     case 'pushups': return slotScore(v, key, overrides, () => (v / 150) * 100);
@@ -527,7 +588,7 @@ export function testScore(key: ScoredTestKey, i: AssessmentInputs, overrides?: T
     case 'run30': return slotScore(v, key, overrides, () => v < 4.02336
       ? (Math.sqrt((11.265408 - v) / 0.11265408) * -1 + 10) * 10
       : v / 11.265408 * 100);
-    case 'speed2': return slotScore(v, key, overrides, () => (Math.sqrt((0.804672 - v) / 0.00804672) * -1 + 10) * 10);
+    case 'run800': return cardioShortScore(i, overrides);
     case 'pike': return slotScore(v, key, overrides, () => Math.max(0, Math.min(10, v)) * 10);
     case 'backbend': return slotScore(v, key, overrides, () => Math.max(0, Math.min(10, v)) * 10);
     case 'straddle': return slotScore(v, key, overrides, () => v < 80 ? 0 : v > 180 ? 100 : v - 80);
@@ -552,21 +613,6 @@ export function testScore(key: ScoredTestKey, i: AssessmentInputs, overrides?: T
 // C 172, B 237, A 301, S 365. Female keeps the strength ladder's own D
 // (13.5 → 81 lb) and scales S by the same ratio the category tables use
 // between the sexes (56.6 / 63.2), landing at 326 lb.
-//
-// Pull-up 1RM, because on the plain strength ladder it ranked people a full
-// rank above where they belong. Same ladder moved up exactly one rank — D
-// sits where C was, and so on, with S one step past the old S. In total
-// load (bodyweight + added, scored against PULLUP_1RM_RECORD): D 142,
-// C 197, B 251, A 306, S 361 lb for men; D 117, C 170, B 222, A 274,
-// S 326 lb for women.
-// Derived rather than typed in, so it keeps following the strength ladder.
-function oneRankStricter(cat: OmniCategory, sex: Sex): { d: number; s: number } {
-  const key = sex === 'female' ? 'female' : 'male';
-  const d = CATEGORY_FLOOR[cat][key];
-  const s = CATEGORY_S_FLOOR_OVERRIDE[cat]?.[key] ?? evenSFloor(sex);
-  const step = (s - d) / 4;
-  return { d: d + step, s: s + step };
-}
 
 const INCHES_TO_LJ_SCORE = 100 / 147;
 const LBS_TO_BENCH_SCORE = 100 / 600;
@@ -578,10 +624,6 @@ const TEST_LADDER_OVERRIDE: Partial<Record<ScoredTestKey, { male: { d: number; s
   bench: {
     male: { d: 18, s: 365 * LBS_TO_BENCH_SCORE },
     female: { d: 13.5, s: 326 * LBS_TO_BENCH_SCORE }
-  },
-  pullup1rm: {
-    male: oneRankStricter('strength', 'male'),
-    female: oneRankStricter('strength', 'female')
   }
 };
 
@@ -624,16 +666,15 @@ export const ASSESSMENT_META = [
   { key: 'deadlift', label: 'Deadlift', unit: 'lbs', step: 20, min: 0, max: 2000, decimals: 0 },
   { key: 'squat', label: 'Squat', unit: 'lbs', step: 20, min: 0, max: 2000, decimals: 0 },
   { key: 'bench', label: 'Bench', unit: 'lbs', step: 20, min: 0, max: 2000, decimals: 0 },
-  { key: 'pullup1rm', label: 'Pull-up 1RM', unit: 'lbs', step: 20, min: 0, max: 2000, decimals: 0 },
   { key: 'longjump', label: 'Long Jump', unit: 'in', step: 3, min: 0, max: 300, decimals: 0 },
   { key: 'sprint', label: '100m Sprint', unit: 'sec', step: 0.1, min: 0, max: 60, decimals: 2 },
   { key: 'pushups', label: 'Pushups', unit: 'reps', step: 5, min: 0, max: 1000, decimals: 0 },
   { key: 'pullups', label: 'Pull-ups', unit: 'reps', step: 3, min: 0, max: 1000, decimals: 0 },
   { key: 'run30', label: '30 Min Run', unit: 'km', step: 0.32, min: 0, max: 50, decimals: 2 },
-  { key: 'speed2', label: '2 Min Speed', unit: 'km', step: 0.016, min: 0, max: 0.805, decimals: 3 },
+  { key: 'run800', label: '800 M Run', unit: 'sec', step: 5, min: 60, max: 1200, decimals: 0 },
   { key: 'pike', label: 'Pike', unit: '', step: 1, min: 0, max: 10, decimals: 0 },
   { key: 'backbend', label: 'Backbend', unit: '', step: 1, min: 0, max: 10, decimals: 0 },
-  { key: 'straddle', label: 'Straddle', unit: 'deg', step: 10, min: 0, max: 180, decimals: 0 }
+  { key: 'straddle', label: 'Middle Split', unit: 'deg', step: 10, min: 0, max: 180, decimals: 0 }
 ] as const;
 
 export interface AssessmentChange {
@@ -657,11 +698,15 @@ export function describeAssessmentChange(
   let best: { label: string; unit: string; decimals: number; oldVal: number; newVal: number; gain: number; pct: number } | null = null;
 
   for (const meta of ASSESSMENT_META) {
-    const oldVal = num(prev[meta.key]);
-    const newVal = num(curr[meta.key]);
+    const value = (x: AssessmentInputs) => meta.key === 'run800' ? effectiveRun800(x) : num(x[meta.key]);
+    const oldVal = value(prev);
+    const newVal = value(curr);
     if (Math.abs(newVal - oldVal) < 1e-9) continue;
 
-    const trial = { ...curr, [meta.key]: oldVal };
+    // The 800 m time replaces whatever 2-minute distance the record carried.
+    const trial = meta.key === 'run800'
+      ? { ...curr, run800: oldVal, speed2: 0 }
+      : { ...curr, [meta.key]: oldVal };
     const trialExact = computeOmni(trial).exact;
     const gain = currTotals.exact - trialExact;
     const base = Math.abs(trialExact) > 1e-9 ? trialExact : currTotals.exact;
@@ -675,7 +720,9 @@ export function describeAssessmentChange(
   if (!best) return { text: fallback, pct: null };
   const unitSuffix = best.unit ? ` ${best.unit}` : '';
   const sign = best.pct > 0 ? '+' : best.pct < 0 ? '' : '±';
-  const text = `${best.label} ${best.oldVal.toFixed(best.decimals)} → ${best.newVal.toFixed(best.decimals)}${unitSuffix} (${sign}${best.pct.toFixed(1)}%)`;
+  const text = best.label === '800 M Run'
+    ? `${best.label} ${formatRunTime(best.oldVal)} → ${formatRunTime(best.newVal)} (${sign}${best.pct.toFixed(1)}%)`
+    : `${best.label} ${best.oldVal.toFixed(best.decimals)} → ${best.newVal.toFixed(best.decimals)}${unitSuffix} (${sign}${best.pct.toFixed(1)}%)`;
   return { text, pct: best.pct };
 }
 
@@ -692,7 +739,7 @@ export function blankAssessmentInputs(): AssessmentInputs {
     bench: 0, benchWeight: 0, benchReps: 1,
     pullup1rm: 0, pullup1rmWeight: 0, pullup1rmReps: 1,
     longjump: 0, sprint: 0, pushups: 0, pullups: 0,
-    run30: 0, speed2: 0, pike: 0, backbend: 0, straddle: 0
+    run30: 0, run800: 0, speed2: 0, pike: 0, backbend: 0, straddle: 0
   };
 }
 
@@ -782,7 +829,7 @@ export const RESILIENCE_TESTS: ReadonlyArray<{
 ];
 
 // Per-exercise percentage of its own max, clamped — the same ratio shape
-// calcStrength uses for the four lifts.
+// calcStrength uses for the three lifts.
 export function resilienceTestPct(key: ResilienceKey, weight: number): number {
   const test = RESILIENCE_TESTS.find(t => t.key === key);
   if (!test || !test.max) return 0;

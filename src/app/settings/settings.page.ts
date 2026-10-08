@@ -5,7 +5,7 @@ import { IonContent, IonIcon, ToastController } from '@ionic/angular/standalone'
 import { addIcons } from 'ionicons';
 import { arrowBack, calendarOutline, layersOutline } from 'ionicons/icons';
 import { CalendarSyncService } from '../services/calendar-sync.service';
-import { FirebaseService } from '../services/firebase.service';
+import { FirebaseService, RescorePlan, RescoreChange, OmniRank, MemberMergePlan } from '../services/firebase.service';
 import { MigrationPlan } from '../services/schedule.util';
 
 // App-wide coach preferences. Currently just Apple Calendar sync — moved
@@ -33,6 +33,7 @@ export class SettingsPage implements OnInit {
 
   ngOnInit() {
     this.loadScheduling();
+    this.loadMergeMembers();
     this.calendarSyncEnabled = this.calendarSync.isEnabled;
     // Opening this page doubles as a refresh, same as the Schedule page
     // syncing on every load — covers anyone whose calendar was left empty
@@ -99,6 +100,117 @@ export class SettingsPage implements OnInit {
       this.schedulingStatus = "Couldn't finish creating sessions — run Preview again; packages already done are skipped.";
     } finally {
       this.schedulingBusy = false;
+    }
+  }
+
+  // ---- Duplicate athletes ----
+  mergeMembers: Array<{ nameKey: string; clientName: string; latestLvl: number | null }> = [];
+  mergeKeep = '';
+  mergeRetire = '';
+  mergePlan: MemberMergePlan | null = null;
+  mergeBusy = false;
+  mergeStatus = '';
+
+  private async loadMergeMembers() {
+    try { this.mergeMembers = await this.firebase.listMembersBasic(); } catch (err) { console.error('Settings: member list failed', err); }
+  }
+
+  pickMerge(which: 'keep' | 'retire', key: string) {
+    if (which === 'keep') this.mergeKeep = key; else this.mergeRetire = key;
+    this.mergePlan = null;
+    this.mergeStatus = '';
+  }
+
+  async previewMerge() {
+    this.mergeBusy = true;
+    this.mergeStatus = 'Checking both records…';
+    try {
+      const p = await this.firebase.planMemberMerge(this.mergeKeep, this.mergeRetire);
+      this.mergePlan = p;
+      this.mergeStatus = `${p.retireName} (Level ${p.retireLevel ?? '—'}) folds into ${p.keepName} (Level ${p.keepLevel ?? '—'}). ${p.keepName} stays at Level ${p.keepLevel ?? '—'}.`
+        + (p.copyCompetitorId ? ' Their competitor ID is carried over.' : '');
+    } catch (err) {
+      console.error('Settings: merge preview failed', err);
+      this.mergeStatus = "Couldn't build the preview. Try again.";
+    } finally {
+      this.mergeBusy = false;
+    }
+  }
+
+  async applyMerge() {
+    const p = this.mergePlan;
+    if (!p) return;
+    if (!confirm(`Merge ${p.retireName} into ${p.keepName}? ${p.assessmentIds.length} assessments and ${p.goalIds.length} goals move over. Nothing is deleted.`)) return;
+    this.mergeBusy = true;
+    this.mergeStatus = 'Merging…';
+    try {
+      await this.firebase.applyMemberMerge(p);
+      this.mergePlan = null;
+      this.mergeStatus = `Merged ${p.retireName} into ${p.keepName}.`;
+      this.mergeRetire = '';
+      await this.loadMergeMembers();
+    } catch (err) {
+      console.error('Settings: merge failed', err);
+      this.mergeStatus = "Couldn't finish. Run Preview again; nothing was changed.";
+    } finally {
+      this.mergeBusy = false;
+    }
+  }
+
+  // ---- Scoring: one-time rescore ----
+  rescorePlan: RescorePlan | null = null;
+  rescoreBusy = false;
+  rescoreStatus = '';
+
+  // The per-assessment rows are the athlete-facing history; the leaderboard
+  // level is shown once per athlete, so list members and other records
+  // together, athlete by athlete.
+  get rescoreRows(): RescoreChange[] {
+    return [...(this.rescorePlan?.changes ?? [])].sort((a, b) => a.name.localeCompare(b.name) || a.coll.localeCompare(b.coll));
+  }
+
+  get rescoreRankChanges(): number {
+    return (this.rescorePlan?.changes ?? []).filter(c => c.coll === 'members' && c.oldRank !== c.newRank).length;
+  }
+
+  rankText(rank: OmniRank): string {
+    return rank === 'UNRANKED' ? 'Unranked' : rank.replace('-RANK', '-Rank');
+  }
+
+  async previewRescore() {
+    this.rescoreBusy = true;
+    this.rescoreStatus = 'Checking every record…';
+    try {
+      this.rescorePlan = await this.firebase.planRescore();
+      const c = this.rescorePlan.checked;
+      const checked = `Checked ${c.assessments} assessments, ${c.pending} pending, ${c.goals} goals and ${c.members} members.`;
+      this.rescoreStatus = this.rescorePlan.changes.length || this.rescorePlan.refresh.length
+        ? `${checked} ${this.rescorePlan.refresh.length} athletes get a record dated today. Highlighted rows change rank.`
+        : `${checked} Everything is already up to date.`;
+    } catch (err) {
+      console.error('Settings: rescore preview failed', err);
+      this.rescoreStatus = "Couldn't build the preview. Try again.";
+    } finally {
+      this.rescoreBusy = false;
+    }
+  }
+
+  async applyRescore() {
+    const plan = this.rescorePlan;
+    if (!plan || !(plan.changes.length || plan.refresh.length)) return;
+    const ok = confirm(`Update ${plan.changes.length} levels (${this.rescoreRankChanges} athletes change rank) and add a record dated today for ${plan.refresh.length} athletes? The previous level and rank stay on each record.`);
+    if (!ok) return;
+    this.rescoreBusy = true;
+    this.rescoreStatus = 'Rescoring…';
+    try {
+      const written = await this.firebase.applyRescore(plan);
+      this.rescorePlan = null;
+      this.rescoreStatus = `Rescored ${written} records.`;
+    } catch (err) {
+      console.error('Settings: rescore failed', err);
+      this.rescoreStatus = "Couldn't finish. Run Preview again; records already done are skipped.";
+    } finally {
+      this.rescoreBusy = false;
     }
   }
 

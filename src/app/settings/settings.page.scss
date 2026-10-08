@@ -267,3 +267,7 @@ ion-content {
   font-size: 13px;
   color: var(--hud-text-dim, #88a6bf);
 }
+
+.merge-pickers { display: grid; gap: 12px; margin-top: 14px; }
+.merge-label { display: block; margin-bottom: 4px; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.7; }
+.merge-select { width: 100%; padding: 10px 12px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.14); color: inherit; font-size: 15px; }
