@@ -3298,6 +3298,14 @@ export class FirebaseService {
     await updateDoc(doc(this.db, 'linkRequests', req.id), { status: 'approved', reviewedAt: new Date().toISOString() });
   }
 
+  // Gives another sign-in (an Apple account, say) access to an athlete who already has a login. Writes the same
+  // clientLinks doc approving a request would, keyed by the account's uid; refuses a uid that is already linked.
+  async linkAccountToClient(uid: string, nameKey: string, clientName: string): Promise<void> {
+    const ref = doc(this.db, 'clientLinks', uid);
+    if ((await getDoc(ref)).exists()) throw new Error('That account is already linked to a client.');
+    await setDoc(ref, { uid, nameKey, clientName, linkedAt: new Date().toISOString() });
+  }
+
   async rejectLinkRequest(id: string): Promise<void> {
     await updateDoc(doc(this.db, 'linkRequests', id), { status: 'rejected', reviewedAt: new Date().toISOString() });
   }

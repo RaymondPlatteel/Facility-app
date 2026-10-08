@@ -183,6 +183,13 @@
                 <option value="no">No — pays for the program</option>
               </select>
             </label>
+            <label class="field" *ngIf="!panelNew">
+              <span>Add another login</span>
+              <div class="login-row">
+                <input type="text" [(ngModel)]="linkUid" placeholder="Firebase user ID" autocomplete="off" />
+                <button type="button" class="ghost-btn" [disabled]="!linkUid.trim() || linking" (click)="addLogin()">Add login</button>
+              </div>
+            </label>
             <label class="field">
               <span>Sex</span>
               <select [(ngModel)]="groupSex">

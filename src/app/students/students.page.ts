@@ -110,6 +110,8 @@ export class StudentsPage implements OnInit, OnDestroy {
   // here by hand is in-person by default; existing ones read what's stored.
   groupInPerson = false;
   freeProgram = false;
+  linkUid = '';
+  linking = false;
   clientCheckIns: CheckIn[] = [];
   clientPayments: PaymentRecord[] = [];
   clientWorkouts: WorkoutLog[] = [];
