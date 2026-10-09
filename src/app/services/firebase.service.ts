@@ -912,6 +912,7 @@ export interface PendingAssessment {
   status: 'pending' | 'approved' | 'rejected';
   reviewedAt?: string;
   videoUrl?: string | null;
+  photoUrl?: string | null;   // a photo as proof, in place of a video
 }
 
 // A Project-000 account's request to link itself to an athlete profile —
