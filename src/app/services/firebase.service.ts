@@ -913,6 +913,14 @@ export interface PendingAssessment {
   reviewedAt?: string;
   videoUrl?: string | null;
   photoUrl?: string | null;   // a photo as proof, in place of a video
+  // Several proofs per submission: videoPaths fixes the slots when it is made, videoUrls fills in (v0, v1, ...)
+  // as each upload finishes, and proofs says which test each slot is for and whether it is a video or a photo.
+  videoPaths?: string[];
+  videoUrls?: Record<string, string>;
+  proofs?: Array<{ test: string; kind: 'video' | 'photo' }>;
+  // What the athlete's form started from, and the input keys they changed (e.g. 'deadliftWeight', 'run800').
+  baseInputs?: AssessmentInputs | null;
+  changed?: string[];
 }
 
 // A Project-000 account's request to link itself to an athlete profile —
@@ -3114,14 +3122,14 @@ export class FirebaseService {
     });
   }
 
-  async setPendingResilienceStatus(id: string, status: 'approved' | 'rejected'): Promise<void> {
-    await updateDoc(doc(this.db, 'pendingResilience', id), { status, reviewedAt: new Date().toISOString() });
+  async setPendingResilienceStatus(id: string, status: 'approved' | 'rejected', note = ''): Promise<void> {
+    await updateDoc(doc(this.db, 'pendingResilience', id), { status, reviewedAt: new Date().toISOString(), coachNote: note.trim() || null });
   }
 
   // Approving a submission: write the real entry, then mark the queue item.
   // Score and rank are recomputed here rather than trusted from the
   // submission, so an edited client payload can't inflate what gets stored.
-  async approvePendingResilience(p: PendingResilience): Promise<void> {
+  async approvePendingResilience(p: PendingResilience, note = ''): Promise<void> {
     await this.saveResilienceEntry({
       clientId: null,
       clientName: p.clientName,
@@ -3130,7 +3138,7 @@ export class FirebaseService {
       dateLabel: p.dateLabel,
       inputs: p.inputs
     });
-    await this.setPendingResilienceStatus(p.id!, 'approved');
+    await this.setPendingResilienceStatus(p.id!, 'approved', note);
   }
 
   async deleteResilienceEntry(id: string): Promise<void> {
@@ -3248,8 +3256,9 @@ export class FirebaseService {
     return snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<PendingAssessment, 'id'>) }));
   }
 
-  async setPendingAssessmentStatus(id: string, status: 'approved' | 'rejected'): Promise<void> {
-    await updateDoc(doc(this.db, 'pendingAssessments', id), { status, reviewedAt: new Date().toISOString() });
+  // coachNote is the coach's comment to the athlete, shown with the outcome in Project-000.
+  async setPendingAssessmentStatus(id: string, status: 'approved' | 'rejected', note = ''): Promise<void> {
+    await updateDoc(doc(this.db, 'pendingAssessments', id), { status, reviewedAt: new Date().toISOString(), coachNote: note.trim() || null });
   }
 
   // ---------- Link requests (Project-000 "link my account" review queue) ----------

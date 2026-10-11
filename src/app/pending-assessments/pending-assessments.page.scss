@@ -222,10 +222,48 @@ ion-content {
   object-fit: contain;
 }
 
+// One proof per test, labelled with the test it is for.
+.proof-item { margin-top: 14px; }
+.proof-item .review-video { margin-top: 6px; }
+.proof-label {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--hud-text-dim, #8fb3c4);
+}
+.proof-pending {
+  margin-top: 6px;
+  padding: 18px;
+  border-radius: 10px;
+  border: 1px dashed var(--hud-border, #133748);
+  font-size: 13px;
+  color: var(--hud-text-dim, #8fb3c4);
+  text-align: center;
+}
+
 .diff-list {
   display: flex;
   flex-direction: column;
   padding-top: 10px;
+}
+
+.diff-heading {
+  padding: 4px 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--hud-text-dim, #8fb3c4);
+}
+.diff-toggle {
+  align-self: flex-start;
+  margin: 10px 0 4px;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--hud-accent, #38bdf8);
+  cursor: pointer;
 }
 
 .diff-row {

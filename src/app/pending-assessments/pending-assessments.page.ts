@@ -63,6 +63,13 @@ export class PendingAssessmentsPage implements OnInit {
 
   expandedId: string | null = null;
   diffRows: DiffRow[] = [];
+  // Unchanged results are folded away under the changed ones.
+  showUnchanged = false;
+  get changedRows(): DiffRow[] { return this.diffRows.filter(r => r.changed); }
+  get unchangedRows(): DiffRow[] { return this.diffRows.filter(r => !r.changed); }
+  // Keeps each proof's element in place across change detection, so a playing video is not reloaded.
+  trackProof = (i: number) => i;
+  trackPending = (_: number, p: PendingAssessment) => p.id;
   loadingDiff = false;
 
   constructor(
@@ -170,6 +177,22 @@ export class PendingAssessmentsPage implements OnInit {
     this.router.navigateByUrl('/home');
   }
 
+  // Each proof on a submission, labelled with the test it is for. A url is null while the phone is still uploading.
+  proofItems(p: PendingAssessment): Array<{ label: string; kind: 'video' | 'photo'; url: string | null }> {
+    const slots = p.proofs?.length ?? p.videoPaths?.length ?? 0;
+    return Array.from({ length: slots }, (_, i) => {
+      const proof = p.proofs?.[i];
+      const label = proof ? (ASSESSMENT_META.find(m => m.key === proof.test)?.label ?? proof.test) : `Video ${i + 1}`;
+      return { label, kind: proof?.kind ?? 'video', url: p.videoUrls?.['v' + i] ?? null };
+    });
+  }
+
+  proofSummary(p: PendingAssessment): string {
+    const items = this.proofItems(p);
+    if (!items.length) return '';
+    return items.some(x => !x.url) ? ` · ${items.length} proof files, uploading` : ` · ${items.length} proof files`;
+  }
+
   async toggleReview(p: PendingAssessment) {
     if (this.expandedId === p.id) {
       this.expandedId = null;
@@ -179,21 +202,24 @@ export class PendingAssessmentsPage implements OnInit {
     this.expandedId = p.id ?? null;
     this.diffRows = [];
     this.loadingDiff = true;
+    this.showUnchanged = false;
     try {
-      const history = await this.firebase.listAssessmentsForClient({ clientName: p.clientName });
-      const baseline = history.length ? history[history.length - 1].inputs : null;
+      // The submission carries what the athlete started from and which inputs they changed; older submissions
+      // fall back to the client's latest assessment and a comparison at display precision.
+      let baseline: AssessmentInputs | null = p.baseInputs ?? null;
+      if (!baseline) {
+        const history = await this.firebase.listAssessmentsForClient({ clientName: p.clientName });
+        baseline = history.length ? history[history.length - 1].inputs : null;
+      }
+      const changedKeys = p.changed?.length ? p.changed : null;
       this.diffRows = DIFF_META.map(m => {
         const oldVal = baseline ? Number(baseline[m.key]) || 0 : 0;
         const newVal = Number(p.inputs[m.key]) || 0;
-        return {
-          label: m.label,
-          unit: m.unit,
-          decimals: m.decimals,
-          oldVal,
-          newVal,
-          changed: Math.abs(newVal - oldVal) > 1e-9
-        };
-      });
+        const changed = changedKeys
+          ? changedKeys.some(k => k === m.key || k === m.key + 'Weight' || k === m.key + 'Reps')
+          : oldVal.toFixed(m.decimals) !== newVal.toFixed(m.decimals);
+        return { label: m.label, unit: m.unit, decimals: m.decimals, oldVal, newVal, changed };
+      }).sort((a, b) => Number(b.changed) - Number(a.changed));
     } catch (err) {
       console.error('Pending assessments: baseline lookup failed', err);
     } finally {
@@ -204,7 +230,27 @@ export class PendingAssessmentsPage implements OnInit {
   // Leaves the pendingAssessments doc in place with status: 'approved' —
   // the mobile client shows that outcome to the athlete until they dismiss
   // it themselves, rather than it just silently vanishing.
+  // Every approve and reject asks for an optional comment, which the athlete reads with the outcome.
+  private async confirmWithComment(header: string, message: string, action: string, destructive: boolean): Promise<string | null> {
+    const alert = await this.alertController.create({
+      header,
+      message,
+      inputs: [{ name: 'note', type: 'textarea', placeholder: 'Comment for the athlete (optional)', attributes: { maxlength: 500, rows: 4 } }],
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        { text: action, role: destructive ? 'destructive' : 'confirm' }
+      ]
+    });
+    await alert.present();
+    const { role, data } = await alert.onDidDismiss<{ values?: { note?: string } }>();
+    if (role === 'cancel' || role === 'backdrop') return null;
+    return (data?.values?.note ?? '').trim();
+  }
+
   async approve(p: PendingAssessment) {
+    const note = await this.confirmWithComment('Approve this assessment?',
+      `${p.clientName} — LVL ${Math.max(1, Math.round(p.lvl))} · ${p.rank} will be saved to their record.`, 'Approve', false);
+    if (note === null) return;
     try {
       await this.firebase.saveAssessment({
         clientId: null,
@@ -216,7 +262,7 @@ export class PendingAssessmentsPage implements OnInit {
         lvl: p.lvl,
         rank: p.rank
       });
-      await this.firebase.setPendingAssessmentStatus(p.id!, 'approved');
+      await this.firebase.setPendingAssessmentStatus(p.id!, 'approved', note);
       this.pending = this.pending.filter(x => x.id !== p.id);
       if (this.expandedId === p.id) this.expandedId = null;
       const t = await this.toastController.create({ message: 'Approved', duration: 1500, position: 'bottom' });
@@ -245,8 +291,11 @@ export class PendingAssessmentsPage implements OnInit {
   }
 
   async approveResilience(p: PendingResilience) {
+    const note = await this.confirmWithComment('Approve this resilience entry?',
+      `${p.clientName} — ${Math.floor(p.score)} · ${p.rank} will be saved to their record.`, 'Approve', false);
+    if (note === null) return;
     try {
-      await this.firebase.approvePendingResilience(p);
+      await this.firebase.approvePendingResilience(p, note);
       this.pendingRes = this.pendingRes.filter(x => x.id !== p.id);
       if (this.expandedResId === p.id) this.expandedResId = null;
       const t = await this.toastController.create({ message: 'Approved', duration: 1500, position: 'bottom' });
@@ -257,55 +306,33 @@ export class PendingAssessmentsPage implements OnInit {
   }
 
   async rejectResilience(p: PendingResilience) {
-    const alert = await this.alertController.create({
-      header: 'Reject this resilience entry?',
-      message: `${p.clientName} — ${Math.floor(p.score)} · ${p.rank} will be discarded, not saved.`,
-      buttons: [
-        { text: 'Cancel', role: 'cancel' },
-        {
-          text: 'Reject',
-          role: 'destructive',
-          handler: async () => {
-            try {
-              await this.firebase.setPendingResilienceStatus(p.id!, 'rejected');
-              this.pendingRes = this.pendingRes.filter(x => x.id !== p.id);
-              if (this.expandedResId === p.id) this.expandedResId = null;
-              const t = await this.toastController.create({ message: 'Rejected', duration: 1500, position: 'bottom' });
-              await t.present();
-            } catch (err) {
-              console.error('Pending assessments: resilience reject failed', err);
-            }
-          }
-        }
-      ]
-    });
-    await alert.present();
+    const note = await this.confirmWithComment('Reject this resilience entry?',
+      `${p.clientName} — ${Math.floor(p.score)} · ${p.rank} will be discarded, not saved.`, 'Reject', true);
+    if (note === null) return;
+    try {
+      await this.firebase.setPendingResilienceStatus(p.id!, 'rejected', note);
+      this.pendingRes = this.pendingRes.filter(x => x.id !== p.id);
+      if (this.expandedResId === p.id) this.expandedResId = null;
+      const t = await this.toastController.create({ message: 'Rejected', duration: 1500, position: 'bottom' });
+      await t.present();
+    } catch (err) {
+      console.error('Pending assessments: resilience reject failed', err);
+    }
   }
 
   async reject(p: PendingAssessment) {
-    const alert = await this.alertController.create({
-      header: 'Reject this assessment?',
-      message: `${p.clientName} — LVL ${Math.max(1, Math.round(p.lvl))} · ${p.rank} will be discarded, not saved.`,
-      buttons: [
-        { text: 'Cancel', role: 'cancel' },
-        {
-          text: 'Reject',
-          role: 'destructive',
-          handler: async () => {
-            try {
-              await this.firebase.setPendingAssessmentStatus(p.id!, 'rejected');
-              this.pending = this.pending.filter(x => x.id !== p.id);
-              if (this.expandedId === p.id) this.expandedId = null;
-              const t = await this.toastController.create({ message: 'Rejected', duration: 1500, position: 'bottom' });
-              await t.present();
-            } catch (err) {
-              console.error('Pending assessments: reject failed', err);
-            }
-          }
-        }
-      ]
-    });
-    await alert.present();
+    const note = await this.confirmWithComment('Reject this assessment?',
+      `${p.clientName} — LVL ${Math.max(1, Math.round(p.lvl))} · ${p.rank} will be discarded, not saved.`, 'Reject', true);
+    if (note === null) return;
+    try {
+      await this.firebase.setPendingAssessmentStatus(p.id!, 'rejected', note);
+      this.pending = this.pending.filter(x => x.id !== p.id);
+      if (this.expandedId === p.id) this.expandedId = null;
+      const t = await this.toastController.create({ message: 'Rejected', duration: 1500, position: 'bottom' });
+      await t.present();
+    } catch (err) {
+      console.error('Pending assessments: reject failed', err);
+    }
   }
 
   async approveLink(req: LinkRequest) {

@@ -115,12 +115,12 @@
     </div>
 
     <div class="pending-list" *ngIf="!loading && pending.length">
-      <div class="pending-item" *ngFor="let p of pending">
+      <div class="pending-item" *ngFor="let p of pending; trackBy: trackPending">
         <div class="pending-row">
           <div class="pending-info">
             <div class="pending-name">{{ p.clientName }}</div>
             <div class="pending-lift">LVL {{ p.lvl < 1 ? 1 : (p.lvl | number:'1.0-0') }} · {{ p.rank }}</div>
-            <div class="pending-meta">{{ p.dateLabel }}<span *ngIf="p.videoUrl"> · video attached</span><span *ngIf="p.photoUrl"> · photo attached</span></div>
+            <div class="pending-meta">{{ p.dateLabel }}<span *ngIf="p.videoUrl"> · video attached</span><span *ngIf="p.photoUrl"> · photo attached</span>{{ proofSummary(p) }}</div>
           </div>
           <div class="pending-actions">
             <button class="action-btn reject" (click)="reject(p)">
@@ -138,16 +138,39 @@
           <video *ngIf="p.videoUrl" class="review-video" [src]="p.videoUrl" controls playsinline></video>
           <a *ngIf="p.photoUrl" [href]="p.photoUrl" target="_blank" rel="noopener"><img class="review-video" [src]="p.photoUrl" alt="Proof photo"></a>
 
+          <div class="proof-item" *ngFor="let x of proofItems(p); trackBy: trackProof">
+            <div class="proof-label">{{ x.label }}</div>
+            <ng-container *ngIf="x.url; else uploading">
+              <video *ngIf="x.kind === 'video'" class="review-video" [src]="x.url" controls playsinline></video>
+              <a *ngIf="x.kind === 'photo'" [href]="x.url" target="_blank" rel="noopener"><img class="review-video" [src]="x.url" [alt]="x.label + ' photo'"></a>
+            </ng-container>
+            <ng-template #uploading><div class="proof-pending">Uploading from the athlete's phone.</div></ng-template>
+          </div>
+
           <div *ngIf="loadingDiff" class="empty-state small">Loading comparison…</div>
 
           <div class="diff-list" *ngIf="!loadingDiff">
-            <div class="diff-row" *ngFor="let row of diffRows" [class.changed]="row.changed">
+            <div class="diff-heading">{{ changedRows.length ? 'Changed' : 'No results changed' }}</div>
+            <ng-container *ngFor="let row of changedRows">
+              <ng-container *ngTemplateOutlet="diffRow; context: { $implicit: row }"></ng-container>
+            </ng-container>
+            <button type="button" class="diff-toggle" *ngIf="unchangedRows.length" (click)="showUnchanged = !showUnchanged">
+              {{ showUnchanged ? 'Hide Unchanged' : 'Show Unchanged (' + unchangedRows.length + ')' }}
+            </button>
+            <ng-container *ngIf="showUnchanged">
+              <ng-container *ngFor="let row of unchangedRows">
+                <ng-container *ngTemplateOutlet="diffRow; context: { $implicit: row }"></ng-container>
+              </ng-container>
+            </ng-container>
+          </div>
+          <ng-template #diffRow let-row>
+            <div class="diff-row" [class.changed]="row.changed">
               <span class="diff-label">{{ row.label }}</span>
               <span class="diff-old">{{ row.oldVal.toFixed(row.decimals) }}{{ row.unit ? ' ' + row.unit : '' }}</span>
               <span class="diff-arrow">→</span>
               <span class="diff-new">{{ row.newVal.toFixed(row.decimals) }}{{ row.unit ? ' ' + row.unit : '' }}</span>
             </div>
-          </div>
+          </ng-template>
 
           <button class="approve-btn" [disabled]="loadingDiff" (click)="approve(p)">
             <ion-icon name="checkmark-circle-outline"></ion-icon>
