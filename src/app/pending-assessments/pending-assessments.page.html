@@ -138,11 +138,21 @@
           <video *ngIf="p.videoUrl" class="review-video" [src]="p.videoUrl" controls playsinline></video>
           <a *ngIf="p.photoUrl" [href]="p.photoUrl" target="_blank" rel="noopener"><img class="review-video" [src]="p.photoUrl" alt="Proof photo"></a>
 
-          <div class="proof-item" *ngFor="let x of proofItems(p); trackBy: trackProof">
+          <div class="proof-item" *ngFor="let x of proofItems(p); let i = index; trackBy: trackProof">
             <div class="proof-label">{{ x.label }}</div>
             <ng-container *ngIf="x.url; else uploading">
               <video *ngIf="x.kind === 'video'" class="review-video" [src]="x.url" controls playsinline></video>
-              <a *ngIf="x.kind === 'photo'" [href]="x.url" target="_blank" rel="noopener"><img class="review-video" [src]="x.url" [alt]="x.label + ' photo'"></a>
+              <app-run-review *ngIf="x.kind === 'run' && p.run" [run]="p.run" [fileUrl]="x.url" [duplicateOf]="runDuplicate"
+                              [submittedKm]="p.inputs.run30" [submittedAt]="p.timestamp"></app-run-review>
+              <ng-container *ngIf="x.kind === 'photo'">
+                <ng-container *ngIf="isSplitSlot(p, i) && p.split as m; else plainPhoto">
+                  <app-split-mark-editor [src]="x.url" [iw]="m.iw" [ih]="m.ih" [athlete]="m.points" (pointsChange)="onSplitEdit(p, $event)"></app-split-mark-editor>
+                  <div class="proof-hint">Drag a point to correct it. The score is the higher of this angle and the athlete's current Middle Split.</div>
+                </ng-container>
+                <ng-template #plainPhoto>
+                  <a [href]="x.url" target="_blank" rel="noopener"><img class="review-video" [src]="x.url" [alt]="x.label + ' photo'"></a>
+                </ng-template>
+              </ng-container>
             </ng-container>
             <ng-template #uploading><div class="proof-pending">Uploading from the athlete's phone.</div></ng-template>
           </div>

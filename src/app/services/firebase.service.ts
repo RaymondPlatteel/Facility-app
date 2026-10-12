@@ -1,13 +1,15 @@
 import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit, onSnapshot, getCountFromServer, arrayUnion } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit, onSnapshot, getCountFromServer, arrayUnion, runTransaction } from 'firebase/firestore';
 import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationPlan, usesStoredSessions } from './schedule.util';
 import type { ScheduleEntry } from './schedule.util';
 import { SYNC_CLIENT_ID, ensureExerciseKeys, isLiveWorkout, isStaleWorkout, staleCloseFields, newExerciseKey, normalizeState, sheetToSync, syncToSheet, WorkoutSyncState } from './workout-sync';
 import { environment } from '../../environments/environment';
 import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank } from './omni.util';
 import type { TestOverrides, ResilienceInputs } from './omni.util';
+import { SplitMark, SplitSample, MODEL_SAMPLES, splitModel, splitSample } from './split-mark.util';
+import type { RunSummary } from './run-import.util';
 
 // Local calendar date (YYYY-MM-DD). toISOString() would shift evening check-ins to the next UTC day.
 export function localDateString(d: Date = new Date()): string {
@@ -917,7 +919,11 @@ export interface PendingAssessment {
   // as each upload finishes, and proofs says which test each slot is for and whether it is a video or a photo.
   videoPaths?: string[];
   videoUrls?: Record<string, string>;
-  proofs?: Array<{ test: string; kind: 'video' | 'photo' }>;
+  proofs?: Array<{ test: string; kind: 'video' | 'photo' | 'run' }>;
+  // The 30-Minute Run as scored from its recording; the file is in proof slot run.slot.
+  run?: RunSummary | null;
+  // The middle split as measured on its proof photo (points on the photo); the coach's points are added on review.
+  split?: SplitMark | null;
   // What the athlete's form started from, and the input keys they changed (e.g. 'deadliftWeight', 'run800').
   baseInputs?: AssessmentInputs | null;
   changed?: string[];
@@ -3259,6 +3265,38 @@ export class FirebaseService {
   // coachNote is the coach's comment to the athlete, shown with the outcome in Project-000.
   async setPendingAssessmentStatus(id: string, status: 'approved' | 'rejected', note = ''): Promise<void> {
     await updateDoc(doc(this.db, 'pendingAssessments', id), { status, reviewedAt: new Date().toISOString(), coachNote: note.trim() || null });
+  }
+
+  // A run can be approved once: runKeys/{key} names who it was approved for.
+  private runKeyRef(key: string) { return doc(this.db, 'runKeys', key.replace(/\//g, '_')); }
+  async runApprovedFor(key: string): Promise<string | null> {
+    const snap = await getDoc(this.runKeyRef(key));
+    return snap.exists() ? String(snap.data()['clientName'] ?? 'another athlete') : null;
+  }
+  async markRunApproved(key: string, clientName: string): Promise<void> {
+    await setDoc(this.runKeyRef(key), { clientName, approvedAt: new Date().toISOString() });
+  }
+
+  // The coach's points and the recorded score for a middle split, saved on its submission for the athlete to see.
+  async saveSplitReview(id: string, split: SplitMark): Promise<void> {
+    await updateDoc(doc(this.db, 'pendingAssessments', id), { split });
+  }
+
+  // Teaches middle split detection from a review: the sample is kept in splitSamples (with the photo, for training a
+  // dedicated model later), and splitPose/model, which Project-000 applies to every detection, is recomputed.
+  async learnSplit(split: SplitMark, photoUrl: string | null): Promise<void> {
+    if (!split.detected || !split.coach) return;
+    const sample = splitSample(split.detected, split.coach, split.iw, split.ih);
+    const now = new Date().toISOString();
+    await addDoc(collection(this.db, 'splitSamples'), {
+      photoUrl, iw: split.iw, ih: split.ih, detected: split.detected, truth: split.coach, sample, createdAt: now
+    });
+    const ref = doc(this.db, 'splitPose', 'model');
+    await runTransaction(this.db, async tx => {
+      const snap = await tx.get(ref);
+      const samples = [...((snap.data()?.['samples'] as SplitSample[] | undefined) ?? []), sample].slice(-MODEL_SAMPLES);
+      tx.set(ref, { ...splitModel(samples), samples, updatedAt: now });
+    });
   }
 
   // ---------- Link requests (Project-000 "link my account" review queue) ----------

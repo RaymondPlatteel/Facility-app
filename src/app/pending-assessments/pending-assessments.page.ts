@@ -5,7 +5,10 @@ import { IonContent, IonIcon, AlertController, ToastController } from '@ionic/an
 import { addIcons } from 'ionicons';
 import { arrowBack, checkmarkCircleOutline, closeCircleOutline, chevronDownOutline, swapHorizontalOutline, chevronForwardOutline } from 'ionicons/icons';
 import { FirebaseService, PendingAssessment, AssessmentInputs, LinkRequest, SwapRequest, PendingResilience } from '../services/firebase.service';
-import { ASSESSMENT_META, RESILIENCE_TESTS, RESILIENCE_REPS, resilienceTestPct } from '../services/omni.util';
+import { ASSESSMENT_META, RESILIENCE_TESTS, RESILIENCE_REPS, resilienceTestPct, computeOmni, getOmniRank } from '../services/omni.util';
+import { SplitPoints, splitDeg } from '../services/split-mark.util';
+import { SplitMarkEditorComponent } from '../shared/split-mark/split-mark-editor.component';
+import { RunReviewComponent } from '../shared/run-review/run-review.component';
 
 interface DiffRow {
   label: string;
@@ -34,7 +37,7 @@ const DIFF_META: Array<{ key: keyof AssessmentInputs; label: string; unit: strin
   standalone: true,
   templateUrl: './pending-assessments.page.html',
   styleUrls: ['./pending-assessments.page.scss'],
-  imports: [CommonModule, IonContent, IonIcon]
+  imports: [CommonModule, IonContent, IonIcon, SplitMarkEditorComponent, RunReviewComponent]
 })
 export class PendingAssessmentsPage implements OnInit {
   pending: PendingAssessment[] = [];
@@ -71,6 +74,10 @@ export class PendingAssessmentsPage implements OnInit {
   trackProof = (i: number) => i;
   trackPending = (_: number, p: PendingAssessment) => p.id;
   loadingDiff = false;
+  // The coach's corrected middle split points, per submission, until it is approved.
+  splitEdits: Record<string, SplitPoints> = {};
+  // Who the open submission's run was already approved for, if anyone.
+  runDuplicate: string | null = null;
 
   constructor(
     private firebase: FirebaseService,
@@ -178,7 +185,7 @@ export class PendingAssessmentsPage implements OnInit {
   }
 
   // Each proof on a submission, labelled with the test it is for. A url is null while the phone is still uploading.
-  proofItems(p: PendingAssessment): Array<{ label: string; kind: 'video' | 'photo'; url: string | null }> {
+  proofItems(p: PendingAssessment): Array<{ label: string; kind: 'video' | 'photo' | 'run'; url: string | null }> {
     const slots = p.proofs?.length ?? p.videoPaths?.length ?? 0;
     return Array.from({ length: slots }, (_, i) => {
       const proof = p.proofs?.[i];
@@ -203,6 +210,12 @@ export class PendingAssessmentsPage implements OnInit {
     this.diffRows = [];
     this.loadingDiff = true;
     this.showUnchanged = false;
+    this.runDuplicate = null;
+    if (p.run?.key) {
+      this.firebase.runApprovedFor(p.run.key)
+        .then(who => { if (this.expandedId === p.id) this.runDuplicate = who; })
+        .catch(err => console.error('Pending assessments: run check failed', err));
+    }
     try {
       // The submission carries what the athlete started from and which inputs they changed; older submissions
       // fall back to the client's latest assessment and a comparison at display precision.
@@ -247,9 +260,42 @@ export class PendingAssessmentsPage implements OnInit {
     return (data?.values?.note ?? '').trim();
   }
 
+  // The middle split photo slot that carries the athlete's points.
+  isSplitSlot(p: PendingAssessment, i: number): boolean { return !!p.split && p.split.slot === i; }
+  onSplitEdit(p: PendingAssessment, pts: SplitPoints) { if (p.id) this.splitEdits[p.id] = pts; }
+
+  // A middle split is scored by the coach's points. The recorded score is the coach's angle, or the athlete's current
+  // score when that is higher, so a correction never takes a score below what was already approved.
+  private async splitOutcome(p: PendingAssessment) {
+    const m = p.split;
+    if (!m || !p.changed?.includes('straddle')) return null;
+    const coach = this.splitEdits[p.id ?? ''] ?? m.points;
+    const coachDeg = splitDeg(coach, m.iw, m.ih);
+    const history = await this.firebase.listAssessmentsForClient({ clientName: p.clientName });
+    const current = Number(history[history.length - 1]?.inputs?.straddle) || 0;
+    return { split: { ...m, coach, coachDeg, applied: Math.max(coachDeg, current) }, coachDeg, current };
+  }
+
   async approve(p: PendingAssessment) {
+    let outcome: Awaited<ReturnType<PendingAssessmentsPage['splitOutcome']>>;
+    try {
+      outcome = await this.splitOutcome(p);
+    } catch (err) {
+      console.error('Pending assessments: split lookup failed', err);
+      return;
+    }
+    // A corrected angle changes the score, so the level and rank are worked out again.
+    let { inputs, lvl, rank } = p;
+    if (outcome && outcome.split.applied !== Number(p.inputs.straddle)) {
+      inputs = { ...p.inputs, straddle: outcome.split.applied };
+      lvl = computeOmni(inputs).lvl;
+      rank = getOmniRank(lvl, (await this.firebase.getMember(p.nameKey).catch(() => null))?.sex ?? 'male');
+    }
+    const splitLine = !outcome ? '' : outcome.split.applied === outcome.coachDeg
+      ? ` Middle Split is recorded as ${outcome.coachDeg}°.`
+      : ` Middle Split measures ${outcome.coachDeg}°, below the current ${outcome.current}°, so ${outcome.current}° stays.`;
     const note = await this.confirmWithComment('Approve this assessment?',
-      `${p.clientName} — LVL ${Math.max(1, Math.round(p.lvl))} · ${p.rank} will be saved to their record.`, 'Approve', false);
+      `${p.clientName} — LVL ${Math.max(1, Math.round(lvl))} · ${rank} will be saved to their record.${splitLine}`, 'Approve', false);
     if (note === null) return;
     try {
       await this.firebase.saveAssessment({
@@ -258,10 +304,17 @@ export class PendingAssessmentsPage implements OnInit {
         nameKey: p.nameKey,
         timestamp: p.timestamp,
         dateLabel: p.dateLabel,
-        inputs: p.inputs,
-        lvl: p.lvl,
-        rank: p.rank
+        inputs,
+        lvl,
+        rank
       });
+      if (p.run?.key && p.changed?.includes('run30')) await this.firebase.markRunApproved(p.run.key, p.clientName);
+      if (outcome) {
+        await this.firebase.saveSplitReview(p.id!, outcome.split);
+        // Learning is a bonus: a failure here never holds up the approval.
+        this.firebase.learnSplit(outcome.split, p.videoUrls?.['v' + outcome.split.slot] ?? null)
+          .catch(err => console.error('Pending assessments: split learning failed', err));
+      }
       await this.firebase.setPendingAssessmentStatus(p.id!, 'approved', note);
       this.pending = this.pending.filter(x => x.id !== p.id);
       if (this.expandedId === p.id) this.expandedId = null;
