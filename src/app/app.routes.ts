@@ -143,6 +143,12 @@ export const routes: Routes = [
     data: { title: 'Programs' }
   },
   {
+    path: 'split-training',
+    canActivate: [authGuard],
+    loadComponent: () => import('./split-training/split-training.page').then( m => m.SplitTrainingPage),
+    data: { title: 'Middle Split Training' }
+  },
+  {
     path: 'program-changes',
     canActivate: [authGuard],
     loadComponent: () => import('./program-changes/program-changes.page').then( m => m.ProgramChangesPage),

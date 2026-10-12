@@ -40,3 +40,15 @@ textarea { width: 100%; box-sizing: border-box; resize: vertical; }
 .chg-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .chg-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; span { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--hud-text-dim, #88a6bf); } p { margin: 3px 0 0; font-size: 13px; i { font-style: normal; color: var(--hud-accent, #00d4ff); font-size: 12px; } } .muted { color: var(--hud-text-dim, #88a6bf); } }
 .ghost-btn.small { padding: 5px 12px; font-size: 12px; }
+
+// A proposed day: only what was added, removed or changed.
+.chg-rows { display: flex; flex-direction: column; gap: 8px; }
+.chg-row { display: flex; gap: 10px; align-items: flex-start;
+  .chg-tag { flex: none; min-width: 66px; padding: 2px 8px; border-radius: 999px; text-align: center; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    background: rgba(255, 255, 255, 0.08); color: var(--hud-text-dim, #88a6bf); }
+  &.added .chg-tag { background: rgba(45, 211, 111, 0.16); color: #2dd36f; }
+  &.removed .chg-tag { background: rgba(255, 90, 106, 0.16); color: #ff5a6a; }
+  &.changed .chg-tag { background: rgba(0, 212, 255, 0.14); color: var(--hud-accent, #00d4ff); }
+  .chg-text { min-width: 0; b { font-size: 13px; } p { margin: 2px 0 0; font-size: 12.5px; line-height: 1.4; } .muted { color: var(--hud-text-dim, #88a6bf); } .arrow { color: var(--hud-text-dim, #88a6bf); } }
+}
+.chg-same { margin: 8px 0 0; font-size: 12px; }

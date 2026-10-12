@@ -1,0 +1,71 @@
+<ion-content [fullscreen]="true" class="content-no-header">
+  <div class="st-page">
+    <div class="st-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back"><ion-icon name="arrow-back"></ion-icon></button>
+      <div class="st-title">
+        <h1>Middle Split Training</h1>
+        <p>Move the points to where they belong on each photo. Detection learns from the difference.</p>
+      </div>
+    </div>
+
+    <div class="st-status">
+      <div><b>{{ samples }}</b><span>Reviews learned</span></div>
+      <div><b>{{ saved }}</b><span>Saved now</span></div>
+      <div><b>{{ remaining }}</b><span>Photos left</span></div>
+    </div>
+    <p class="muted" *ngIf="samples < 3">The athlete app applies the correction once it has 3 reviews.</p>
+
+    <div class="st-card" *ngIf="stats as st">
+      <h2>How well detection finds the points</h2>
+      <p class="muted">Compared with where you put them, across {{ st.n }} photo{{ st.n === 1 ? '' : 's' }}. Distances are in pixels, with every photo scaled to {{ statPx }} px on its long side, so photos of any size can be compared. "After learning" applies what your corrections taught it; it is measured on the same photos, so it reads a little better than it will on new ones.</p>
+      <p class="muted st-cols">Before learning → After learning</p>
+      <div class="st-metric" *ngFor="let r of rows">
+        <h3>{{ r.label }}</h3>
+        <div class="st-line"><span>Typical distance off</span><b>{{ px(st.raw[r.key].median) }}</b><i>→</i><b>{{ px(st.corrected[r.key].median) }}</b></div>
+        <div class="st-line"><span>Usually</span><b>{{ vert(st.raw[r.key].vertical) }}</b><i>→</i><b>{{ vert(st.corrected[r.key].vertical) }}</b></div>
+        <div class="st-line"><span></span><b>{{ horiz(r.key, st.raw[r.key].horizontal) }}</b><i>→</i><b>{{ horiz(r.key, st.corrected[r.key].horizontal) }}</b></div>
+        <div class="st-line"><span>Spot on (within {{ closePx }} px)</span><b>{{ of(st.raw[r.key]) }}</b><i>→</i><b>{{ of(st.corrected[r.key]) }}</b></div>
+        <div class="st-line"><span>Wrong spot (over {{ farPx }} px)</span><b>{{ wrong(st.raw[r.key]) }}</b><i>→</i><b>{{ wrong(st.corrected[r.key]) }}</b></div>
+      </div>
+      <div class="st-metric">
+        <h3>The angle itself</h3>
+        <div class="st-line"><span>Typical miss</span><b>{{ deg1(st.raw.angle.median) }}</b><i>→</i><b>{{ deg1(st.corrected.angle.median) }}</b></div>
+        <div class="st-line"><span>Spot on (within {{ target }}°)</span><b>{{ of(st.raw.angle) }}</b><i>→</i><b>{{ of(st.corrected.angle) }}</b></div>
+        <div class="st-line"><span>Wrong spot (over {{ far }}°)</span><b>{{ wrong(st.raw.angle) }}</b><i>→</i><b>{{ wrong(st.corrected.angle) }}</b></div>
+      </div>
+      <p class="muted">Learning moves a point by the same amount every time. It can fix a habit, like placing an ankle too high. It cannot fix a photo where detection grabbed the wrong body part, or a point that is off by a different amount each time.</p>
+    </div>
+    <p class="st-warn" *ngIf="!native">Detection runs in the iPhone or iPad app. Open this page there to train.</p>
+
+    <label class="st-pick" *ngIf="native">
+      <ion-icon name="cloud-upload-outline"></ion-icon>
+      <span>{{ loadingPhotos ? 'Reading photos…' : remaining ? 'Add more photos' : 'Choose photos' }}</span>
+      <input type="file" accept="image/*" multiple [disabled]="loadingPhotos" (change)="onFiles($event)" />
+    </label>
+    <p class="muted" *ngIf="skipped">{{ skipped }} photo{{ skipped === 1 ? '' : 's' }} skipped: no body detected or unreadable.</p>
+    <p class="st-error" *ngIf="error">{{ error }}</p>
+
+    <ng-container *ngIf="current && current.detected && points">
+      <ng-container *ngFor="let photo of [current]; trackBy: trackPhoto">
+        <app-split-mark-editor [src]="photo.url" [iw]="photo.iw" [ih]="photo.ih" [athlete]="photo.detected!" (pointsChange)="onPoints($event)"></app-split-mark-editor>
+      </ng-container>
+      <div class="st-card" *ngIf="current.conf as c">
+        <h2>How sure detection is on this photo</h2>
+        <div class="st-conf" *ngFor="let r of pointRows">
+          <span class="st-conf-name">{{ r.label }}<i *ngIf="r.key !== 'hip' && current.knee && current.knee[r.key]"> · found by the knee</i></span>
+          <span class="st-conf-bar"><span [style.width.%]="(c[r.key] || 0) * 100"></span></span>
+          <b>{{ conf(c[r.key]) }}</b>
+          <span class="st-conf-typ" *ngIf="stats">usually {{ px(stats.corrected[r.key].median) }} off after learning</span>
+        </div>
+        <p class="muted">This is Apple's own certainty that it found that body part. A high number does not promise the point is in the right place: a hand mistaken for an ankle can still read high. Check the ankles against the photo.</p>
+      </div>
+      <p class="muted">The dashed lines are what detection found. The solid lines are yours.</p>
+      <div class="st-actions">
+        <button class="ghost-btn" [disabled]="saving" (click)="skip()">Skip</button>
+        <button class="primary-btn" [disabled]="saving" (click)="save()">{{ saving ? 'Saving…' : moved ? 'Save correction' : 'Save, detection was right' }}</button>
+      </div>
+    </ng-container>
+
+    <p class="muted" *ngIf="native && !current && saved">All photos done. Choose more to keep training.</p>
+  </div>
+</ion-content>

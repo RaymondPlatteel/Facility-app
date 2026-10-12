@@ -10,6 +10,9 @@ import { ProgramReviewCountService } from '../services/program-review-count.serv
 
 // A coach's review of an athlete's generated program: see every week at once, move exercises, swap days,
 // write notes, answer the athlete's questions and approve. Edits go straight to the program document.
+// One line of a proposed day: what was added, removed or changed.
+interface DiffRow { kind: 'added' | 'removed' | 'changed' | 'order'; name: string; was?: string; now?: string; }
+
 @Component({
   selector: 'app-program-review',
   standalone: true,
@@ -66,6 +69,12 @@ export class ProgramReviewPage implements OnInit {
   summary(e: ProgramExercise): string {
     const attrs = e.attributes || [];
     const get = (t: string) => attrs.find(a => a.type === t);
+    // A flexibility routine is a video and a check box: say which routine, with no sets or columns.
+    const routine = get('Routine')?.val?.split('|');
+    if (routine && routine.length === 3) {
+      const rank = routine[0] === 'UNRANKED' ? 'Unranked' : routine[0].replace('-RANK', '-Rank');
+      return `${rank} · ${routine[1][0].toUpperCase() + routine[1].slice(1)} routine`;
+    }
     const parts: string[] = [];
     if (e.setPlan?.length) parts.push(`${e.setPlan.length} sets: ${e.setPlan.map(s => s.reps).join(' / ')}`);
     else {
@@ -89,19 +98,42 @@ export class ProgramReviewPage implements OnInit {
   // ---- a proposed update from the generator, after the athlete's results or schedule changed ----
   get proposal() { return this.program?.proposal ?? null; }
 
-  // The days where the proposed version differs from the current program.
-  get changes(): Array<{ week: number; day: number; current: ProgramExercise[]; proposed: ProgramExercise[] }> {
+  // The days where the proposed version differs from the current program, and within each day only the exercises
+  // that were added, removed or changed. What stayed the same is left out.
+  get changes(): Array<{ week: number; day: number; rows: DiffRow[]; same: number }> {
     const p = this.proposal;
     if (!p || !this.program) return [];
-    const out: Array<{ week: number; day: number; current: ProgramExercise[]; proposed: ProgramExercise[] }> = [];
+    const out: Array<{ week: number; day: number; rows: DiffRow[]; same: number }> = [];
     for (let w = 0; w < this.weeks.length; w++) {
       for (let d = 0; d < 7; d++) {
         const cur = this.day(w, d)?.exercises ?? [];
         const prop = p.schedule[w * 7 + d]?.exercises ?? [];
-        if (this.sig(cur) !== this.sig(prop)) out.push({ week: w, day: d, current: cur, proposed: prop });
+        if (this.sig(cur) !== this.sig(prop)) out.push({ week: w, day: d, ...this.diff(cur, prop) });
       }
     }
     return out;
+  }
+
+  private one(e: ProgramExercise): string {
+    return `${this.summary(e)}${e.instructions ? ` · ${e.instructions}` : ''}`;
+  }
+
+  // Exercises are matched by name, in order; a match that reads the same is unchanged and not listed.
+  private diff(cur: ProgramExercise[], prop: ProgramExercise[]): { rows: DiffRow[]; same: number } {
+    const rows: DiffRow[] = [];
+    const left = [...cur];
+    let same = 0;
+    for (const e of prop) {
+      const at = left.findIndex(c => c.name === e.name);
+      if (at < 0) { rows.push({ kind: 'added', name: e.name, now: this.one(e) }); continue; }
+      const [c] = left.splice(at, 1);
+      if (this.sig([c]) === this.sig([e])) same++;
+      else rows.push({ kind: 'changed', name: e.name, was: this.one(c), now: this.one(e) });
+    }
+    for (const c of left) rows.push({ kind: 'removed', name: c.name, was: this.one(c) });
+    // the same exercises in a different order
+    if (!rows.length) rows.push({ kind: 'order', name: 'Order of exercises' });
+    return { rows, same };
   }
 
   useProposedDay(w: number, d: number) {
@@ -224,6 +256,7 @@ export class ProgramReviewPage implements OnInit {
     try {
       try { localStorage.setItem('reviewerName', this.reviewer.trim()); } catch { /* storage unavailable */ }
       const fields: Partial<Program> = { schedule: this.program.schedule, reviewNote: (this.program.reviewNote || '').trim() };
+      if (this.dirty) fields.coachEdited = true;   // from now on a newer version is proposed, not swapped in
       if (approve) {
         fields.reviewStatus = 'approved';
         fields.reviewedBy = this.reviewer.trim() || 'a coach';

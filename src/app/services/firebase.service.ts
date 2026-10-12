@@ -8,7 +8,7 @@ import { SYNC_CLIENT_ID, ensureExerciseKeys, isLiveWorkout, isStaleWorkout, stal
 import { environment } from '../../environments/environment';
 import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank } from './omni.util';
 import type { TestOverrides, ResilienceInputs } from './omni.util';
-import { SplitMark, SplitSample, MODEL_SAMPLES, splitModel, splitSample } from './split-mark.util';
+import { SplitMark, SplitSample, SplitModel, SplitStats, MODEL_SAMPLES, splitModel, splitSample, splitStats } from './split-mark.util';
 import type { RunSummary } from './run-import.util';
 
 // Local calendar date (YYYY-MM-DD). toISOString() would shift evening check-ins to the next UTC day.
@@ -727,6 +727,9 @@ export interface Program {
   proposal?: { schedule: ProgramDay[]; createdAt: string; reason: string };
   // Optional. A fingerprint of what the generator last wrote, to tell whether the program would change.
   baselineHash?: string;
+  // Set once a coach has changed the schedule by hand. Until then (and until it is approved) a newer generated version
+  // replaces the program directly instead of waiting as a proposal.
+  coachEdited?: boolean;
   // Optional. Questions and problems from the athlete, and the coach's replies.
   support?: ProgramSupportMessage[];
   // Optional. The day the athlete actually got the program (startDate is the Monday that anchors its weeks).
@@ -2463,14 +2466,31 @@ export class FirebaseService {
 
   async listPrograms(): Promise<Program[]> {
     const snap = await getDocs(this.programsCollection());
-    const programs = snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Program, 'id'>) }));
+    const programs = await Promise.all(snap.docs.map(d => this.settleProposal({ id: d.id, ...(d.data() as Omit<Program, 'id'>) })));
     return programs.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
   }
 
   async getProgram(id: string): Promise<Program | null> {
     const snap = await getDoc(doc(this.db, 'programs', id));
     if (!snap.exists()) return null;
-    return { id: snap.id, ...(snap.data() as Omit<Program, 'id'>) };
+    return this.settleProposal({ id: snap.id, ...(snap.data() as Omit<Program, 'id'>) });
+  }
+
+  // A generated program nobody has reviewed or edited yet has nothing to compare a newer version against, so the
+  // newest version simply becomes the program. Only a program that has been approved, or that a coach has changed,
+  // keeps its proposal for review.
+  private async settleProposal(p: Program): Promise<Program> {
+    if (!p.id || !p.generated || !p.proposal || p.reviewStatus === 'approved') return p;
+    if (p.coachEdited) return p;
+    const schedule = p.proposal.schedule;
+    try {
+      await this.saveProgramReview(p.id, { schedule, baselineHash: programHash(schedule) }, true);
+    } catch (err) {
+      console.error('Program: could not apply the newest version', err);
+      return p;
+    }
+    const { proposal: _gone, ...rest } = p;
+    return { ...rest, schedule, baselineHash: programHash(schedule) };
   }
 
   async saveProgram(program: Program): Promise<string> {
@@ -3299,6 +3319,36 @@ export class FirebaseService {
     });
   }
 
+  // The learned correction as it stands, and how many reviews it rests on.
+  async getSplitModel(): Promise<SplitModel | null> {
+    const snap = await getDoc(doc(this.db, 'splitPose', 'model'));
+    return snap.exists() ? snap.data() as SplitModel : null;
+  }
+
+  // How far detection is from the coach's points across every sample, before and after the learned correction.
+  async getSplitStats(): Promise<SplitStats | null> {
+    const [model, snap] = await Promise.all([
+      this.getSplitModel(),
+      getDocs(query(collection(this.db, 'splitSamples'), orderBy('createdAt', 'desc'), limit(MODEL_SAMPLES)))
+    ]);
+    const rows = snap.docs.map(d => d.data() as { detected: any; truth: any; iw: number; ih: number });
+    return splitStats(rows, model);
+  }
+
+  // The photo behind a training sample, kept so a dedicated model can be trained on it later. Best effort: a sample
+  // without its photo still teaches the correction.
+  async uploadSplitPhoto(file: Blob): Promise<string | null> {
+    try {
+      const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const r = ref(getStorage(this.app), `splitSamples/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`);
+      await uploadBytes(r, file, { contentType: 'image/jpeg' });
+      return await getDownloadURL(r);
+    } catch (err) {
+      console.error('Split training: could not keep the photo', err);
+      return null;
+    }
+  }
+
   // ---------- Link requests (Project-000 "link my account" review queue) ----------
   private linkRequestsCollection() { return collection(this.db, 'linkRequests'); }
 
@@ -3801,4 +3851,22 @@ export class FirebaseService {
     }
     return written;
   }
+}
+
+
+// JSON with the keys in a fixed order, so the same schedule always gives the same text. Matches the athlete app's
+// fingerprint of a generated schedule, which is how an edited program is told from an untouched one.
+function programStable(value: unknown): string {
+  if (Array.isArray(value)) return '[' + value.map(programStable).join(',') + ']';
+  if (value && typeof value === 'object') {
+    const o = value as Record<string, unknown>;
+    return '{' + Object.keys(o).filter(k => o[k] !== undefined).sort().map(k => JSON.stringify(k) + ':' + programStable(o[k])).join(',') + '}';
+  }
+  return JSON.stringify(value);
+}
+function programHash(schedule: unknown): string {
+  const text = programStable(schedule);
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(16) + ':' + text.length;
 }

@@ -74,3 +74,66 @@ export function splitModel(samples: SplitSample[]): SplitModel {
   for (const k of KEYS) out[k] = { x: median(samples.map(s => s[k].x)), y: median(samples.map(s => s[k].y)) };
   return out;
 }
+
+
+// ---------- How accurate detection is ----------
+// Points are judged by distance in pixels, with every photo scaled so its long side is STAT_PX, so photos of different
+// sizes can be compared. The angle is judged in degrees: the measured angle against yours. "Raw" is Apple's detection
+// as it is; "corrected" has the learned shift applied (measured on the photos it learned from, so it flatters it a little).
+export const STAT_PX = 1000;
+export const POINT_CLOSE_PX = 8;      // counted as spot on
+export const POINT_FAR_PX = 60;       // counted as a wrong spot, such as the wrong body part
+export const ANGLE_TARGET = 0.5;      // degrees: counted as spot on
+export const ANGLE_FAR = 5;           // degrees: counted as a wrong spot
+
+export interface PointSpread { median: number; vertical: number; horizontal: number; hits: number; farCount: number; count: number; }
+export interface AngleSpread { median: number; p90: number; hits: number; farCount: number; count: number; }
+export interface SplitStats {
+  n: number;
+  raw: Record<'hip' | 'left' | 'right', PointSpread> & { angle: AngleSpread };
+  corrected: Record<'hip' | 'left' | 'right', PointSpread> & { angle: AngleSpread };
+}
+
+export function splitDegExact(p: SplitPoints, iw: number, ih: number): number {
+  const a = Math.atan2((p.left.y - p.hip.y) * ih, (p.left.x - p.hip.x) * iw);
+  const b = Math.atan2((p.right.y - p.hip.y) * ih, (p.right.x - p.hip.x) * iw);
+  let d = Math.abs(a - b) * 180 / Math.PI;
+  if (d > 180) d = 360 - d;
+  return d;
+}
+
+function quantile(v: number[], q: number): number {
+  const s = [...v].sort((a, b) => a - b);
+  return s.length ? s[Math.min(s.length - 1, Math.floor(q * s.length))] : 0;
+}
+
+export function splitStats(rows: Array<{ detected: SplitPoints; truth: SplitPoints; iw: number; ih: number }>, model: SplitModel | null): SplitStats | null {
+  if (!rows.length) return null;
+  type Acc = Record<'hip' | 'left' | 'right', { dist: number[]; v: number[]; h: number[] }> & { angle: number[] };
+  const acc = (): Acc => ({ hip: { dist: [], v: [], h: [] }, left: { dist: [], v: [], h: [] }, right: { dist: [], v: [], h: [] }, angle: [] });
+  const raw = acc(), corrected = acc();
+  for (const r of rows) {
+    const t = r.truth, fixed = correctSplit(r.detected, model, r.iw, r.ih);
+    const k = STAT_PX / Math.max(r.iw, r.ih);
+    const truthDeg = splitDegExact(t, r.iw, r.ih);
+    for (const [out, pts] of [[raw, r.detected], [corrected, fixed]] as Array<[Acc, SplitPoints]>) {
+      for (const key of KEYS) {
+        const dx = (pts[key].x - t[key].x) * r.iw * k, dy = (pts[key].y - t[key].y) * r.ih * k;
+        out[key].dist.push(Math.hypot(dx, dy));
+        out[key].v.push(-dy);   // positive: detection is above where you put it
+        // positive: detection is further from the middle of the photo than your point, i.e. too far out
+        out[key].h.push(key === 'hip' ? dx : dx * (t[key].x < t.hip.x ? -1 : 1));
+      }
+      out.angle.push(Math.abs(splitDegExact(pts, r.iw, r.ih) - truthDeg));
+    }
+  }
+  const point = (a: Acc['hip']): PointSpread => ({
+    median: quantile(a.dist, 0.5), vertical: quantile(a.v, 0.5), horizontal: quantile(a.h, 0.5),
+    hits: a.dist.filter(x => x <= POINT_CLOSE_PX).length, farCount: a.dist.filter(x => x > POINT_FAR_PX).length, count: a.dist.length
+  });
+  const make = (a: Acc) => ({
+    hip: point(a.hip), left: point(a.left), right: point(a.right),
+    angle: { median: quantile(a.angle, 0.5), p90: quantile(a.angle, 0.9), hits: a.angle.filter(x => x <= ANGLE_TARGET).length, farCount: a.angle.filter(x => x > ANGLE_FAR).length, count: a.angle.length }
+  });
+  return { n: rows.length, raw: make(raw), corrected: make(corrected) };
+}

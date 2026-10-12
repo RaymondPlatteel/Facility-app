@@ -38,10 +38,18 @@
             <b>Week {{ c.week + 1 }} · {{ weekdays[c.day] }}</b>
             <button class="ghost-btn small" (click)="useProposedDay(c.week, c.day)">Use proposed</button>
           </div>
-          <div class="chg-cols">
-            <div><span>Current</span><p *ngFor="let e of c.current">{{ e.name }} <i>{{ summary(e) }}</i></p><p *ngIf="!c.current.length" class="muted">Rest</p></div>
-            <div><span>Proposed</span><p *ngFor="let e of c.proposed">{{ e.name }} <i>{{ summary(e) }}</i></p><p *ngIf="!c.proposed.length" class="muted">Rest</p></div>
+          <div class="chg-rows">
+            <div class="chg-row" *ngFor="let r of c.rows" [ngClass]="r.kind">
+              <span class="chg-tag">{{ r.kind === 'added' ? 'Added' : r.kind === 'removed' ? 'Removed' : r.kind === 'changed' ? 'Changed' : 'Order' }}</span>
+              <div class="chg-text">
+                <b>{{ r.name }}</b>
+                <p *ngIf="r.kind === 'changed'"><span class="muted">{{ r.was }}</span><span class="arrow"> → </span>{{ r.now }}</p>
+                <p *ngIf="r.kind === 'added'">{{ r.now }}</p>
+                <p *ngIf="r.kind === 'removed'" class="muted">{{ r.was }}</p>
+              </div>
+            </div>
           </div>
+          <p class="muted chg-same" *ngIf="c.same">{{ c.same }} unchanged</p>
         </div>
       </div>
 

@@ -35,7 +35,8 @@ import {
   personCircleOutline,
   menuOutline,
   arrowBack,
-  addOutline
+  addOutline,
+  scanOutline
 } from 'ionicons/icons';
 
 @Component({
@@ -104,6 +105,7 @@ export class AppComponent implements OnInit, OnDestroy {
   ) {
     this.coachTheme.init();
     addIcons({
+      scanOutline,
       lockClosedOutline,
       keypadOutline,
       homeOutline,
