@@ -18,7 +18,7 @@ interface Device {
   section: Section;
   tester: boolean;
   events: AppEvent[];          // oldest first
-  install: number | null;      // first open as a new user
+  install: number | null;      // when they became a new user: first open, or creating an account
   first: number;               // first event of any kind
   days: Set<string>;           // days with any activity
 }
@@ -51,28 +51,48 @@ export interface Report {
 
 const dayKey = (t: number) => new Date(t).toLocaleDateString('en-CA');
 
+// One person per device, except that creating an account starts a new person: a phone that was someone else's (a
+// tester's, or a family member's) counts the new account on its own from that moment.
 function devices(batches: EventBatch[]): Device[] {
-  const map = new Map<string, { seg: EventBatch['seg']; segAt: number; tester: boolean; events: AppEvent[] }>();
+  type Tagged = AppEvent & { seg: EventBatch['seg'] };
+  const byDevice = new Map<string, Tagged[]>();
   for (const b of batches) {
     if (b.pl === 'web') continue;
-    let d = map.get(b.d);
-    if (!d) { d = { seg: 'anon', segAt: 0, tester: false, events: [] }; map.set(b.d, d); }
-    if (b.seg === 'tester') d.tester = true;
-    if (b.seg !== 'anon' && b.at >= d.segAt) { d.seg = b.seg; d.segAt = b.at; }
-    d.events.push(...(b.ev ?? []));
+    const list = byDevice.get(b.d) ?? [];
+    for (const e of b.ev ?? []) list.push({ ...e, seg: b.seg });
+    byDevice.set(b.d, list);
   }
-  return [...map.entries()].map(([id, d]) => {
-    const events = d.events.sort((a, b) => a.t - b.t);
-    return {
-      id,
-      section: d.seg === 'facility' ? 'facility' : 'remote',
-      tester: d.tester,
-      events,
-      install: events.find(e => e.e === EVENTS.install)?.t ?? null,
-      first: events[0]?.t ?? 0,
-      days: new Set(events.map(e => dayKey(e.t)))
-    } as Device;
-  });
+  const people: Device[] = [];
+  for (const [id, list] of byDevice) {
+    list.sort((a, b) => a.t - b.t);
+    let part: Tagged[] = [], n = 0;
+    const close = () => {
+      if (!part.length) return;
+      const known = part.filter(e => e.seg !== 'anon');
+      const seg = known.length ? known[known.length - 1].seg : 'anon';
+      const events: AppEvent[] = part.map(({ seg: _s, ...e }) => e);
+      const start = events.find(e => e.e === EVENTS.install || e.e === EVENTS.signup)?.t ?? null;
+      people.push({
+        id: n ? `${id}#${n}` : id,
+        section: seg === 'facility' ? 'facility' : 'remote',
+        tester: part.some(e => e.seg === 'tester'),
+        events,
+        install: start,
+        first: events[0]?.t ?? 0,
+        days: new Set(events.map(e => dayKey(e.t)))
+      });
+      part = []; n++;
+    };
+    for (const e of list) {
+      // A sign-up on a phone that was already someone's: it was in use before this tracking (upgrade), or an
+      // account was already made on it. A brand-new install signing up is the same person carrying on.
+      const owned = part.some(p => p.e === EVENTS.signup) || (part.length > 0 && !part.some(p => p.e === EVENTS.install));
+      if (e.e === EVENTS.signup && owned) close();
+      part.push(e);
+    }
+    close();
+  }
+  return people;
 }
 
 // Whether a device reached a step: the step's event (with its detail, if the step names one), or its page.
