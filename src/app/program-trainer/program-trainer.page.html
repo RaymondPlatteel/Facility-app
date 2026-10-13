@@ -1,0 +1,149 @@
+<ion-content [fullscreen]="true" class="content-no-header">
+  <div class="pt-page">
+
+    <div class="pt-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back"><ion-icon name="arrow-back"></ion-icon></button>
+      <div class="pt-titles">
+        <div class="pt-eyebrow">Program Rules</div>
+        <h1>PROGRAM <span>TRAINER</span></h1>
+      </div>
+      <div class="pt-head-stats">
+        <div class="pt-stat"><span>Corrections</span><b>{{ corrections.length }}</b></div>
+        <div class="pt-stat"><span>Rules off, last 10</span><b>{{ recent('rulesOff') }}</b></div>
+        <div class="pt-stat accent"><span>Model off, last 10</span><b>{{ recent('modelOff') }}</b></div>
+      </div>
+    </div>
+
+    <p class="pt-error" *ngIf="error">{{ error }}</p>
+
+    <div class="pt-layout">
+
+      <!-- Athlete -->
+      <aside class="pt-athlete">
+        <div class="pt-card">
+          <div class="pt-card-head">
+            <h2>{{ athlete.name }}</h2>
+            <button class="pt-btn small" (click)="newAthlete()"><ion-icon name="refresh-outline"></ion-icon> New Athlete</button>
+          </div>
+          <label class="pt-rank overall">
+            <span>Overall</span>
+            <select [ngModel]="athlete.overall" (ngModelChange)="setOverall($event)">
+              <option *ngFor="let r of ranks" [value]="r">{{ short[r] }}</option>
+            </select>
+          </label>
+          <div class="pt-ranks">
+            <label class="pt-rank" *ngFor="let f of rankFields">
+              <span>{{ f.label }}</span>
+              <select [ngModel]="rankOf(f.key)" (ngModelChange)="setRank(f.key, $event)">
+                <option *ngFor="let r of ranks" [value]="r">{{ short[r] }}</option>
+              </select>
+            </label>
+          </div>
+          <div class="pt-facts">
+            <span>{{ state.pushupMax }} push-ups</span>
+            <span>{{ state.pullupMax }} pull-ups</span>
+            <span>{{ state.bodyWeight }} lb</span>
+          </div>
+          <div class="pt-days">
+            <button *ngFor="let d of days; let i = index" class="pt-day-toggle" [class.on]="trains(i)" (click)="toggleDay(i)">{{ d }}</button>
+          </div>
+          <p class="pt-hint" *ngIf="belowMinimum">Below the {{ short[athlete.overall] }}-Rank minimum of training days. The athlete app would not allow this week.</p>
+          <p class="pt-hint" *ngIf="!belowMinimum">{{ trainingDays }} training days. Changing a rank or a day rebuilds the week.</p>
+        </div>
+
+        <div class="pt-card">
+          <h3>Scores</h3>
+          <div class="pt-score">
+            <span>Rules</span>
+            <b>{{ rulesPct }}%</b>
+            <small>{{ rulesOff }} {{ rulesOff === 1 ? 'block' : 'blocks' }} off</small>
+          </div>
+          <div class="pt-score accent">
+            <span>Model</span>
+            <b>{{ modelPct }}%</b>
+            <small>{{ modelOff }} {{ modelOff === 1 ? 'block' : 'blocks' }} off</small>
+          </div>
+          <p class="pt-hint" *ngIf="modelDiffers">The model changed this week from the rules.</p>
+          <p class="pt-hint" *ngIf="!modelDiffers">The model's week is the same as the rules'.</p>
+        </div>
+      </aside>
+
+      <!-- Week -->
+      <section class="pt-week-wrap">
+        <div class="pt-week">
+          <div *ngFor="let d of days; let i = index" class="pt-col"
+               [class.rest]="!trains(i)" [class.drop]="dropDay === i" [class.armed]="selected && trains(i)"
+               [attr.data-day]="i" (click)="dayTap(i)">
+            <div class="pt-col-head">{{ d }}</div>
+            <ng-container *ngIf="trains(i); else restDay">
+              <div *ngFor="let b of sorted(week[i]); trackBy: trackBlock" class="pt-block" [ngClass]="groupClass(b.key)" [class.added]="added(i, b.key, b.index)"
+                   draggable="false" (pointerdown)="press($event, { from: 'day', day: i, index: b.index })">
+                <span>{{ def(b.key).label }}</span>
+                <button class="pt-x" (click)="remove(i, b.index); $event.stopPropagation()" aria-label="Remove">×</button>
+              </div>
+              <div *ngFor="let k of removed(i); let n = index; trackBy: trackRemoved" class="pt-block removed" [ngClass]="groupClass(k)"><span>{{ def(k).label }}</span></div>
+              <div class="pt-empty" *ngIf="!week[i].length && !removed(i).length">Empty</div>
+            </ng-container>
+            <ng-template #restDay><div class="pt-empty">Rest</div></ng-template>
+          </div>
+        </div>
+        <div class="pt-legend">
+          <span><i class="added"></i> Added to the rules' week</span>
+          <span><i class="removed"></i> Taken from the rules' week</span>
+        </div>
+
+        <div class="pt-actions">
+          <input class="pt-note" [(ngModel)]="note" placeholder="Note on this correction (optional)" />
+          <button class="pt-btn" (click)="resetToRules()">Reset to Rules</button>
+          <button class="pt-btn" (click)="resetToModel()">Reset to Model</button>
+          <button class="pt-btn primary" [disabled]="saving || loading" (click)="save()">{{ edited ? 'Save Correction' : 'Confirm Week' }}</button>
+        </div>
+
+        <!-- Progress -->
+        <div class="pt-card pt-progress">
+          <div class="pt-card-head">
+            <h3>Progress</h3>
+            <div class="pt-key"><span class="rules">Rules</span><span class="model">Model</span></div>
+          </div>
+          <ng-container *ngIf="chart.length >= 2; else noChart">
+            <svg viewBox="0 0 600 160" preserveAspectRatio="none">
+              <line *ngFor="let g of [10, 45, 80, 115, 150]" x1="0" x2="600" [attr.y1]="g" [attr.y2]="g" class="grid" />
+              <path class="rules" [attr.d]="path('rulesOff')" />
+              <path class="model" [attr.d]="path('modelOff')" />
+            </svg>
+            <div class="pt-axis"><span>0 blocks off</span><span>Blocks off per week, five-correction average</span><span>{{ chart.length }} corrections</span></div>
+            <p class="pt-hint">Each correction is scored against what the model proposed before it learned from it. Blocks off per week: rules {{ first('rulesOff') }} and model {{ first('modelOff') }} over the first ten, rules {{ recent('rulesOff') }} and model {{ recent('modelOff') }} over the last ten.</p>
+          </ng-container>
+          <ng-template #noChart><p class="pt-hint">The chart starts after two saved corrections.</p></ng-template>
+
+          <div class="pt-list" *ngIf="latest.length">
+            <div class="pt-row" *ngFor="let c of latest">
+              <span class="pt-row-name">{{ c.name }} · {{ short[c.overall] }}-Rank<em *ngIf="c.source === 'review'" class="pt-tag">Review</em></span>
+              <span>Rules {{ correctionPct(c, 'rules') }}%</span>
+              <span class="accent">Model {{ correctionPct(c, 'model') }}%</span>
+              <span class="pt-row-note">{{ c.note }}</span>
+              <button class="pt-x" (click)="deleteCorrection(c)" aria-label="Delete correction"><ion-icon name="trash-outline"></ion-icon></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Blocks -->
+      <aside class="pt-palette" [class.drop]="ghost && dropDay === null">
+        <h3>Blocks</h3>
+        <p class="pt-hint">Drag a block onto a day, or tap it and then tap a day. Drag a block back here, or tap its ×, to remove it.</p>
+        <div *ngFor="let g of groups" class="pt-group">
+          <div class="pt-group-name">{{ g }}</div>
+          <div *ngFor="let b of groupBlocks(g); trackBy: trackDef" class="pt-block palette" [ngClass]="groupClass(b.key)" [class.selected]="selected === b.key"
+               draggable="false" (pointerdown)="press($event, { from: 'palette', key: b.key })" (click)="choose(b.key)">
+            <span>{{ b.label }}</span>
+          </div>
+        </div>
+        <p class="pt-hint">Week-to-week changes are not blocks: squat and deadlift alternating, max tests and the monthly speed-endurance run stay in the program.</p>
+      </aside>
+    </div>
+  </div>
+  <div class="pt-block pt-ghost" *ngIf="ghost" [ngClass]="groupClass(ghost.key)" [style.left.px]="ghost.x" [style.top.px]="ghost.y">
+    <span>{{ def(ghost.key).label }}</span>
+  </div>
+</ion-content>

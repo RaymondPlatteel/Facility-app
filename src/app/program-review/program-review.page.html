@@ -21,6 +21,11 @@
     <div *ngIf="!loading && !program" class="state-msg">This program could not be found.</div>
 
     <ng-container *ngIf="program">
+      <div class="pr-model" *ngIf="program.modelChanges?.length">
+        <b>Trainer model changes</b>
+        <span>The model changed the rules' program from your past corrections. Saving this review teaches it what you keep.</span>
+        <ul><li *ngFor="let c of program.modelChanges">{{ c }}</li></ul>
+      </div>
       <div class="pr-proposal" *ngIf="proposal">
         <div class="pp-head">
           <div>

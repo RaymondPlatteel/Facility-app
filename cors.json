@@ -1,8 +1,34 @@
 [
   {
-    "origin": ["http://localhost:4200", "https://localhost:4200"],
-    "method": ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"],
+    "origin": [
+      "*"
+    ],
+    "method": [
+      "GET",
+      "HEAD",
+      "PUT",
+      "POST",
+      "DELETE",
+      "OPTIONS"
+    ],
     "maxAgeSeconds": 3600,
-    "responseHeader": ["Content-Type", "Authorization", "Range"]
+    "responseHeader": [
+      "Content-Type",
+      "Authorization",
+      "Range",
+      "Content-Length",
+      "Content-Range",
+      "X-Goog-Upload-Command",
+      "X-Goog-Upload-Header-Content-Length",
+      "X-Goog-Upload-Header-Content-Type",
+      "X-Goog-Upload-Offset",
+      "X-Goog-Upload-Protocol",
+      "X-Goog-Upload-Status",
+      "X-Goog-Upload-URL",
+      "X-Goog-Upload-Chunk-Granularity",
+      "X-Firebase-Storage-Version",
+      "X-Goog-Upload-Control-URL",
+      "X-Goog-Resumable"
+    ]
   }
-] 
+]

@@ -52,3 +52,8 @@ textarea { width: 100%; box-sizing: border-box; resize: vertical; }
   .chg-text { min-width: 0; b { font-size: 13px; } p { margin: 2px 0 0; font-size: 12.5px; line-height: 1.4; } .muted { color: var(--hud-text-dim, #88a6bf); } .arrow { color: var(--hud-text-dim, #88a6bf); } }
 }
 .chg-same { margin: 8px 0 0; font-size: 12px; }
+
+.pr-model { margin-bottom: 14px; padding: 12px 14px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--hud-accent, #00d4ff) 40%, transparent);
+  background: color-mix(in srgb, var(--hud-accent, #00d4ff) 6%, transparent); font-size: 13px; color: var(--hud-text-dim, #88a6bf);
+  b { display: block; color: var(--hud-accent, #00d4ff); font-size: 14px; margin-bottom: 2px; }
+  ul { margin: 6px 0 0; padding-left: 18px; color: var(--hud-text, #dceaf6); } }

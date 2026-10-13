@@ -18,7 +18,7 @@ export interface RunSeries {
 }
 
 export interface RunMeta {
-  source: 'fit' | 'health';
+  source: 'fit' | 'health' | 'gpx';
   device: string;            // what recorded it, as best known, e.g. "Garmin Forerunner 265", "Apple Watch"
   maker?: string;            // the .fit file's manufacturer as written, e.g. "garmin"; "development" means a tool made it
   key: string;               // the same run gives the same key, so it cannot be submitted twice
@@ -37,8 +37,16 @@ export interface RunSummary extends RunMeta {
   splits: number[];          // metres in each 5 minutes of it
   hrAvg: number | null;
   hrMax: number | null;
-  route: Array<[number, number]>;   // [lat, lon] of the scored 30:00, at most ROUTE_POINTS
+  route: Array<{ lat: number; lon: number }>;   // positions of the scored 30:00, at most ROUTE_POINTS
+  minutes?: RunMinutes;      // the scored 30:00 minute by minute, for the graph
   flags: string[];           // reasons for the coach to look closer
+}
+
+// One value for each minute of the scored 30:00; null where nothing was recorded.
+export interface RunMinutes {
+  pace: Array<number | null>;   // seconds per km
+  hr: Array<number | null>;     // bpm
+  alt: Array<number | null>;    // metres above sea level
 }
 
 export class RunImportError extends Error {}
@@ -95,9 +103,58 @@ export function parseFit(bytes: Uint8Array): { meta: RunMeta; series: RunSeries 
   };
 }
 
+// ── .gpx (Strava's Export GPX, and most other apps) ──
+// Positions, elevation and time, with heart rate and cadence in the Garmin extension. Distance is worked out from the track.
+export function parseGpx(text: string): { meta: RunMeta; series: RunSeries } {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length || !doc.getElementsByTagName('gpx').length) throw new RunImportError('This is not a .gpx file.');
+  const pts = Array.from(doc.getElementsByTagName('trkpt'));
+  const num = (el: Element, tag: string): number | null => {
+    const found = Array.from(el.getElementsByTagName('*')).find(e => e.localName === tag);
+    const v = found ? parseFloat(found.textContent ?? '') : NaN;
+    return isFinite(v) ? v : null;
+  };
+  const rows = pts.map(el => {
+    const time = Array.from(el.getElementsByTagName('time'))[0]?.textContent;
+    return { el, ms: time ? Date.parse(time) : NaN };
+  }).filter(r => isFinite(r.ms));
+  if (rows.length < 2) throw new RunImportError('This .gpx file has no timed track points.');
+  const t0 = rows[0].ms;
+  const series: RunSeries = { dist: [], route: [], hr: [], cadence: [], alt: [] };
+  for (const { el, ms } of rows) {
+    const t = (ms - t0) / 1000;
+    const lat = parseFloat(el.getAttribute('lat') ?? ''), lon = parseFloat(el.getAttribute('lon') ?? '');
+    if (isFinite(lat) && isFinite(lon)) series.route.push({ t, lat, lon });
+    const ele = num(el, 'ele'); if (ele != null) series.alt!.push({ t, m: ele });
+    const hr = num(el, 'hr'); if (hr != null && hr > 0) series.hr.push({ t, bpm: hr });
+    const cad = num(el, 'cad'); if (cad != null) series.cadence!.push({ t, spm: cad * 2 });
+  }
+  if (series.route.length < 2) throw new RunImportError('This .gpx file has no positions.');
+  series.dist = distanceFromRoute(series.route);
+  const creator = doc.getElementsByTagName('gpx')[0].getAttribute('creator') ?? '';
+  const type = (doc.getElementsByTagName('type')[0]?.textContent ?? '').toLowerCase();
+  if (type && !/run|jog/.test(type)) throw new RunImportError('This .gpx file is not a run.');
+  return {
+    meta: {
+      source: 'gpx',
+      device: creator.replace(/^StravaGPX\s*/i, 'Strava ').trim() || 'GPX file',
+      key: `gpx:${t0}:${series.route[0].lat.toFixed(5)}:${series.route[0].lon.toFixed(5)}`,
+      startedAt: new Date(t0).toISOString(),
+      indoor: false,
+      userEntered: false
+    },
+    series
+  };
+}
+
 // ── Scoring ──
 export function summarize(meta: RunMeta, s: RunSeries): RunSummary {
-  const dist = monotonic(s.dist);
+  let dist = monotonic(s.dist);
+  // A run whose distance came as only a few samples would split evenly; the GPS track is better then.
+  if (s.route.length > 30 && dist.length < Math.max(30, s.route.length / 10)) {
+    const fromRoute = monotonic(distanceFromRoute(s.route));
+    if (fromRoute.length > dist.length) dist = fromRoute;
+  }
   if (dist.length < 2) throw new RunImportError('No distance was recorded on this run.');
   const totalSec = dist[dist.length - 1].t - dist[0].t;
   if (totalSec < WINDOW_SEC) throw new RunImportError(`This run is ${clock(totalSec)} long. It needs to be at least 30:00.`);
@@ -110,11 +167,12 @@ export function summarize(meta: RunMeta, s: RunSeries): RunSummary {
   const hr = s.hr.filter(h => h.t >= start && h.t <= end).map(h => h.bpm);
   const pts = s.route.filter(p => p.t >= start && p.t <= end);
   const step = Math.max(1, Math.ceil(pts.length / ROUTE_POINTS));
-  const route = pts.filter((_, i) => i % step === 0).map(p => [round6(p.lat), round6(p.lon)] as [number, number]);
+  const route = pts.filter((_, i) => i % step === 0).map(p => ({ lat: round6(p.lat), lon: round6(p.lon) }));
 
   const flags: string[] = [];
   if (meta.userEntered) flags.push('Entered by hand in Apple Health.');
-  if (meta.indoor) flags.push('No GPS route: an indoor or treadmill run.');
+  if (meta.indoor) flags.push('An indoor or treadmill run.');
+  else if (!s.route.length) flags.push('No GPS route was recorded.');
   if (!hr.length) flags.push('No heart rate was recorded.');
   if (fastestMinute(dist, start, end) > 7) flags.push('One minute is faster than 7 m/s.');
   const gap = longestGap(s.route.length ? s.route : dist, start, end);
@@ -130,8 +188,22 @@ export function summarize(meta: RunMeta, s: RunSeries): RunSummary {
     hrAvg: hr.length ? Math.round(hr.reduce((a, b) => a + b, 0) / hr.length) : null,
     hrMax: hr.length ? Math.max(...hr) : null,
     route,
+    minutes: minutesOf(dist, s, start),
     flags
   };
+}
+
+function minutesOf(dist: Array<{ t: number; m: number }>, s: RunSeries, start: number): RunMinutes {
+  const avg = (v: number[]) => v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null;
+  const within = <T extends { t: number }>(a: T[] | undefined, i: number) => (a ?? []).filter(p => p.t >= start + i * 60 && p.t < start + (i + 1) * 60);
+  const pace: Array<number | null> = [], hr: Array<number | null> = [], alt: Array<number | null> = [];
+  for (let i = 0; i < 30; i++) {
+    const m = distAt(dist, start + (i + 1) * 60) - distAt(dist, start + i * 60);
+    pace.push(m > 1 ? Math.round(60 / (m / 1000)) : null);
+    hr.push(avg(within(s.hr, i).map(p => p.bpm)));
+    alt.push(avg(within(s.alt, i).map(p => p.m)));
+  }
+  return { pace, hr, alt };
 }
 
 // Start of the 30:00 that covers the most distance. Distance is linear between samples, so the best window starts or

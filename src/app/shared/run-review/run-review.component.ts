@@ -1,6 +1,6 @@
 import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RunSummary, clock } from '../../services/run-import.util';
+import { RunSeries, RunSummary, clock, distAt } from '../../services/run-import.util';
 import { RunCheckResult, checkRun, readRunFile } from '../../services/run-check.util';
 
 // The coach's view of a 30-Minute Run. The original file is downloaded and checked here (run-check.util): a pass or
@@ -37,15 +37,21 @@ import { RunCheckResult, checkRun, readRunFile } from '../../services/run-check.
       </div>
 
       <ng-container *ngIf="result as r">
-        <div class="rr-chart" *ngIf="pacePath">
-          <div class="rr-chart-head"><span>Pace by minute</span><span>{{ paceRange }}</span></div>
-          <svg viewBox="0 0 400 80" preserveAspectRatio="none"><path class="pace" [attr.d]="pacePath" /></svg>
+        <div class="rr-charts" (mousemove)="hover($event)" (touchmove)="hover($event)" (mouseleave)="hoverF = null">
+          <div class="rr-chart" *ngFor="let c of detail">
+            <div class="rr-chart-head">
+              <span>{{ c.label }}</span>
+              <span>{{ hoverF != null ? valueAt(c) : c.range }}</span>
+            </div>
+            <svg viewBox="0 0 600 120" preserveAspectRatio="none">
+              <line *ngFor="let g of [20, 60, 100]" x1="0" x2="600" [attr.y1]="g" [attr.y2]="g" class="grid" />
+              <path [attr.d]="c.path" [style.stroke]="c.color" />
+              <line *ngIf="hoverF != null" class="cursor" [attr.x1]="hoverF * 600" [attr.x2]="hoverF * 600" y1="0" y2="120" />
+            </svg>
+          </div>
+          <div class="rr-axis"><span *ngFor="let t of ticks">{{ t }}<ng-container *ngIf="t !== 0"> min</ng-container></span></div>
+          <div class="rr-hover" *ngIf="hoverF != null">{{ clock(hoverF * 1800) }}</div>
         </div>
-        <div class="rr-chart" *ngIf="hrPath">
-          <div class="rr-chart-head"><span>Heart rate by minute</span><span>{{ r.metrics.hrMin }}–{{ r.metrics.hrMax }} bpm</span></div>
-          <svg viewBox="0 0 400 80" preserveAspectRatio="none"><path class="hr" [attr.d]="hrPath" /></svg>
-        </div>
-        <div class="rr-axis"><span>0</span><span>10 min</span><span>20 min</span><span>30 min</span></div>
       </ng-container>
 
       <svg *ngIf="routePath" class="rr-route" viewBox="0 0 400 220" preserveAspectRatio="xMidYMid meet">
@@ -75,8 +81,8 @@ import { RunCheckResult, checkRun, readRunFile } from '../../services/run-check.
 
       <div class="rr-meta">
         <span>{{ shown.startedAt | date: 'EEE, MMM d, y · h:mm a' }}</span>
-        <span>{{ shown.device }} · {{ shown.source === 'fit' ? '.fit file' : 'Apple Health' }}</span>
-        <a *ngIf="fileUrl" [href]="fileUrl" target="_blank" rel="noopener">Download {{ shown.source === 'fit' ? '.fit File' : 'Run Data' }}</a>
+        <span>{{ shown.device }} · {{ shown.source === 'fit' ? '.fit file' : shown.source === 'gpx' ? '.gpx file' : 'Apple Health' }}</span>
+        <a *ngIf="fileUrl" [href]="fileUrl" target="_blank" rel="noopener">Download {{ shown.source === 'fit' ? '.fit File' : shown.source === 'gpx' ? '.gpx File' : 'Run Data' }}</a>
       </div>
     </div>
   `,
@@ -99,8 +105,12 @@ import { RunCheckResult, checkRun, readRunFile } from '../../services/run-check.
     .rr-metric small { font-size: 12px; font-weight: 400; color: #8aa0b4; }
     .rr-chart { margin-top: 12px; }
     .rr-chart-head { display: flex; justify-content: space-between; font-size: 12px; color: #8aa0b4; margin-bottom: 4px; }
-    .rr-chart svg { display: block; width: 100%; height: 80px; border-radius: 6px; background: rgba(255,255,255,0.03); }
-    .rr-chart path { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+    .rr-chart svg { display: block; width: 100%; height: 120px; border-radius: 6px; background: rgba(255,255,255,0.03); }
+    .rr-chart path { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+    .rr-chart .grid { stroke: rgba(255,255,255,0.07); stroke-width: 1; vector-effect: non-scaling-stroke; }
+    .rr-chart .cursor { stroke: rgba(255,255,255,0.5); stroke-width: 1; vector-effect: non-scaling-stroke; }
+    .rr-charts { position: relative; touch-action: pan-y; }
+    .rr-hover { margin-top: 4px; font-size: 12px; color: #b6c8d6; text-align: center; font-variant-numeric: tabular-nums; }
     .rr-chart path.pace { stroke: var(--hud-accent, #00d4ff); }
     .rr-chart path.hr { stroke: #f87171; }
     .rr-axis { display: flex; justify-content: space-between; margin-top: 2px; font-size: 11px; color: #6d8399; }
@@ -139,6 +149,24 @@ export class RunReviewComponent implements OnChanges {
   private file: { url: string; bytes: ArrayBuffer } | null = null;
 
   // The run as checked from the file, or as submitted until then.
+  detail: DetailChart[] = [];
+  ticks = [0, 5, 10, 15, 20, 25, 30];
+  hoverF: number | null = null;
+
+  hover(e: MouseEvent | TouchEvent) {
+    const svg = (e.currentTarget as HTMLElement).querySelector('svg');
+    if (!svg) return;
+    const r = svg.getBoundingClientRect();
+    const x = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    this.hoverF = Math.min(1, Math.max(0, (x - r.left) / r.width));
+  }
+  valueAt(c: DetailChart): string {
+    const t = (this.hoverF ?? 0) * 1800;
+    let best: [number, number] | null = null;
+    for (const p of c.points) if (!best || Math.abs(p[0] - t) < Math.abs(best[0] - t)) best = p;
+    return best && Math.abs(best[0] - t) < 30 ? c.fmt(best[1]) : '—';
+  }
+
   get shown(): RunSummary { return this.result?.summary ?? this.run; }
 
   async ngOnChanges(changes: SimpleChanges) {
@@ -159,6 +187,7 @@ export class RunReviewComponent implements OnChanges {
       }
       const { meta, series } = readRunFile(this.run.source, this.file.bytes);
       this.result = checkRun(meta, series, { km: this.submittedKm, at: this.submittedAt, duplicateOf: this.duplicateOf });
+      this.detail = buildDetail(series, this.result.summary.windowStart);
     } catch (e) {
       this.result = null;
       this.error = e instanceof Error && e.message !== 'download' && e.message
@@ -180,31 +209,11 @@ export class RunReviewComponent implements OnChanges {
   // Minutes per km over a five-minute split.
   pace(m: number): string { return m > 0 ? clock(300 / (m / 1000)) : '—'; }
 
-  // Faster at the top. Standing minutes sit at the bottom.
-  get pacePath(): string {
-    const v = this.result?.metrics.paceByMinute ?? [];
-    const moving = v.filter(x => x > 0);
-    if (moving.length < 2) return '';
-    const lo = Math.min(...moving), hi = Math.max(...moving), span = Math.max(hi - lo, 10);
-    return line(v.map(x => x > 0 ? 6 + ((x - lo) / span) * 68 : 76));
-  }
-  get paceRange(): string {
-    const moving = (this.result?.metrics.paceByMinute ?? []).filter(x => x > 0);
-    return moving.length ? `${clock(Math.min(...moving))}–${clock(Math.max(...moving))} /km` : '';
-  }
-  get hrPath(): string {
-    const v = this.result?.metrics.hrByMinute ?? [];
-    const known = v.filter((x): x is number => x != null);
-    if (known.length < 2) return '';
-    const lo = Math.min(...known), hi = Math.max(...known), span = Math.max(hi - lo, 10);
-    return line(v.map(x => x == null ? null : 74 - ((x - lo) / span) * 68));
-  }
-
   private get projected(): Array<[number, number]> {
     const pts = this.shown?.route ?? [];
     if (pts.length < 2) return [];
-    const k = Math.cos(pts[0][0] * Math.PI / 180);
-    const xs = pts.map(p => p[1] * k), ys = pts.map(p => -p[0]);
+    const k = Math.cos(pts[0].lat * Math.PI / 180);
+    const xs = pts.map(p => p.lon * k), ys = pts.map(p => -p.lat);
     const x0 = Math.min(...xs), y0 = Math.min(...ys), w = Math.max(...xs) - x0 || 1e-9, h = Math.max(...ys) - y0 || 1e-9;
     const s = Math.min(380 / w, 200 / h), ox = (400 - w * s) / 2, oy = (220 - h * s) / 2;
     return pts.map((_, i) => [ox + (xs[i] - x0) * s, oy + (ys[i] - y0) * s]);
@@ -227,4 +236,44 @@ function line(ys: Array<number | null>): string {
     pen = true;
   });
   return d.trim();
+}
+
+interface DetailChart {
+  label: string; color: string; range: string; path: string;
+  points: Array<[number, number]>;      // seconds into the scored 30:00, value
+  fmt: (n: number) => string;
+}
+
+// Every recorded point of the scored 30:00: pace from the distance (smoothed over 20 seconds), heart rate and elevation as recorded.
+function buildDetail(series: RunSeries, windowStart: number): DetailChart[] {
+  const dist = [...series.dist].sort((a, b) => a.t - b.t);
+  if (dist.length < 2) return [];
+  const s0 = dist[0].t + windowStart;
+  const inWin = <T extends { t: number }>(a: T[] | undefined) => (a ?? []).filter(p => p.t >= s0 && p.t <= s0 + 1800);
+
+  const pace: Array<[number, number]> = [];
+  for (let t = 0; t <= 1800; t += 5) {
+    const m = distAt(dist, s0 + Math.min(1800, t + 10)) - distAt(dist, s0 + Math.max(0, t - 10));
+    const span = Math.min(1800, t + 10) - Math.max(0, t - 10);
+    const sec = m > 1 ? span / (m / 1000) : 0;
+    if (sec > 0 && sec < 1200) pace.push([t, sec]);
+  }
+  const hr: Array<[number, number]> = inWin(series.hr).map(p => [p.t - s0, p.bpm]);
+  const alt: Array<[number, number]> = inWin(series.alt).map(p => [p.t - s0, p.m]);
+
+  const out: DetailChart[] = [];
+  const add = (label: string, pts: Array<[number, number]>, flip: boolean, color: string, fmt: (n: number) => string) => {
+    if (pts.length < 2) return;
+    const vs = pts.map(p => p[1]);
+    const lo = Math.min(...vs), hi = Math.max(...vs), span = hi - lo || 1;
+    const path = pts.map((p, i) => {
+      const y = flip ? 8 + ((p[1] - lo) / span) * 104 : 112 - ((p[1] - lo) / span) * 104;
+      return `${i ? 'L' : 'M'}${(p[0] / 1800 * 600).toFixed(1)} ${y.toFixed(1)}`;
+    }).join(' ');
+    out.push({ label, color, path, points: pts, fmt, range: `${fmt(lo)} – ${fmt(hi)}` });
+  };
+  add('Pace (/km)', pace, true, 'var(--hud-accent, #00d4ff)', n => clock(n));
+  add('Heart Rate', hr, false, '#f87171', n => `${Math.round(n)} bpm`);
+  add('Elevation', alt, false, '#4ade80', n => `${Math.round(n)} m`);
+  return out;
 }

@@ -1,0 +1,44 @@
+<ion-content [fullscreen]="true" class="content-no-header">
+  <div class="av-page">
+    <div class="av-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back"><ion-icon name="arrow-back"></ion-icon></button>
+      <div class="av-titles">
+        <div class="av-eyebrow">Athlete App</div>
+        <h1>APP <span>VIDEOS</span></h1>
+      </div>
+      <div class="av-count"><b>{{ uploaded }}</b> of {{ slots.length }} uploaded</div>
+    </div>
+
+    <p class="av-note">Upload a video to a slot and the athlete app plays it the next time it opens. No new build is needed. Replacing a video removes the old one. MP4 or MOV at 720p keeps the app quick.</p>
+    <p class="av-error" *ngIf="error">{{ error }}</p>
+    <p class="av-note" *ngIf="loading">Loading…</p>
+
+    <section class="av-group" *ngFor="let g of groups">
+      <h2>{{ g }}</h2>
+      <div class="av-slot" *ngFor="let s of inGroup(g)" [class.has]="videos[s.key]">
+        <div class="av-row">
+          <div class="av-name">
+            <b>{{ s.title }}</b>
+            <span *ngIf="videos[s.key] as v">{{ v.name }} · {{ size(v) }} · {{ when(v) }}</span>
+            <span *ngIf="!videos[s.key]">No video</span>
+          </div>
+          <div class="av-actions">
+            <ng-container *ngIf="busy[s.key] === undefined; else uploading">
+              <button class="av-btn" *ngIf="videos[s.key]" (click)="preview(s)">{{ previewing === s.key ? 'Hide' : 'Play' }}</button>
+              <label class="av-btn primary">
+                {{ videos[s.key] ? 'Replace' : 'Upload' }}
+                <input type="file" accept="video/*" hidden (change)="pick(s, $event)" />
+              </label>
+              <button class="av-btn danger" *ngIf="videos[s.key]" (click)="remove(s)">Remove</button>
+            </ng-container>
+            <ng-template #uploading>
+              <div class="av-progress"><span [style.width.%]="busy[s.key]"></span></div>
+              <span class="av-pct">{{ busy[s.key] }}%</span>
+            </ng-template>
+          </div>
+        </div>
+        <video *ngIf="previewing === s.key && videos[s.key] as v" class="av-video" [src]="v.url" controls playsinline preload="metadata"></video>
+      </div>
+    </section>
+  </div>
+</ion-content>

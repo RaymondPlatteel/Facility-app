@@ -12,6 +12,8 @@ import { addIcons } from 'ionicons';
 import {
   lockClosedOutline,
   keypadOutline,
+  schoolOutline,
+  videocamOutline,
   homeOutline,
   megaphoneOutline,
   trophyOutline,
@@ -108,6 +110,8 @@ export class AppComponent implements OnInit, OnDestroy {
       scanOutline,
       lockClosedOutline,
       keypadOutline,
+      schoolOutline,
+      videocamOutline,
       homeOutline,
       megaphoneOutline,
       trophyOutline,

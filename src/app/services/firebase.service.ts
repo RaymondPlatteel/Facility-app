@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
 import { initializeApp } from 'firebase/app';
+import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit, onSnapshot, getCountFromServer, arrayUnion, runTransaction } from 'firebase/firestore';
 import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationPlan, usesStoredSessions } from './schedule.util';
 import type { ScheduleEntry } from './schedule.util';
@@ -734,7 +735,15 @@ export interface Program {
   support?: ProgramSupportMessage[];
   // Optional. The day the athlete actually got the program (startDate is the Monday that anchors its weeks).
   startedOn?: string;
-  generatedFrom?: { assessmentAt: string | null; intakeAt: string; version: number };
+  generatedFrom?: {
+    assessmentAt: string | null; intakeAt: string; version: number;
+    // What the rules read (AthleteState) and the overall rank, so a review of the program teaches the trainer model.
+    state?: Record<string, unknown>; overall?: string;
+    model?: number;   // corrections the trainer model had learned from when it was built
+    blocks?: Record<string, string[]>;   // the first week as built, in the trainer's blocks
+  };
+  // The trainer model's changes to the rules' program ("Mon: added Easy Cardio").
+  modelChanges?: string[];
   durationPerDayMinutes?: number;
   equipment?: string[];
   schedule: ProgramDay[];  // length = cycles * daysPerCycle
@@ -1079,12 +1088,33 @@ export interface ThemeDoc {
   order?: number;
 }
 
+export type { AppVideo } from '../program-engine/videos';
+import type { AppVideo } from '../program-engine/videos';
+
+// A coach's correction in the Program Trainer. Weeks are stored day by day: { "0": [...blocks], ..., "6": [...] }.
+export interface TrainerCorrection {
+  id?: string;
+  createdAt: string;
+  engineVersion: number;
+  name: string;
+  overall: OmniRank;
+  state: Record<string, unknown>;     // the practice athlete, as the rules read it (AthleteState)
+  rules: Record<string, string[]>;
+  model: Record<string, string[]>;
+  corrected: Record<string, string[]>;
+  correctedOriginal?: Record<string, string[]>;   // the week as first saved, when it was later repaired
+  source?: 'practice' | 'review';     // a practice athlete in the trainer, or a real athlete's program review
+  programId?: string;
+  note?: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class FirebaseService {
   private app;
   private db;
+  private storage;
 
   // Fires whenever anything that shapes the training schedule is written —
   // packages, reschedule overrides, one-off sessions. CalendarSyncService
@@ -1102,6 +1132,7 @@ export class FirebaseService {
   constructor() {
     this.app = initializeApp(environment.firebase);
     this.db = getFirestore(this.app);
+    this.storage = getStorage(this.app);
     
     console.log('Firebase initialized successfully', {
       projectId: environment.firebase.projectId
@@ -3850,6 +3881,63 @@ export class FirebaseService {
       written += plan.toCreate.length;
     }
     return written;
+  }
+
+  // ---------- Program Trainer ----------
+  // Each saved correction: a practice athlete, the week the rules gave, the week the model proposed, and the week
+  // the coach made it. The trainer learns from all of them.
+  async addTrainerCorrection(entry: TrainerCorrection): Promise<string> {
+    const ref = await addDoc(collection(this.db, 'programTrainer'), JSON.parse(JSON.stringify(entry)));
+    return ref.id;
+  }
+
+  async listTrainerCorrections(): Promise<TrainerCorrection[]> {
+    const snap = await getDocs(query(collection(this.db, 'programTrainer'), orderBy('createdAt', 'asc')));
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as TrainerCorrection) }));
+  }
+
+  // A program review keeps one correction per program, replaced on each save.
+  async setTrainerCorrection(id: string, entry: TrainerCorrection): Promise<void> {
+    await setDoc(doc(this.db, 'programTrainer', id), JSON.parse(JSON.stringify(entry)));
+  }
+
+  async updateTrainerCorrection(id: string, data: Partial<TrainerCorrection>): Promise<void> {
+    await updateDoc(doc(this.db, 'programTrainer', id), JSON.parse(JSON.stringify(data)));
+  }
+
+  async deleteTrainerCorrection(id: string): Promise<void> {
+    await deleteDoc(doc(this.db, 'programTrainer', id));
+  }
+
+  // ---------- App videos ----------
+  // Videos the athlete app plays (flexibility routines, assessment tests), by slot key. The athlete app reads the
+  // `appVideos` collection, so a video is added or swapped here without a new build.
+  async listAppVideos(): Promise<Record<string, AppVideo>> {
+    const snap = await getDocs(collection(this.db, 'appVideos'));
+    const out: Record<string, AppVideo> = {};
+    snap.docs.forEach(d => out[d.id] = d.data() as AppVideo);
+    return out;
+  }
+
+  // Uploads a video to the slot and points the slot at it. The video it replaces is removed afterwards.
+  async uploadAppVideo(key: string, file: File, onProgress?: (pct: number) => void): Promise<AppVideo> {
+    const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
+    const path = `appVideos/${key}-${Date.now()}.${ext}`;
+    const task = uploadBytesResumable(storageRef(this.storage, path), file, { contentType: file.type || 'video/mp4' });
+    await new Promise<void>((resolve, reject) => {
+      task.on('state_changed', s => onProgress?.(Math.round((s.bytesTransferred / s.totalBytes) * 100)), reject, () => resolve());
+    });
+    const video: AppVideo = { url: await getDownloadURL(task.snapshot.ref), path, name: file.name, bytes: file.size, updatedAt: new Date().toISOString() };
+    const old = (await getDoc(doc(this.db, 'appVideos', key))).data() as AppVideo | undefined;
+    await setDoc(doc(this.db, 'appVideos', key), video);
+    if (old?.path) deleteObject(storageRef(this.storage, old.path)).catch(() => undefined);
+    return video;
+  }
+
+  async removeAppVideo(key: string): Promise<void> {
+    const old = (await getDoc(doc(this.db, 'appVideos', key))).data() as AppVideo | undefined;
+    await deleteDoc(doc(this.db, 'appVideos', key));
+    if (old?.path) deleteObject(storageRef(this.storage, old.path)).catch(() => undefined);
   }
 }
 

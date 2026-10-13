@@ -135,6 +135,18 @@ export const routes: Routes = [
     loadComponent: () => import('./fit-analyzer/fit-analyzer.page').then( m => m.FitAnalyzerPage),
     data: { title: 'FIT Analyzer' }
   },
+  {
+    path: 'app-videos',
+    canActivate: [authGuard],
+    loadComponent: () => import('./app-videos/app-videos.page').then( m => m.AppVideosPage),
+    data: { title: 'App Videos' }
+  },
+  {
+    path: 'program-trainer',
+    canActivate: [authGuard],
+    loadComponent: () => import('./program-trainer/program-trainer.page').then( m => m.ProgramTrainerPage),
+    data: { title: 'Program Trainer' }
+  },
   // Training programs (program creator + workout log)
   {
     path: 'programs',

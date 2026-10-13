@@ -5,7 +5,11 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { IonContent, IonIcon, AlertController, ToastController } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import { arrowBack, arrowUp, arrowDown, closeOutline, checkmarkCircle } from 'ionicons/icons';
-import { FirebaseService, Program, ProgramChange, ProgramDay, ProgramExercise } from '../services/firebase.service';
+import { FirebaseService, OmniRank, Program, ProgramChange, ProgramDay, ProgramExercise } from '../services/firebase.service';
+import { toStored, weekBlocks } from '../program-engine/blocks';
+import { generateProgram } from '../program-engine/generator';
+import type { AthleteState } from '../program-engine/types';
+import { ENGINE_VERSION } from '../program-engine/version';
 import { ProgramReviewCountService } from '../services/program-review-count.service';
 
 // A coach's review of an athlete's generated program: see every week at once, move exercises, swap days,
@@ -268,6 +272,7 @@ export class ProgramReviewPage implements OnInit {
       this.savedNote = noteNow;
       await this.flushLog();
       Object.assign(this.program, fields);
+      await this.teach();
       this.dirty = false;
       this.reviewCount.refresh();
       await this.toast(approve ? 'Program approved' : 'Changes saved');
@@ -276,6 +281,30 @@ export class ProgramReviewPage implements OnInit {
       await this.toast('Could not save', 'danger');
     }
     this.saving = false;
+  }
+
+  // A saved review of a generated program is a correction for the Program Trainer's model: the athlete as the rules
+  // read them, the rules' first week, and the first week as the coach left it. One per program, replaced on each save.
+  // Best-effort, like the log: it never blocks saving the program.
+  private async teach() {
+    const p = this.program;
+    const state = p?.generatedFrom?.state as AthleteState | undefined;
+    if (!p?.id || !p.generated || !state?.minutes) return;
+    try {
+      const rules = weekBlocks(generateProgram(state, { weeks: 1 }).schedule.slice(0, 7));
+      await this.firebase.setTrainerCorrection(`review-${p.id}`, {
+        createdAt: new Date().toISOString(),
+        engineVersion: ENGINE_VERSION,
+        name: this.athlete,
+        overall: (p.generatedFrom?.overall ?? state.strengthRank) as OmniRank,
+        state: state as unknown as Record<string, unknown>,
+        rules: toStored(rules),
+        model: p.generatedFrom?.blocks ?? toStored(rules),   // the week as built, before the coach's edits
+        corrected: toStored(weekBlocks(p.schedule.slice(0, 7))),
+        source: 'review',
+        programId: p.id
+      });
+    } catch (err) { console.error('Program review: trainer correction not saved', err); }
   }
 
   // Logging is best-effort: a failure here must never block saving the program.

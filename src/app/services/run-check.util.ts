@@ -2,7 +2,7 @@
 // the Apple Health data), scores it again and tests it, so nothing the athlete's phone reported is taken on trust.
 // Every check passes, warns or fails; the run passes only when nothing fails. Warnings are for the coach to look at.
 
-import { RunMeta, RunSeries, RunSummary, WINDOW_SEC, clock, distAt, parseFit, summarize } from './run-import.util';
+import { RunMeta, RunSeries, RunSummary, WINDOW_SEC, clock, distAt, parseFit, parseGpx, summarize } from './run-import.util';
 
 export type CheckStatus = 'pass' | 'warn' | 'fail';
 export interface RunCheck { label: string; status: CheckStatus; detail: string; }
@@ -31,6 +31,7 @@ const WORLD_30_MIN_KM = 11.265408;   // the 30-Minute Run's world record (omni.u
 
 export function readRunFile(source: RunSummary['source'], bytes: ArrayBuffer): { meta: RunMeta; series: RunSeries } {
   if (source === 'fit') return parseFit(new Uint8Array(bytes));
+  if (source === 'gpx') return parseGpx(new TextDecoder().decode(bytes));
   const data = JSON.parse(new TextDecoder().decode(bytes));
   const { dist, route, hr, cadence, alt, ...meta } = data;
   return { meta: meta as RunMeta, series: { dist: dist ?? [], route: route ?? [], hr: hr ?? [], cadence, alt } };
@@ -90,6 +91,7 @@ export function checkRun(
   if (meta.userEntered) add('Recorded by a watch', 'fail', 'The run was typed into Apple Health by hand.');
   else if (meta.source === 'fit' && meta.maker === 'development') add('Recorded by a watch', 'fail', 'The file was made by a file tool, not recorded by a watch.');
   else if (meta.source === 'fit' && !meta.maker) add('Recorded by a watch', 'warn', 'The file does not say what recorded it.');
+  else if (meta.source === 'gpx') add('Recorded by a watch', 'warn', `A .gpx export from ${meta.device}. A .gpx file can be edited, so check the route and heart rate.`);
   else add('Recorded by a watch', 'pass', meta.device);
 
   add('Not submitted before', submitted.duplicateOf ? 'fail' : 'pass',
