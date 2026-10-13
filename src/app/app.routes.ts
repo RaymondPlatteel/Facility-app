@@ -136,6 +136,12 @@ export const routes: Routes = [
     data: { title: 'FIT Analyzer' }
   },
   {
+    path: 'app-analytics',
+    canActivate: [authGuard],
+    loadComponent: () => import('./app-analytics/app-analytics.page').then( m => m.AppAnalyticsPage),
+    data: { title: 'App Analytics' }
+  },
+  {
     path: 'app-videos',
     canActivate: [authGuard],
     loadComponent: () => import('./app-videos/app-videos.page').then( m => m.AppVideosPage),

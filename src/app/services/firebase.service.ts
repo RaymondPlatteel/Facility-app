@@ -1090,6 +1090,7 @@ export interface ThemeDoc {
 
 export type { AppVideo } from '../program-engine/videos';
 import type { AppVideo } from '../program-engine/videos';
+import type { EventBatch } from '../program-engine/analytics';
 
 // A coach's correction in the Program Trainer. Weeks are stored day by day: { "0": [...blocks], ..., "6": [...] }.
 export interface TrainerCorrection {
@@ -3939,6 +3940,13 @@ export class FirebaseService {
     await deleteDoc(doc(this.db, 'appVideos', key));
     if (old?.path) deleteObject(storageRef(this.storage, old.path)).catch(() => undefined);
   }
+  // ---------- App analytics ----------
+  // The athlete app's anonymous event log, uploaded since the given day (YYYY-MM-DD).
+  async listEventBatches(sinceDay: string): Promise<EventBatch[]> {
+    const snap = await getDocs(query(collection(this.db, 'appEvents'), where('day', '>=', sinceDay)));
+    return snap.docs.map(d => d.data() as EventBatch);
+  }
+
 }
 
 
@@ -3957,4 +3965,5 @@ function programHash(schedule: unknown): string {
   let h = 2166136261;
   for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
   return (h >>> 0).toString(16) + ':' + text.length;
+
 }
