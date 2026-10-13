@@ -130,14 +130,50 @@
 
           <section class="an-card">
             <div class="an-card-head">
-              <h2>Barely Used Pages</h2>
-              <span class="an-muted">opened by under 5% of active users</span>
+              <h2>Errors</h2>
+              <span class="an-muted">failures athletes saw</span>
             </div>
-            <div class="an-chips">
-              <span class="an-chip" *ngFor="let p of r.unused" [class.zero]="p.users === 0">{{ p.label }} <i>{{ p.users }}</i></span>
-            </div>
+            <table class="an-table" *ngIf="r.errors.length; else noErrors">
+              <thead><tr><th>What failed</th><th>Times</th><th>Users</th></tr></thead>
+              <tbody><tr *ngFor="let e of r.errors"><td><ion-icon name="alert-circle"></ion-icon> {{ e.what }}</td><td>{{ e.count }}</td><td>{{ e.users }}</td></tr></tbody>
+            </table>
+            <ng-template #noErrors><p class="an-muted">No errors in this period.</p></ng-template>
           </section>
         </div>
+
+        <!-- Every page, as one pie of page views -->
+        <section class="an-card">
+          <div class="an-card-head">
+            <h2>All Pages</h2>
+            <span class="an-muted">share of page views · select a page to take it out
+              <button class="an-link" *ngIf="hidden.size" (click)="showAllPages()">Show all ({{ hidden.size }} hidden)</button>
+            </span>
+          </div>
+          <div class="an-pie-wrap">
+            <div class="an-pie">
+              <svg viewBox="0 0 320 320" role="img" aria-label="Page views by page">
+                <path *ngFor="let s of slices" [attr.d]="s.d" [style.fill]="s.color" class="slice" [class.dim]="pieHover && pieHover !== s.path"
+                      (mouseenter)="pieHover = s.path" (mouseleave)="pieHover = null" (click)="togglePage(s.path)" />
+                <circle *ngIf="!slices.length" cx="160" cy="160" [attr.r]="R" class="empty" />
+              </svg>
+              <div class="an-pie-tip" *ngIf="hovered as h">
+                <b>{{ h.label }}</b>
+                <span>{{ pct(h.share) }} of views</span>
+                <small>{{ h.views }} views · {{ h.users }} {{ h.users === 1 ? 'user' : 'users' }}</small>
+              </div>
+              <p class="an-pie-empty" *ngIf="!slices.length">No page views{{ hidden.size ? ' left to show' : '' }}.</p>
+            </div>
+            <div class="an-legend">
+              <button *ngFor="let p of r.allPages" class="an-legend-row" [class.off]="hidden.has(p.path)" [class.zero]="p.views === 0"
+                      [class.hot]="pieHover === p.path" [disabled]="p.views === 0"
+                      (mouseenter)="pieHover = p.views ? p.path : null" (mouseleave)="pieHover = null" (click)="togglePage(p.path)">
+                <i [style.background]="p.views ? pageColor(p.path) : 'transparent'"></i>
+                <span class="an-legend-label">{{ p.label }}</span>
+                <span class="an-legend-val">{{ p.views ? (hidden.has(p.path) ? 'hidden' : pct(pageShare(p))) : '0 views' }}</span>
+              </button>
+            </div>
+          </div>
+        </section>
 
         <div class="an-grid">
           <section class="an-card">
@@ -163,17 +199,6 @@
           </section>
         </div>
 
-        <section class="an-card">
-          <div class="an-card-head">
-            <h2>Errors</h2>
-            <span class="an-muted">failures athletes saw</span>
-          </div>
-          <table class="an-table" *ngIf="r.errors.length; else noErrors">
-            <thead><tr><th>What failed</th><th>Times</th><th>Users</th></tr></thead>
-            <tbody><tr *ngFor="let e of r.errors"><td><ion-icon name="alert-circle"></ion-icon> {{ e.what }}</td><td>{{ e.count }}</td><td>{{ e.users }}</td></tr></tbody>
-          </table>
-          <ng-template #noErrors><p class="an-muted">No errors in this period.</p></ng-template>
-        </section>
       </ng-container>
     </ng-container>
   </div>

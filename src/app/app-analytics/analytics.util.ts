@@ -43,6 +43,7 @@ export interface Report {
   cohorts: Cohort[];
   pages: PageRow[];            // opened, most first
   unused: PageRow[];           // opened by nobody, or by under 5% of active users
+  allPages: PageRow[];         // every page of the app, most viewed first, including those nobody opened
   tour: Bar[];
   run: Bar[];
   errors: ErrorRow[];
@@ -217,6 +218,7 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
     cohorts,
     pages,
     unused,
+    allPages: [...rows].sort((a, b) => b.views - a.views || a.label.localeCompare(b.label)),
     tour,
     run,
     errors: [...errs.entries()].map(([what, v]) => ({ what, count: v.count, users: v.users.size })).sort((a, b) => b.count - a.count),

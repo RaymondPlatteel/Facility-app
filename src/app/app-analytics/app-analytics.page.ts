@@ -6,7 +6,7 @@ import { addIcons } from 'ionicons';
 import { arrowBack, alertCircle, trendingDown } from 'ionicons/icons';
 import { FirebaseService } from '../services/firebase.service';
 import type { EventBatch } from '../program-engine/analytics';
-import { Bar, Report, Section, buildReport } from './analytics.util';
+import { Bar, PageRow, Report, Section, buildReport } from './analytics.util';
 import { demoBatches } from './demo';
 
 const DAY = 86400000;
@@ -110,6 +110,52 @@ export class AppAnalyticsPage implements OnInit {
   }
   get hoverDay() { return this.hover && this.report ? this.report.daily[this.hover.i] : null; }
   get hoverLeft(): number { return this.hover ? this.hover.x / this.W * 100 : 0; }
+
+  // ---------- Every page, as a pie of page views ----------
+  // A slice clicked (or its row in the list) is taken out, and the rest share the pie; click again to put it back.
+  hidden = new Set<string>();
+  pieHover: string | null = null;
+  readonly R = 150;   // pie radius, in a 320 × 320 box
+
+  togglePage(path: string) {
+    if (this.hidden.has(path)) this.hidden.delete(path); else this.hidden.add(path);
+    this.hidden = new Set(this.hidden);
+    this.pieHover = null;
+  }
+  showAllPages() { this.hidden = new Set(); }
+
+  private get shown(): PageRow[] { return (this.report?.allPages ?? []).filter(p => p.views > 0 && !this.hidden.has(p.path)); }
+  get pieTotal(): number { return this.shown.reduce((t, p) => t + p.views, 0); }
+
+  // One colour per page, from the brightest blue for the most viewed to the deepest for the least, in the order of
+  // the full list, so taking a slice out never repaints the others.
+  pageColor(path: string): string {
+    const all = (this.report?.allPages ?? []).filter(p => p.views > 0);
+    const i = Math.max(0, all.findIndex(p => p.path === path));
+    const t = all.length > 1 ? i / (all.length - 1) : 0;
+    return `color-mix(in oklab, var(--accent) ${Math.round(100 - t * 78)}%, #0a1f2e)`;
+  }
+
+  get slices(): Array<{ path: string; label: string; d: string; share: number; views: number; users: number; color: string; mid: { x: number; y: number } }> {
+    const total = this.pieTotal;
+    if (!total) return [];
+    const c = 160, R = this.R;
+    let a0 = -Math.PI / 2;
+    return this.shown.map(p => {
+      const share = p.views / total;
+      const a1 = a0 + share * Math.PI * 2;
+      const big = a1 - a0 > Math.PI ? 1 : 0;
+      const pt = (a: number, r = R) => ({ x: c + r * Math.cos(a), y: c + r * Math.sin(a) });
+      const s = pt(a0), e = pt(a1), mid = pt((a0 + a1) / 2, R * 0.62);
+      const d = share >= 0.9999
+        ? `M${c} ${c - R} A${R} ${R} 0 1 1 ${c - 0.01} ${c - R} Z`
+        : `M${c} ${c} L${s.x.toFixed(2)} ${s.y.toFixed(2)} A${R} ${R} 0 ${big} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)} Z`;
+      a0 = a1;
+      return { path: p.path, label: p.label, d, share, views: p.views, users: p.users, color: this.pageColor(p.path), mid };
+    });
+  }
+  get hovered() { return this.slices.find(s => s.path === this.pieHover) ?? null; }
+  pageShare(p: PageRow): number { return this.pieTotal && !this.hidden.has(p.path) ? p.views / this.pieTotal : 0; }
 
   // Return-rate cells: a single blue, deeper for a higher share.
   cellBg(v: number | null): string {
