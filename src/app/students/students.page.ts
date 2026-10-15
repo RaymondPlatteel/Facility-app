@@ -109,6 +109,9 @@ export class StudentsPage implements OnInit, OnDestroy {
   // members/{nameKey}.inPerson — see Member.inPerson. A client the coach adds
   // here by hand is in-person by default; existing ones read what's stored.
   groupInPerson = false;
+  // members/{nameKey}.suspended — see Member.suspended.
+  groupSuspended = false;
+  suspendReason = '';
   freeProgram = false;
   linkUid = '';
   linking = false;
@@ -382,6 +385,8 @@ export class StudentsPage implements OnInit, OnDestroy {
     this.groupSex = 'male';
     this.competitorId = '';
     this.groupInPerson = false;
+    this.groupSuspended = false;
+    this.suspendReason = '';
     this.freeProgram = false;
     this.panelOpen = true;
 
@@ -410,6 +415,8 @@ export class StudentsPage implements OnInit, OnDestroy {
       this.groupSex = member?.sex ?? 'male';
       this.competitorId = member?.competitorId ?? '';
       this.groupInPerson = member?.inPerson ?? false;
+      this.groupSuspended = member?.suspended ?? false;
+      this.suspendReason = member?.suspendedReason ?? '';
       this.freeProgram = member?.freeProgram ?? false;
       this.clientWaivers = waivers;
     } catch (err) {
@@ -650,6 +657,7 @@ export class StudentsPage implements OnInit, OnDestroy {
       });
       await this.firebase.setMemberSex(name.toLowerCase(), name, this.groupSex);
       await this.firebase.setMemberInPerson(name.toLowerCase(), name, this.groupInPerson);
+      await this.firebase.setMemberSuspended(name.toLowerCase(), name, this.groupSuspended, this.suspendReason);
       await this.firebase.setMemberFreeProgram(name.toLowerCase(), name, this.freeProgram);
       this.panelOpen = false;
       await this.loadData(true);

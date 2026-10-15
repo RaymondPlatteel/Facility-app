@@ -177,6 +177,19 @@
               </select>
             </label>
             <label class="field">
+              <span>Account status</span>
+              <select [ngModel]="groupSuspended ? 'yes' : 'no'" (ngModelChange)="groupSuspended = $event === 'yes'">
+                <option value="no">Active</option>
+                <option value="yes">Suspended — locked out and hidden from standings</option>
+              </select>
+            </label>
+            @if (groupSuspended) {
+              <label class="field span-2">
+                <span>Message shown to the athlete</span>
+                <input type="text" [(ngModel)]="suspendReason" placeholder="This account has been suspended." maxlength="200" />
+              </label>
+            }
+            <label class="field">
               <span>Free program</span>
               <select [ngModel]="freeProgram ? 'yes' : 'no'" (ngModelChange)="freeProgram = $event === 'yes'">
                 <option value="yes">Yes — program at no charge</option>

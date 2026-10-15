@@ -346,6 +346,10 @@ export interface Member {
   // the athlete app shows them Schedule and Membership; everyone else (the
   // competition's remote athletes) doesn't get those.
   inPerson?: boolean;
+  // Set by the coach only. A suspended athlete sees only a notice in the athlete app and is left off its standings and
+  // activity feed. `suspendedReason` is the sentence they are shown.
+  suspended?: boolean;
+  suspendedReason?: string;
   // Set by the coach only. The athlete gets their program without paying for it.
   freeProgram?: boolean;
   // Written only by the payments worker from Apple's signed receipts: the program is paid for until this time.
@@ -3498,6 +3502,10 @@ export class FirebaseService {
 
   async setMemberFreeProgram(nameKey: string, clientName: string, freeProgram: boolean): Promise<void> {
     await setDoc(doc(this.db, 'members', nameKey), { nameKey, clientName, freeProgram }, { merge: true });
+  }
+
+  async setMemberSuspended(nameKey: string, clientName: string, suspended: boolean, reason: string): Promise<void> {
+    await setDoc(doc(this.db, 'members', nameKey), { nameKey, clientName, suspended, suspendedReason: suspended ? reason.trim() : '' }, { merge: true });
   }
 
   async setMemberInPerson(nameKey: string, clientName: string, inPerson: boolean): Promise<void> {
