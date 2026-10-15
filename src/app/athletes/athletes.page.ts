@@ -47,6 +47,7 @@ export class AthletesPage implements OnInit {
   }
 
   goBack() { this.router.navigate(['/home']); }
+  goMerge() { this.router.navigate(['/merge']); }
 
   count(v: View): number { return this.members.filter(m => this.inView(m, v)).length; }
   private inView(m: Member, v: View): boolean { return v === 'all' || (v === 'inPerson' ? !!m.inPerson : !m.inPerson); }

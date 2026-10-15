@@ -6,6 +6,7 @@ ion-content { --background: var(--hud-bg, #01070f); --color: var(--hud-text, #dc
 .at-header { display: flex; align-items: center; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
 .icon-btn { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border); background: #070b12; color: var(--dim); font-size: 19px;
   display: flex; align-items: center; justify-content: center; cursor: pointer; &:hover { color: var(--accent); border-color: var(--accent); } }
+.at-btn.merge { margin-left: auto; }
 .at-eyebrow { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
 h1 { margin: 2px 0 0; font-family: 'Bebas Neue', 'Barlow', sans-serif; font-size: 34px; letter-spacing: 0.06em; font-weight: 400; span { color: var(--accent); } }
 .at-tabs { display: flex; gap: 4px; padding: 4px; border-radius: 12px; border: 1px solid var(--border); background: rgba(255,255,255,0.02);

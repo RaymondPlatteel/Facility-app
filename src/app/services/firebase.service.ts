@@ -3626,12 +3626,124 @@ export class FirebaseService {
     await setDoc(doc(this.db, 'config', 'testers'), { names, updatedAt: new Date().toISOString() });
   }
 
+  // ---------- Merging two accounts of one person ----------
+  // Nothing is deleted. The records of the account being merged in are re-pointed at the account that stays (their
+  // nameKey and clientName change, and `mergedFrom` remembers where each came from), the logins that opened it open the
+  // account that stays, and the merged-in member record is only marked `mergedInto`. A log of every document moved is
+  // written to `merges`, so a merge can be undone by hand.
+  static readonly MERGE_MOVE = ['assessments', 'dailyCheckIns', 'memberWorkoutLogs', 'resilienceEntries', 'assessmentGoals', 'pendingAssessments', 'pendingResilience', 'jobAcceptances'];
+  static readonly MERGE_GROUPS: Array<{ key: string; label: string; fields: string[] }> = [
+    { key: 'inPerson', label: 'In-person status', fields: ['inPerson'] },
+    { key: 'sex', label: 'Sex', fields: ['sex'] },
+    { key: 'height', label: 'Height', fields: ['height'] },
+    { key: 'units', label: 'Units', fields: ['units'] },
+    { key: 'photo', label: 'Profile photo', fields: ['photoUrl'] },
+    { key: 'theme', label: 'Theme', fields: ['themeId', 'themeBorder', 'themeAt'] },
+    { key: 'cosmetics', label: 'Worn shop items', fields: ['cosmetics'] },
+    { key: 'designation', label: 'Cell, generation and cohort', fields: ['cell', 'generation', 'cohort'] },
+    { key: 'free', label: 'Free program', fields: ['freeProgram'] },
+    { key: 'subscription', label: 'Program subscription', fields: ['programExpiresAt', 'programProductId', 'programOriginalTransactionId', 'programSubscriptionStatus', 'programEnvironment', 'programUpdatedAt'] },
+    { key: 'intake', label: 'Program intake answers', fields: ['programIntake'] },
+    { key: 'suspension', label: 'Suspension', fields: ['suspended', 'suspendedReason'] }
+  ];
+
+  private mergeShow(rec: Record<string, any>, fields: string[]): string {
+    const parts = fields.filter(f => rec[f] !== undefined && rec[f] !== null && rec[f] !== '').map(f => {
+      const v = rec[f];
+      const t = typeof v === 'boolean' ? (v ? 'yes' : 'no') : typeof v === 'object' ? JSON.stringify(v).slice(0, 60) : String(v);
+      return fields.length > 1 ? `${f}: ${t}` : t;
+    });
+    return parts.join(', ');
+  }
+
+  async mergePreview(keepKey: string, fromKey: string) {
+    const [keepSnap, fromSnap] = await Promise.all([getDoc(doc(this.db, 'members', keepKey)), getDoc(doc(this.db, 'members', fromKey))]);
+    if (!keepSnap.exists() || !fromSnap.exists()) throw new Error('One of the accounts has no member record.');
+    const keep = keepSnap.data() as Record<string, any>;
+    const from = fromSnap.data() as Record<string, any>;
+    const counts: Array<{ collection: string; n: number }> = [];
+    for (const col of FirebaseService.MERGE_MOVE) {
+      const n = (await getDocs(query(collection(this.db, col), where('nameKey', '==', fromKey)))).size;
+      if (n) counts.push({ collection: col, n });
+    }
+    const logins = (await getDocs(query(collection(this.db, 'clientLinks'), where('nameKey', '==', fromKey)))).size;
+    const conflicts: Array<{ key: string; label: string; keepText: string; fromText: string }> = [];
+    for (const g of FirebaseService.MERGE_GROUPS) {
+      const k = this.mergeShow(keep, g.fields), f = this.mergeShow(from, g.fields);
+      if (k && f && JSON.stringify(g.fields.map(x => keep[x] ?? null)) !== JSON.stringify(g.fields.map(x => from[x] ?? null))) {
+        conflicts.push({ key: g.key, label: g.label, keepText: k, fromText: f });
+      }
+    }
+    const fromProfile = !!(await this.getClientProfileByName(from['clientName'] ?? fromKey).catch(() => null));
+    return { keepName: keep['clientName'] as string, fromName: from['clientName'] as string, counts, logins, conflicts, fromProfile };
+  }
+
+  // `choices` says, for each conflict, whether the account that stays ('keep') or the merged-in one ('from') wins.
+  async mergeAccounts(keepKey: string, fromKey: string, choices: Record<string, 'keep' | 'from'>): Promise<void> {
+    const keepRef = doc(this.db, 'members', keepKey), fromRef = doc(this.db, 'members', fromKey);
+    const [keepSnap, fromSnap] = await Promise.all([getDoc(keepRef), getDoc(fromRef)]);
+    if (!keepSnap.exists() || !fromSnap.exists()) throw new Error('One of the accounts has no member record.');
+    const keep = keepSnap.data() as Record<string, any>;
+    const from = fromSnap.data() as Record<string, any>;
+    const keepName = keep['clientName'] as string;
+    const moved: Record<string, string[]> = {};
+
+    const repoint = async (col: string, extra: Record<string, unknown>) => {
+      const snap = await getDocs(query(collection(this.db, col), where('nameKey', '==', fromKey)));
+      moved[col] = snap.docs.map(d => d.id);
+      for (let i = 0; i < snap.docs.length; i += 400) {
+        const batch = writeBatch(this.db);
+        snap.docs.slice(i, i + 400).forEach(d => batch.update(d.ref, { nameKey: keepKey, clientName: keepName, mergedFrom: fromKey, ...extra }));
+        await batch.commit();
+      }
+    };
+    for (const col of FirebaseService.MERGE_MOVE) await repoint(col, {});
+    // The logins that opened the merged-in account now open the one that stays.
+    const links = await getDocs(query(collection(this.db, 'clientLinks'), where('nameKey', '==', fromKey)));
+    moved['clientLinks'] = links.docs.map(d => d.id);
+    await Promise.all(links.docs.map(d => updateDoc(d.ref, { nameKey: keepKey, clientName: keepName, mergedFrom: fromKey })));
+
+    // The member record: what only the merged-in account has is added; conflicts follow the choices; lists are joined.
+    const patch: Record<string, unknown> = {};
+    for (const g of FirebaseService.MERGE_GROUPS) {
+      const hasKeep = g.fields.some(f => keep[f] !== undefined && keep[f] !== null && keep[f] !== '');
+      const hasFrom = g.fields.some(f => from[f] !== undefined && from[f] !== null && from[f] !== '');
+      if (!hasFrom) continue;
+      const same = JSON.stringify(g.fields.map(x => keep[x] ?? null)) === JSON.stringify(g.fields.map(x => from[x] ?? null));
+      if (same) continue;
+      if (!hasKeep || choices[g.key] === 'from') g.fields.forEach(f => { if (from[f] !== undefined) patch[f] = from[f]; });
+    }
+    if (Array.isArray(from['cosmeticsOwned'])) patch['cosmeticsOwned'] = [...new Set([...(keep['cosmeticsOwned'] ?? []), ...from['cosmeticsOwned']])];
+    // Level and last activity come from the newest assessment of the two histories together.
+    const all = await getDocs(query(collection(this.db, 'assessments'), where('nameKey', '==', keepKey)));
+    let newest: Record<string, any> | null = null;
+    all.forEach(d => { const a = d.data(); if (!newest || new Date(a['timestamp']).getTime() > new Date(newest['timestamp']).getTime()) newest = a; });
+    if (newest) {
+      const n = newest as Record<string, any>;
+      if (typeof n['lvl'] === 'number') patch['latestLvl'] = n['lvl'];
+      if (n['rank']) patch['latestRank'] = n['rank'];
+    }
+    if ((from['lastActivityAt'] ?? '') > (keep['lastActivityAt'] ?? '')) {
+      patch['lastActivityAt'] = from['lastActivityAt'];
+      patch['lastActivityLabel'] = from['lastActivityLabel'] ?? null;
+    }
+    if (Object.keys(patch).length) await setDoc(keepRef, patch, { merge: true });
+    await updateDoc(fromRef, { mergedInto: keepKey, mergedAt: new Date().toISOString() });
+
+    try {
+      await addDoc(collection(this.db, 'merges'), {
+        keepKey, fromKey, at: new Date().toISOString(), choices, moved,
+        keepBefore: JSON.parse(JSON.stringify(keep)), fromBefore: JSON.parse(JSON.stringify(from))
+      });
+    } catch (e) { console.warn('Merge: the log could not be written', e); }
+  }
+
   // Every athlete-app member (the record behind an account), for the Athletes page.
-  async listMembers(): Promise<Member[]> {
+  async listMembers(includeMerged = false): Promise<Member[]> {
     const snap = await getDocs(collection(this.db, 'members'));
     return snap.docs
-      .map(d => d.data() as Member)
-      .filter(m => m.nameKey && m.clientName)
+      .map(d => d.data() as Member & { mergedInto?: string })
+      .filter(m => m.nameKey && m.clientName && (includeMerged || !m.mergedInto))
       .sort((a, b) => a.clientName.localeCompare(b.clientName));
   }
 

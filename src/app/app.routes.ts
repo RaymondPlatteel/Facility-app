@@ -58,6 +58,12 @@ export const routes: Routes = [
     data: { title: 'Themes' }
   },
   {
+    path: 'merge',
+    canActivate: [authGuard],
+    loadComponent: () => import('./merge/merge.page').then( m => m.MergePage),
+    data: { title: 'Merge Accounts' }
+  },
+  {
     path: 'remote-users',
     canActivate: [authGuard],
     loadComponent: () => import('./athletes/athletes.page').then( m => m.AthletesPage),

@@ -1,0 +1,65 @@
+<ion-content [fullscreen]="true" class="content-no-header">
+  <div class="mg-page">
+    <div class="mg-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back"><ion-icon name="arrow-back"></ion-icon></button>
+      <div>
+        <div class="mg-eyebrow">Athlete App</div>
+        <h1>MERGE <span>ACCOUNTS</span></h1>
+      </div>
+    </div>
+
+    <p class="mg-note">Use this when one person has two accounts. Nothing is deleted: the records of the second account are moved onto the first, and the second account is only marked as merged.</p>
+    <p class="mg-error" *ngIf="error">{{ error }}</p>
+
+    <ng-container *ngIf="!done">
+      <label class="mg-field">
+        <span>1. Account that stays (the one with the package)</span>
+        <select [(ngModel)]="keepKey" (ngModelChange)="reset()">
+          <option value="">Select an account</option>
+          <option *ngFor="let m of members" [value]="m.nameKey">{{ option(m) }}</option>
+        </select>
+      </label>
+      <label class="mg-field">
+        <span>2. Account to merge in</span>
+        <select [(ngModel)]="fromKey" (ngModelChange)="reset()">
+          <option value="">Select an account</option>
+          <option *ngFor="let m of members" [value]="m.nameKey" [disabled]="m.nameKey === keepKey">{{ option(m) }}</option>
+        </select>
+      </label>
+      <button class="mg-btn primary" [disabled]="!ready || busy" (click)="compare()">{{ busy && !preview ? 'Comparing…' : 'Compare' }}</button>
+
+      <section class="mg-card" *ngIf="preview as p">
+        <h2>What will happen</h2>
+        <ul class="mg-list">
+          <li *ngFor="let c of p.counts"><b>{{ c.n }}</b> {{ label(c.collection) }} move to {{ p.keepName }}</li>
+          <li *ngIf="!p.counts.length">No records to move.</li>
+          <li><b>{{ p.logins }}</b> {{ p.logins === 1 ? 'login' : 'logins' }} will open {{ p.keepName }}</li>
+          <li>{{ p.fromName }} is kept on file and marked as merged. It leaves the leaderboards.</li>
+          <li *ngIf="p.fromProfile">{{ p.fromName }} also has a client profile. It is not changed.</li>
+        </ul>
+
+        <h2>Where the two accounts disagree</h2>
+        <p class="mg-note" *ngIf="!p.conflicts.length">No conflicts.</p>
+        <div class="mg-conflict" *ngFor="let c of p.conflicts">
+          <div class="mg-clabel">{{ c.label }}</div>
+          <label class="mg-choice" [class.on]="choices[c.key] === 'keep'">
+            <input type="radio" [name]="c.key" value="keep" [(ngModel)]="choices[c.key]" />
+            <span><small>{{ p.keepName }}</small>{{ c.keepText }}</span>
+          </label>
+          <label class="mg-choice" [class.on]="choices[c.key] === 'from'">
+            <input type="radio" [name]="c.key" value="from" [(ngModel)]="choices[c.key]" />
+            <span><small>{{ p.fromName }}</small>{{ c.fromText }}</span>
+          </label>
+        </div>
+
+        <button class="mg-btn primary wide" [disabled]="busy" (click)="merge()">{{ busy ? 'Merging…' : 'Merge' }}</button>
+      </section>
+    </ng-container>
+
+    <section class="mg-card" *ngIf="done">
+      <h2>Merged</h2>
+      <p class="mg-note">The accounts are merged. The login now opens the account that stays, and the other account is kept on file, marked as merged.</p>
+      <button class="mg-btn" (click)="goBack()">Done</button>
+    </section>
+  </div>
+</ion-content>
