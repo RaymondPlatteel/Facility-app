@@ -120,7 +120,7 @@
 /* ------------------------------ rank up ----------------------------- */
 
 // The rank being left. Shown briefly, then thrown off screen — the ascent
-// needs a FROM or the new letter is just a letter appearing.
+// needs a FROM or the new badge is just a badge appearing.
 .lu-old {
   position: absolute;
   display: flex;
@@ -141,22 +141,12 @@
   to { opacity: 0; transform: scale(0.55) translateY(-40px); filter: blur(3px); }
 }
 
-.lu-old-letter {
-  font-family: 'Bebas Neue', 'Impact', sans-serif;
-  font-size: 96px;
-  line-height: 1;
-  color: var(--hud-text-faint, #4a6378);
+.lu-old-badge {
+  width: 150px;
 }
 
-.lu-old-label {
-  font-family: 'Courier New', monospace;
-  letter-spacing: 0.3em;
-  font-size: 10px;
-  color: var(--hud-text-faint, #4a6378);
-}
-
-// The new rank letter, landing hard. Deliberately enormous — this is the
-// single biggest thing the app ever draws.
+// The new rank badge, landing hard. Deliberately enormous — this is the
+// single biggest thing the app ever draws. The artwork carries its own glow.
 .lu-slam {
   position: relative;
   opacity: 0;
@@ -164,39 +154,35 @@
   &.on {
     animation: lu-slam-in 620ms cubic-bezier(0.15, 1.5, 0.3, 1) forwards;
   }
+
+  // A burst of the rank's light behind the badge as it lands, then a slow settle.
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -12%;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, var(--lu-accent), transparent);
+    opacity: 0;
+    pointer-events: none;
+  }
+  &.on::before {
+    animation: lu-burst 1400ms ease-out 260ms forwards;
+  }
 }
 
-.lu-slam-letter {
+.lu-slam-badge {
+  position: relative;
   display: block;
-  font-family: 'Bebas Neue', 'Impact', sans-serif;
-  font-size: 200px;
-  line-height: 0.9;
-  background-image: var(--lu-grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  // Glow behind the glyph, tinted to the rank.
-  //
-  // text-shadow, NOT filter: drop-shadow(). This element paints its colour
-  // as a background clipped to the glyph, and a filter runs against the
-  // element's box rather than that clip — so drop-shadow glowed the
-  // background RECTANGLE and the halo ended in visible straight edges.
-  // text-shadow is generated from the glyph outline itself, so it follows
-  // the letter and has nothing to be cut off by.
-  //
-  // Two stops: a tight bright core and a wide soft bloom, which reads as
-  // light coming off the letter rather than as a uniform outline.
-  text-shadow:
-    0 0 22px var(--lu-accent),
-    0 0 70px var(--lu-accent);
+  color: var(--lu-accent);
+  width: min(270px, 72vw);
 }
 
-// No `filter` here, deliberately. It used to blur on entry, but `forwards`
-// leaves the final `blur(0)` applied for good, and any filter flattens the
-// element into a filter region that can clip the letter's glow back into a
-// rectangle — the exact problem text-shadow was meant to solve. The scale
-// overshoot carries the impact on its own.
+@keyframes lu-burst {
+  0% { opacity: 0; transform: scale(0.4); }
+  25% { opacity: 0.55; transform: scale(1.05); }
+  100% { opacity: 0.16; transform: scale(1.15); }
+}
+
 @keyframes lu-slam-in {
   0% { opacity: 0; transform: scale(3.2); }
   55% { opacity: 1; }
@@ -249,11 +235,13 @@
 @media (prefers-reduced-motion: reduce) {
   .lu-scrim,
   .lu-slam.on,
+  .lu-slam.on::before,
   .lu-big-num.on,
   .lu-old.gone,
   .lu-tap {
     animation: none;
   }
+  .lu-slam.on::before { opacity: 0.16; }
   .lu-slam.on,
   .lu-big-num.on { opacity: 1; transform: none; filter: none; }
   .lu-old.gone { opacity: 0; }

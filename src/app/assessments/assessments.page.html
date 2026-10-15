@@ -543,9 +543,8 @@
             <div class="result-hero">
               <div class="result-hero-top">
                 <div class="result-name">{{ panel.athleteName.trim() || '—' }}</div>
-                <div class="rank-badge" [style.color]="resilienceColor(panel)">
-                  <span class="rank-letter" [class.chroma-text]="resilienceIsS(panel)">{{ rankLetter(resilienceRank(panel)) }}</span>
-                  <span class="rank-caption">{{ rankLabel(resilienceRank(panel)) }}</span>
+                <div class="rank-emblem" [style.color]="resilienceColor(panel)">
+                  <app-rank-badge [rank]="resilienceRank(panel)" [numeral]="resilienceTier(panel)"></app-rank-badge>
                 </div>
               </div>
               <div class="omni-score-row">
@@ -625,10 +624,8 @@
             <div class="result-hero">
               <div class="result-hero-top">
                 <div class="result-name">{{ panel.resultName || '—' }}</div>
-                <div class="rank-badge" [style.color]="panel.rankColor">
-                  <span class="rank-letter" [class.chroma-text]="panel.isChroma">{{ rankLetter(panel.rank) }}</span>
-                  <span class="rank-tier" *ngIf="tierNumeral(panel.result.lvl, panel.rank, panel.sex)">{{ tierNumeral(panel.result.lvl, panel.rank, panel.sex) }}</span>
-                  <span class="rank-caption">{{ rankLabel(panel.rank) }}</span>
+                <div class="rank-emblem" [style.color]="panel.rankColor">
+                  <app-rank-badge [rank]="panel.rank" [numeral]="tierNumeral(panel.result.lvl, panel.rank, panel.sex)"></app-rank-badge>
                 </div>
               </div>
               <div class="omni-score-row">

@@ -40,6 +40,7 @@ import {
   WaiverData,
   DailyCheckIn,
   localDateString, Sex } from '../services/firebase.service';
+import { RankBadgeComponent } from '../shared/rank-badge/rank-badge.component';
 import { rankLetter, rankLabel, tierNumeral, levelColor as omniLevelColor } from '../services/omni.util';
 import { isSRank } from '../services/level-color.util';
 import { ChromaMotionService } from '../services/chroma-motion.service';
@@ -61,7 +62,7 @@ type StatusFilter = 'all' | 'active' | 'prospect' | 'paused' | 'inactive';
   templateUrl: './students.page.html',
   styleUrls: ['./students.page.scss'],
   standalone: true,
-  imports: [IonContent, IonIcon, CommonModule, FormsModule]
+  imports: [IonContent, IonIcon, CommonModule, FormsModule, RankBadgeComponent]
 })
 export class StudentsPage implements OnInit, OnDestroy {
   loading = true;

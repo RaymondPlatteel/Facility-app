@@ -272,9 +272,7 @@
             <div class="omni-level-num" [style.--rbc-grad]="levelGrad(clientLatestAssessment.lvl, groupSex)">
               <strong [style.color]="levelColor(clientLatestAssessment.lvl, groupSex)" [class.chroma-text]="isChroma(clientLatestAssessment.lvl, groupSex)">{{ clientLatestAssessment.lvl }}</strong>
               <span class="omni-rank" [style.color]="levelColor(clientLatestAssessment.lvl, groupSex)">
-                <span class="rank-letter" [class.chroma-text]="isChroma(clientLatestAssessment.lvl, groupSex)">{{ rankLetter(clientLatestAssessment.rank) }}</span>
-                <span class="rank-tier" *ngIf="tierNumeral(clientLatestAssessment.lvl, clientLatestAssessment.rank, groupSex)">{{ tierNumeral(clientLatestAssessment.lvl, clientLatestAssessment.rank, groupSex) }}</span>
-                <span class="rank-caption">{{ rankLabel(clientLatestAssessment.rank) }}</span>
+                <app-rank-badge [rank]="clientLatestAssessment.rank" [numeral]="tierNumeral(clientLatestAssessment.lvl, clientLatestAssessment.rank, groupSex)"></app-rank-badge>
               </span>
             </div>
             <div class="omni-level-meta">

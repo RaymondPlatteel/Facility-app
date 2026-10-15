@@ -779,12 +779,10 @@ ion-content {
 }
 .omni-rank {
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex: 0 0 auto;
   line-height: 1;
-  border: 1px solid currentColor;
-  border-radius: 4px;
-  padding: 4px 12px 6px;
+  // The artwork keeps room around it for its glow; the negative margins take that room back.
+  app-rank-badge { width: 84px; margin: -10px -10px -10px -14px; }
 }
 .rank-letter {
   font-size: 30px;

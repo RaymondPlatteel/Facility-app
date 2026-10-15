@@ -23,12 +23,13 @@ import {
   rankLetter, tierNumeral, getCategoryRank, categoryRankPct, categoryColor, categoryBgColor, isCategorySRank,
   getTestRank, testColor, testBgColor,
   RESILIENCE_TESTS, RESILIENCE_REPS, blankResilienceInputs, calcResilience, resilienceTestPct,
-  RESILIENCE_GROUPS, calcResilienceGroup, getResilienceRank, resilienceColor, resilienceBgColor
+  RESILIENCE_GROUPS, calcResilienceGroup, getResilienceRank, resilienceColor, resilienceBgColor, resilienceRankBandBounds
 } from '../services/omni.util';
 import type { TestKey, TestOverride, TestOverrides, OmniCategory, ScoredTestKey, ResilienceKey, ResilienceInputs, ResilienceGroupKey } from '../services/omni.util';
 import { isSRank } from '../services/level-color.util';
 import { ChromaMotionService } from '../services/chroma-motion.service';
 import { LevelUpComponent } from '../shared/level-up/level-up.component';
+import { RankBadgeComponent } from '../shared/rank-badge/rank-badge.component';
 import { ResilienceGridDirective } from './resilience-grid.directive';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -334,7 +335,7 @@ const ASSESSMENT_META = [
   templateUrl: './assessments.page.html',
   styleUrls: ['./assessments.page.scss'],
   standalone: true,
-  imports: [IonContent, IonIcon, CommonModule, FormsModule, LevelUpComponent, ResilienceGridDirective]
+  imports: [IonContent, IonIcon, CommonModule, FormsModule, LevelUpComponent, ResilienceGridDirective, RankBadgeComponent]
 })
 export class AssessmentsPage implements OnInit, OnDestroy {
   // The rank-up takeover. Driven directly rather than by a watcher: a coach
@@ -784,6 +785,17 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   // Scored live off the form, so the panel on the right tracks what the
   // coach is typing rather than only the last saved entry.
   readonly resilienceGroups = RESILIENCE_GROUPS;
+
+  // The resilience rank's band split in four, as the Level's is: I, II, III, IV. S-Rank and Unranked have none.
+  resilienceTier(panel: Panel): string {
+    const rank = this.resilienceRank(panel);
+    if (rank === 'S-RANK' || rank === 'UNRANKED') return '';
+    const score = this.resilienceScore(panel);
+    const { floor, ceil } = resilienceRankBandBounds(score, panel.sex);
+    const span = ceil - floor;
+    const i = span > 0 ? Math.max(0, Math.min(3, Math.floor(((score - floor) / span) * 4))) : 0;
+    return ['I', 'II', 'III', 'IV'][i];
+  }
 
   resilienceRank(panel: Panel): OmniRank {
     return getResilienceRank(this.resilienceScore(panel), panel.sex);

@@ -2,7 +2,8 @@ import { Component, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChromaMotionService } from '../../services/chroma-motion.service';
 import { isSRank } from '../../services/level-color.util';
-import { levelColor, rankLetter, getOmniRank } from '../../services/omni.util';
+import { levelColor, getOmniRank, tierNumeral } from '../../services/omni.util';
+import { RankBadgeComponent } from '../rank-badge/rank-badge.component';
 import type { OmniRank, Sex } from '../../services/firebase.service';
 
 export interface LevelUpEvent {
@@ -29,7 +30,7 @@ export interface LevelUpEvent {
 @Component({
   selector: 'app-level-up',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RankBadgeComponent],
   templateUrl: './level-up.component.html',
   styleUrl: './level-up.component.scss'
 })
@@ -81,12 +82,22 @@ export class LevelUpComponent implements OnDestroy {
     return !!this.event && this.event.toLvl === this.event.fromLvl;
   }
 
-  get newLetter(): string {
-    return this.event ? rankLetter(this.event.toRank) : '';
+  // The tier numerals the badges carry: where the athlete was, and where they landed.
+  get oldNumeral(): string {
+    const e = this.event;
+    return e ? tierNumeral(e.fromLvl, e.fromRank, e.sex) : '';
   }
 
-  get oldLetter(): string {
-    return this.event ? rankLetter(this.event.fromRank) : '';
+  get newNumeral(): string {
+    const e = this.event;
+    return e ? tierNumeral(e.toLvl, e.toRank, e.sex) : '';
+  }
+
+  // The colour of the rank being left: its own level colour, or the live chrome from S-Rank.
+  get oldAccent(): string {
+    const e = this.event;
+    if (!e) return '#ffffff';
+    return isSRank(e.fromLvl, e.sex) ? this.chroma.hex : levelColor(e.fromLvl, e.sex);
   }
 
   get accent(): string {

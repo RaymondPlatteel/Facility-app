@@ -9,12 +9,11 @@
       <!-- The rank you're leaving, shown then dismissed. Without this the
            new letter has nothing to be an ascent FROM. -->
       <div class="lu-old" [class.on]="step >= 1" [class.gone]="step >= 2">
-        <span class="lu-old-letter">{{ oldLetter }}</span>
-        <span class="lu-old-label">{{ event.fromRank }}</span>
+        <app-rank-badge class="lu-old-badge" [style.color]="oldAccent" [rank]="event.fromRank" [numeral]="oldNumeral"></app-rank-badge>
       </div>
 
       <div class="lu-slam" [class.on]="step >= 2">
-        <span class="lu-slam-letter">{{ newLetter }}</span>
+        <app-rank-badge class="lu-slam-badge" [rank]="event.toRank" [numeral]="newNumeral"></app-rank-badge>
       </div>
 
       <div class="lu-titles" [class.on]="step >= 3">

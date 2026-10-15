@@ -1766,3 +1766,12 @@ $rank-tint-cards: true;
 
 .rank-badge .rank-caption { order: -1; margin: 0 0 2px; padding-left: 0.25em; }
 .rank-tier { margin-top: 4px; padding-left: 0.1em; font-family: 'Roboto Slab', serif; font-weight: 500; font-size: 19px; letter-spacing: 0.12em; line-height: 1; text-align: center; }
+
+// The rank emblem (app-rank-badge). The artwork keeps room around it for its glow, so the negative margins let it sit
+// where the old boxed badge did, but never past the hero's padding: the card clips at its edge.
+.rank-emblem {
+  display: flex;
+  flex: 0 0 auto;
+  line-height: 1;
+  app-rank-badge { width: 112px; margin: -14px -14px -14px -22px; }
+}
