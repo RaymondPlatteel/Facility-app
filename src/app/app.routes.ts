@@ -58,6 +58,12 @@ export const routes: Routes = [
     data: { title: 'Themes' }
   },
   {
+    path: 'remote-users',
+    canActivate: [authGuard],
+    loadComponent: () => import('./athletes/athletes.page').then( m => m.AthletesPage),
+    data: { title: 'Remote Users' }
+  },
+  {
     path: 'students',
     canActivate: [authGuard],
     loadComponent: () => import('./students/students.page').then( m => m.StudentsPage),

@@ -3626,6 +3626,15 @@ export class FirebaseService {
     await setDoc(doc(this.db, 'config', 'testers'), { names, updatedAt: new Date().toISOString() });
   }
 
+  // Every athlete-app member (the record behind an account), for the Athletes page.
+  async listMembers(): Promise<Member[]> {
+    const snap = await getDocs(collection(this.db, 'members'));
+    return snap.docs
+      .map(d => d.data() as Member)
+      .filter(m => m.nameKey && m.clientName)
+      .sort((a, b) => a.clientName.localeCompare(b.clientName));
+  }
+
   // Every member's display name and key, for picking testers.
   async listMemberNames(): Promise<Array<{ nameKey: string; clientName: string }>> {
     const snap = await getDocs(collection(this.db, 'members'));

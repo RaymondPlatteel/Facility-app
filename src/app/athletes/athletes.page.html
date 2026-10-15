@@ -1,0 +1,72 @@
+<ion-content [fullscreen]="true" class="content-no-header">
+  <div class="at-page">
+    <div class="at-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back"><ion-icon name="arrow-back"></ion-icon></button>
+      <div class="at-titles">
+        <div class="at-eyebrow">Athlete App</div>
+        <h1>REMOTE <span>USERS</span></h1>
+      </div>
+    </div>
+
+    <div class="at-tabs" role="tablist">
+      <button type="button" role="tab" [class.on]="view === 'all'" (click)="view = 'all'">All <b>{{ count('all') }}</b></button>
+      <button type="button" role="tab" [class.on]="view === 'inPerson'" (click)="view = 'inPerson'">In Person <b>{{ count('inPerson') }}</b></button>
+      <button type="button" role="tab" [class.on]="view === 'remote'" (click)="view = 'remote'">Remote <b>{{ count('remote') }}</b></button>
+    </div>
+
+    <div class="at-search">
+      <ion-icon name="search-outline"></ion-icon>
+      <input type="text" placeholder="Search users" [(ngModel)]="query" />
+    </div>
+
+    <p class="at-error" *ngIf="error">{{ error }}</p>
+    <p class="at-note" *ngIf="loading">Loading…</p>
+    <p class="at-note" *ngIf="!loading && !shown.length">No users in this view.</p>
+
+    <div class="at-list">
+      <div class="at-item" *ngFor="let m of shown; trackBy: track" [class.open]="open === m.nameKey" [class.sus]="m.suspended">
+        <button type="button" class="at-row" (click)="toggle(m)">
+          <span class="at-name">{{ m.clientName }}</span>
+          <span class="at-tags">
+            <span class="tag" [class.ip]="m.inPerson">{{ m.inPerson ? 'In person' : 'Remote' }}</span>
+            <span class="tag warn" *ngIf="m.suspended">Suspended</span>
+            <span class="tag" *ngIf="m.freeProgram">Free program</span>
+          </span>
+          <span class="at-lvl">{{ m.latestLvl != null ? 'Level ' + (m.latestLvl | number: '1.0-0') : '—' }}</span>
+        </button>
+
+        <div class="at-panel" *ngIf="open === m.nameKey">
+          <label class="field">
+            <span>Athlete type</span>
+            <select [ngModel]="draftInPerson ? 'yes' : 'no'" (ngModelChange)="draftInPerson = $event === 'yes'">
+              <option value="yes">In person — trains with the facility</option>
+              <option value="no">Remote — competes through the app</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Account status</span>
+            <select [ngModel]="draftSuspended ? 'yes' : 'no'" (ngModelChange)="draftSuspended = $event === 'yes'">
+              <option value="no">Active</option>
+              <option value="yes">Suspended — locked out and hidden from standings</option>
+            </select>
+          </label>
+          <label class="field wide" *ngIf="draftSuspended">
+            <span>Message shown to the athlete</span>
+            <input type="text" [(ngModel)]="draftReason" placeholder="This account has been suspended." maxlength="200" />
+          </label>
+          <label class="field">
+            <span>Free program</span>
+            <select [ngModel]="draftFree ? 'yes' : 'no'" (ngModelChange)="draftFree = $event === 'yes'">
+              <option value="yes">Yes — program at no charge</option>
+              <option value="no">No</option>
+            </select>
+          </label>
+          <div class="at-actions">
+            <button type="button" class="at-btn" (click)="open = null">Cancel</button>
+            <button type="button" class="at-btn primary" [disabled]="saving" (click)="save(m)">{{ saving ? 'Saving…' : 'Save' }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</ion-content>
