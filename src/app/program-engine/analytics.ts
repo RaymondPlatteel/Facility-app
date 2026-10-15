@@ -88,7 +88,7 @@ export const PAGES: Array<{ path: string; label: string }> = [
   { path: '/auth', label: 'Sign in' },
   { path: '/application', label: 'Intake' },
   { path: '/waiver', label: 'Waiver' },
-  { path: '/home', label: 'Home' },
+  { path: '/home', label: 'World' },
   { path: '/get-started', label: 'Get Started' },
   { path: '/assessment', label: 'Profile' },
   { path: '/history', label: 'Assessment History' },
