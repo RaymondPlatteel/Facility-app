@@ -666,15 +666,16 @@ export class StudentsPage implements OnInit, OnDestroy {
     const profile = this.selected.profile;
     const alert = await this.alertController.create({
       header: 'Delete client?',
-      message: `${profile.fullName} will be removed. Their check-in history and packages stay in the database.`,
+      message: `${profile.fullName} will be removed, along with their assessments, workout logs, goals and place on the leaderboards. Their visits and packages stay in the database.`,
       buttons: [
         { text: 'Cancel', role: 'cancel' },
         {
           text: 'Delete',
           role: 'destructive',
           handler: async () => {
+            const left = await this.firebase.deleteAthleteData(profile.fullName).catch(() => ['all']);
             await this.firebase.deleteClientProfile(profile.id!);
-            this.toast('Client deleted');
+            this.toast(left.length ? `Client deleted. Not cleared: ${left.join(', ')}` : 'Client deleted');
             this.panelOpen = false;
             await this.loadData(true);
           }

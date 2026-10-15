@@ -1426,6 +1426,23 @@ export class FirebaseService {
     await updateDoc(ref, stripUndefined(data));
   }
 
+  // Removes an athlete's records from the athlete app's side as well: assessments, check-ins, workout logs, resilience
+  // entries, goals, anything awaiting review, and the member record behind the leaderboards. Returns the collections that
+  // could not be cleared. Visits and packages (the facility's own records) are left alone.
+  async deleteAthleteData(fullName: string): Promise<string[]> {
+    const key = this.normalizeNameKey(fullName);
+    const failed: string[] = [];
+    const sweep = async (col: string) => {
+      try {
+        const snap = await getDocs(query(collection(this.db, col), where('nameKey', '==', key)));
+        await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+      } catch { failed.push(col); }
+    };
+    await Promise.all(['assessments', 'dailyCheckIns', 'memberWorkoutLogs', 'resilienceEntries', 'pendingResilience', 'pendingAssessments', 'assessmentGoals', 'jobAcceptances'].map(sweep));
+    try { await deleteDoc(doc(this.db, 'members', key)); } catch { failed.push('members'); }
+    return failed;
+  }
+
   async deleteClientProfile(id: string): Promise<void> {
     await deleteDoc(doc(this.db, 'clientProfiles', id));
   }
