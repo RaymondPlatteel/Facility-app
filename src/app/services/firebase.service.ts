@@ -7,7 +7,7 @@ import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationP
 import type { ScheduleEntry } from './schedule.util';
 import { SYNC_CLIENT_ID, ensureExerciseKeys, isLiveWorkout, isStaleWorkout, staleCloseFields, newExerciseKey, normalizeState, sheetToSync, syncToSheet, WorkoutSyncState } from './workout-sync';
 import { environment } from '../../environments/environment';
-import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank } from './omni.util';
+import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank, estimatedTestsOf, remainingEstimates } from './omni.util';
 import type { TestOverrides, ResilienceInputs } from './omni.util';
 import { SplitMark, SplitSample, SplitModel, SplitStats, MODEL_SAMPLES, splitModel, splitSample, splitStats } from './split-mark.util';
 import type { RunSummary } from './run-import.util';
@@ -978,6 +978,9 @@ export interface FitnessAssessment {
   testOverrides?: TestOverrides;
   lvl: number;
   rank: OmniRank;
+  // The tests (ScoredTestKey) whose results are still the athlete's own estimates as of this assessment: everything
+  // from their Get Started baseline, less each test a coach has since recorded. Absent on older assessments.
+  estimatedTests?: string[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -3238,6 +3241,7 @@ export class FirebaseService {
       testOverrides: data['testOverrides'] ?? undefined,
       lvl: data['lvl'],
       rank: data['rank'],
+      estimatedTests: data['estimatedTests'] ?? undefined,
       createdAt: data['createdAt'],
       updatedAt: data['updatedAt']
     };
@@ -3281,6 +3285,17 @@ export class FirebaseService {
     const sameDay = existing.docs.find(
       d => ((d.data() as { timestamp?: string }).timestamp || '').slice(0, 10) === dayKey
     );
+    // Which of the athlete's own estimates are still unproven. They start as everything on a Get Started baseline; the
+    // tests this save changed (or cleared) are the ones the coach has now recorded. The athlete stays off the
+    // standings until none are left.
+    const priorDoc = sameDay
+      ? (sameDay.data() as { timestamp?: string; inputs?: AssessmentInputs; selfReported?: boolean; estimatedTests?: string[] })
+      : existing.docs.reduce<{ timestamp?: string; inputs?: AssessmentInputs; selfReported?: boolean; estimatedTests?: string[] } | null>((latest, d) => {
+          const data = d.data() as { timestamp?: string; inputs?: AssessmentInputs; selfReported?: boolean; estimatedTests?: string[] };
+          return !latest || (data.timestamp || '') > (latest.timestamp || '') ? data : latest;
+        }, null);
+    const priorEstimated = priorDoc ? (priorDoc.estimatedTests ?? (priorDoc.selfReported ? estimatedTestsOf(priorDoc.inputs) : [])) : [];
+    const estimatedTests = remainingEstimates(priorEstimated, priorDoc?.inputs ?? null, a.inputs);
     const payload = this.cleanForFirestore({
       clientId: a.clientId ?? null,
       clientName: a.clientName,
@@ -3291,6 +3306,7 @@ export class FirebaseService {
       testOverrides: a.testOverrides ?? null,
       lvl: a.lvl,
       rank: a.rank,
+      estimatedTests,
       createdAt: sameDay
         ? ((sameDay.data() as { createdAt?: string }).createdAt ?? now)
         : (a.createdAt ?? now),
@@ -3315,7 +3331,7 @@ export class FirebaseService {
       id = docRef.id;
     }
     const change = describeAssessmentChange(previousInputs, a.inputs);
-    await this.touchMemberActivity(nameKey, a.clientName, change.text, a.lvl, a.rank);
+    await this.touchMemberActivity(nameKey, a.clientName, change.text, a.lvl, a.rank, estimatedTests);
     return id;
   }
 
@@ -3466,7 +3482,7 @@ export class FirebaseService {
   // performers + recent-activity feed) every time a coach saves an
   // assessment here. Best-effort — must never block the actual save.
   private async touchMemberActivity(
-    nameKey: string, clientName: string, label: string, lvl: number, rank: OmniRank
+    nameKey: string, clientName: string, label: string, lvl: number, rank: OmniRank, estimatedTests?: string[]
   ): Promise<void> {
     try {
       const ref = doc(this.db, 'members', nameKey);
@@ -3475,6 +3491,8 @@ export class FirebaseService {
         clientName: (clientName || '').trim(),
         latestLvl: lvl,
         latestRank: rank,
+        // Read by the standings in Project 000: any estimate left keeps the athlete off them.
+        ...(estimatedTests ? { estimatedTests } : {}),
         lastActivityAt: new Date().toISOString(),
         lastActivityLabel: label
       }, { merge: true });

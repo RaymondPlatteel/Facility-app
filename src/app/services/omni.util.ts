@@ -676,6 +676,31 @@ export const ASSESSMENT_META = [
   { key: 'straddle', label: 'Middle Split', unit: 'deg', step: 10, min: 0, max: 180, decimals: 0 }
 ] as const;
 
+// ---------- estimated results ----------
+// A result the athlete reported themselves (Get Started) is an estimate until a coach records that test. An
+// assessment's `estimatedTests` lists the tests still estimated, and the athlete stays off the standings until it is
+// empty: one proven test does not clear the others.
+export function testValue(key: ScoredTestKey, i: Partial<AssessmentInputs> | null | undefined): number {
+  return key === 'run800' ? effectiveRun800(i) : num(i?.[key]);
+}
+
+// Every test the inputs hold a result for.
+export function estimatedTestsOf(i: Partial<AssessmentInputs> | null | undefined): ScoredTestKey[] {
+  return ASSESSMENT_META.map(m => m.key as ScoredTestKey).filter(k => testValue(k, i) > 0);
+}
+
+// The estimates left after a coach saves `after` over `before`: a test the coach changed, or cleared, is proven.
+export function remainingEstimates(
+  prev: readonly string[] | null | undefined,
+  before: Partial<AssessmentInputs> | null | undefined,
+  after: Partial<AssessmentInputs> | null | undefined
+): ScoredTestKey[] {
+  return (prev ?? []).map(k => k as ScoredTestKey).filter(k => {
+    const now = testValue(k, after);
+    return now > 0 && Math.abs(now - testValue(k, before)) < 1e-9;
+  });
+}
+
 export interface AssessmentChange {
   text: string;         // "100m Sprint 13.86 → 13.50 sec (+12.5%)"
   pct: number | null;   // null when `fallback` was used (no prior, or nothing scorable changed)
