@@ -7,7 +7,7 @@ import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationP
 import type { ScheduleEntry } from './schedule.util';
 import { SYNC_CLIENT_ID, ensureExerciseKeys, isLiveWorkout, isStaleWorkout, staleCloseFields, newExerciseKey, normalizeState, sheetToSync, syncToSheet, WorkoutSyncState } from './workout-sync';
 import { environment } from '../../environments/environment';
-import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank, estimatedTestsOf, remainingEstimates } from './omni.util';
+import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank, estimatedTestsOf, remainingEstimates, testScoresOf } from './omni.util';
 import type { TestOverrides, ResilienceInputs } from './omni.util';
 import { SplitMark, SplitSample, SplitModel, SplitStats, MODEL_SAMPLES, splitModel, splitSample, splitStats } from './split-mark.util';
 import type { RunSummary } from './run-import.util';
@@ -359,6 +359,8 @@ export interface Member {
   cohort: number | null;
   latestLvl: number | null;
   latestRank: OmniRank | null;
+  // The latest result in each test, for the athlete app's per-test and per-category leaderboards.
+  testScores?: Record<string, number>;
   lastActivityAt: string | null;
   lastActivityLabel: string | null;
 }
@@ -897,7 +899,8 @@ export interface AssessmentInputs {
   pushups: number;
   pullups: number;
   run30: number;
-  run800?: number;         // 800 m run, seconds; replaces speed2 (older records only carry that)
+  run800?: number;         // the old 800 m run, seconds; kept on older records and read as an equivalent 400 m time
+  run400?: number;         // 400 m run, seconds; replaces speed2 (older records only carry that)
   speed2: number;
   pike: number;
   backbend: number;
@@ -940,7 +943,7 @@ export interface PendingAssessment {
   run?: RunSummary | null;
   // The middle split as measured on its proof photo (points on the photo); the coach's points are added on review.
   split?: SplitMark | null;
-  // What the athlete's form started from, and the input keys they changed (e.g. 'deadliftWeight', 'run800').
+  // What the athlete's form started from, and the input keys they changed (e.g. 'deadliftWeight', 'run400').
   baseInputs?: AssessmentInputs | null;
   changed?: string[];
 }
@@ -3331,7 +3334,7 @@ export class FirebaseService {
       id = docRef.id;
     }
     const change = describeAssessmentChange(previousInputs, a.inputs);
-    await this.touchMemberActivity(nameKey, a.clientName, change.text, a.lvl, a.rank, estimatedTests);
+    await this.touchMemberActivity(nameKey, a.clientName, change.text, a.lvl, a.rank, estimatedTests, testScoresOf(a.inputs));
     return id;
   }
 
@@ -3482,7 +3485,8 @@ export class FirebaseService {
   // performers + recent-activity feed) every time a coach saves an
   // assessment here. Best-effort — must never block the actual save.
   private async touchMemberActivity(
-    nameKey: string, clientName: string, label: string, lvl: number, rank: OmniRank, estimatedTests?: string[]
+    nameKey: string, clientName: string, label: string, lvl: number, rank: OmniRank, estimatedTests?: string[],
+    testScores?: Record<string, number>
   ): Promise<void> {
     try {
       const ref = doc(this.db, 'members', nameKey);
@@ -3493,6 +3497,7 @@ export class FirebaseService {
         latestRank: rank,
         // Read by the standings in Project 000: any estimate left keeps the athlete off them.
         ...(estimatedTests ? { estimatedTests } : {}),
+        ...(testScores ? { testScores } : {}),
         lastActivityAt: new Date().toISOString(),
         lastActivityLabel: label
       }, { merge: true });

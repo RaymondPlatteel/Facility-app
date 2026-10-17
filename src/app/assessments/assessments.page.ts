@@ -18,7 +18,7 @@ import {
 import {
   getOmniRank, levelColor, levelBgColor, SpeedUnit, kmToSpeedDisplay, speedDisplayToKm,
   calcStrength, calcPower, calcEndurance, calcCardio, calcFlex, computeOmni,
-  effectiveRun800, formatRunTime,
+  effectiveRun400, formatRunTime,
   overrideScore, isCurveTest, CURVE_TEST_DEFAULTS, RATIO_TEST_DEFAULTS,
   rankLetter, tierNumeral, getCategoryRank, categoryRankPct, categoryColor, categoryBgColor, isCategorySRank,
   getTestRank, testColor, testBgColor,
@@ -144,10 +144,10 @@ interface AssessForm {
   run30: number | null;
   run30Unit: SpeedUnit;
   run30Display: number | null;
-  // The 800 m run: total seconds, entered as minutes and seconds.
-  run800: number | null;
-  run800Min: number | null;
-  run800Sec: number | null;
+  // The 400 m run: total seconds, entered as minutes and seconds.
+  run400: number | null;
+  run400Min: number | null;
+  run400Sec: number | null;
   pike: number | null;
   backbend: number | null;
   straddle: number | null;
@@ -324,7 +324,7 @@ const ASSESSMENT_META = [
   { key: 'pushups', label: 'Pushups', unit: 'reps', step: 5, min: 0, max: 1000, decimals: 0 },
   { key: 'pullups', label: 'Pull-ups', unit: 'reps', step: 3, min: 0, max: 1000, decimals: 0 },
   { key: 'run30', label: '30 Min Run', unit: 'km', step: 0.32, min: 0, max: 50, decimals: 2 },
-  { key: 'run800', label: '800 M Run', unit: 'sec', step: 5, min: 60, max: 1200, decimals: 0 },
+  { key: 'run400', label: '400 M Run', unit: 'sec', step: 5, min: 60, max: 1200, decimals: 0 },
   { key: 'pike', label: 'Pike', unit: '', step: 1, min: 0, max: 10, decimals: 0 },
   { key: 'backbend', label: 'Backbend', unit: '', step: 1, min: 0, max: 10, decimals: 0 },
   { key: 'straddle', label: 'Middle Split', unit: 'deg', step: 10, min: 0, max: 180, decimals: 0 }
@@ -529,11 +529,18 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     await this.refreshClients();
 
     // Allow deep-linking from the clients page: /assessments?client=Name
+    await this.openPreset();
+  }
+
+  // The athlete named in ?client=, opened in the first panel. A remote user is not in the athlete dropdown, so
+  // this is how the Remote Users page reaches their results. Each link is opened once.
+  private lastPreset = '';
+  private async openPreset() {
     const preset = this.route.snapshot.queryParamMap.get('client');
-    if (preset) {
-      this.panels[0].athleteName = preset;
-      await this.commitAthleteName(this.panels[0]);
-    }
+    if (!preset || preset === this.lastPreset) return;
+    this.lastPreset = preset;
+    this.panels[0].athleteName = preset;
+    await this.commitAthleteName(this.panels[0]);
   }
 
   // Ionic caches this page's component across navigations, so ngOnInit only
@@ -541,6 +548,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   // page) wouldn't show up in the athlete dropdown until a full app reload.
   async ionViewWillEnter() {
     await this.refreshClients();
+    await this.openPreset();
     // A coach may have just flipped "modify assessment" on the Clients page
     // for whoever's already loaded in a panel here — this page is cached
     // across navigations, so re-check every return visit instead of only
@@ -740,7 +748,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       longjump: null, sprint: null,
       pushups: null, pullups: null,
       run30: null, run30Unit: 'mph', run30Display: null,
-      run800: null, run800Min: null, run800Sec: null,
+      run400: null, run400Min: null, run400Sec: null,
       pike: null, backbend: null, straddle: null
     };
   }
@@ -1184,10 +1192,10 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       : null;
   }
 
-  // Minutes and seconds typed for the 800 m run become the total seconds that are scored.
-  onRun800Changed(panel: Panel) {
-    const total = this.n(panel.form.run800Min) * 60 + this.n(panel.form.run800Sec);
-    panel.form.run800 = total > 0 ? total : null;
+  // Minutes and seconds typed for the 400 m run become the total seconds that are scored.
+  onRun400Changed(panel: Panel) {
+    const total = this.n(panel.form.run400Min) * 60 + this.n(panel.form.run400Sec);
+    panel.form.run400 = total > 0 ? total : null;
   }
 
   private rankGradientColor(level: number, sex: Sex = 'male'): string {
@@ -1234,7 +1242,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       pushups: this.n(form.pushups),
       pullups: this.n(form.pullups),
       run30: this.n(form.run30),
-      run800: this.n(form.run800),
+      run400: this.n(form.run400),
       speed2: 0,
       pike: this.n(form.pike),
       backbend: this.n(form.backbend),
@@ -1319,7 +1327,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
       longjump: this.orNull(i.longjump), sprint: this.orNull(i.sprint),
       pushups: this.orNull(i.pushups), pullups: this.orNull(i.pullups),
       run30: this.orNull(i.run30), run30Unit: 'mph', run30Display: null,
-      run800: null, run800Min: null, run800Sec: null,
+      run400: null, run400Min: null, run400Sec: null,
       pike: this.orNull(i.pike), backbend: this.orNull(i.backbend), straddle: this.orNull(i.straddle)
     };
     // Derive the mph display from the stored km for both timed-distance
@@ -1327,11 +1335,11 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     panel.form.run30Display = panel.form.run30 != null
       ? Math.round(kmToSpeedDisplay(panel.form.run30, 'mph', this.speedWindow('run30')) * 1000) / 1000
       : null;
-    // A record that only carries the old 2-minute distance shows the 800 m time it scores as.
-    const t800 = Math.round(effectiveRun800(i));
-    panel.form.run800 = t800 > 0 ? t800 : null;
-    panel.form.run800Min = t800 > 0 ? Math.floor(t800 / 60) : null;
-    panel.form.run800Sec = t800 > 0 ? t800 % 60 : null;
+    // A record that only carries the old 2-minute distance shows the 400 m time it scores as.
+    const t400 = Math.round(effectiveRun400(i));
+    panel.form.run400 = t400 > 0 ? t400 : null;
+    panel.form.run400Min = t400 > 0 ? Math.floor(t400 / 60) : null;
+    panel.form.run400Sec = t400 > 0 ? t400 % 60 : null;
   }
 
   private orNull(v: number | undefined): number | null {
@@ -1713,7 +1721,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
   // description — so a coach can see precisely what will drive the score
   // before committing to it, and watch it change live as they edit any
   // constant. Ratio-type slots (the strength lifts, long jump) have one
-  // editable constant; curve-type slots (sprint, 30 Min Run, 800 M Run)
+  // editable constant; curve-type slots (sprint, 30 Min Run, 400 M Run)
   // have two — the record and the spread that controls how fast the score
   // falls off past it.
   overrideFormulaText(panel: Panel): string {
@@ -1988,7 +1996,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
         calcStrength(i.deadlift, i.squat, i.bench, ov),
         calcPower(i.longjump, i.sprint, ov),
         calcEndurance(i.pushups, i.pullups, ov),
-        calcCardio(i.run30, effectiveRun800(i), ov),
+        calcCardio(i.run30, effectiveRun400(i), ov),
         calcFlex(i.pike, i.backbend, i.straddle, ov)
       ];
       const d = new Date(prevEntry.timestamp);
@@ -2098,7 +2106,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     if (type === 'H') prev = calcStrength(i.deadlift, i.squat, i.bench, ov);
     else if (type === 'K') prev = calcPower(i.longjump, i.sprint, ov);
     else if (type === 'N') prev = calcEndurance(i.pushups, i.pullups, ov);
-    else if (type === 'Q') prev = calcCardio(i.run30, effectiveRun800(i), ov);
+    else if (type === 'Q') prev = calcCardio(i.run30, effectiveRun400(i), ov);
     else if (type === 'U') prev = calcFlex(i.pike, i.backbend, i.straddle, ov);
     const diff = curr - prev;
     const pct = (diff / (prev || 1)) * 100;
@@ -2112,12 +2120,12 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     const best: Array<{ label: string; unit: string; current: number; nextVal: number; gain: number; projectedLvl: number; decimals: number }> = [];
 
     ASSESSMENT_META.forEach(test => {
-      const current = test.key === 'run800' ? effectiveRun800(inputs) : Number((inputs as any)[test.key] || 0);
+      const current = test.key === 'run400' ? effectiveRun400(inputs) : Number((inputs as any)[test.key] || 0);
       const candidates = [current + test.step, current - test.step].filter(v => v >= test.min && v <= test.max);
       let bestForTest: typeof best[number] | null = null;
       const label = overrides?.[test.key as TestKey]?.name || test.label;
       candidates.forEach(nextVal => {
-        const trialInputs = { ...inputs, [test.key]: nextVal, ...(test.key === 'run800' ? { speed2: 0 } : {}) } as AssessmentInputs;
+        const trialInputs = { ...inputs, [test.key]: nextVal, ...(test.key === 'run400' ? { speed2: 0 } : {}) } as AssessmentInputs;
         const trial = computeOmni(trialInputs, overrides);
         const gain = trial.exact - base.exact;
         if (!bestForTest || gain > bestForTest.gain) {
@@ -2225,7 +2233,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     const lastFive = panel.history.slice(-5);
 
     const getTestHistory = (key: string): (number | null)[] => {
-      const vals = lastFive.map(e => (key === 'run800' ? effectiveRun800(e.inputs) : (e.inputs as any)[key]) || 0);
+      const vals = lastFive.map(e => (key === 'run400' ? effectiveRun400(e.inputs) : (e.inputs as any)[key]) || 0);
       return [...Array(5 - vals.length).fill(null), ...vals];
     };
     const getCatHistory = (type: 'H' | 'K' | 'N' | 'Q' | 'U'): (number | null)[] =>
@@ -2235,7 +2243,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
         if (type === 'H') return calcStrength(i.deadlift, i.squat, i.bench, ov);
         if (type === 'K') return calcPower(i.longjump, i.sprint, ov);
         if (type === 'N') return calcEndurance(i.pushups, i.pullups, ov);
-        if (type === 'Q') return calcCardio(i.run30, effectiveRun800(i), ov);
+        if (type === 'Q') return calcCardio(i.run30, effectiveRun400(i), ov);
         return calcFlex(i.pike, i.backbend, i.straddle, ov);
       });
 
@@ -2267,8 +2275,8 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     const testBreakdown = [
       { l: 'Deadlift', k: 'deadlift', u: ' lbs', d: 0 }, { l: 'Squat', k: 'squat', u: ' lbs', d: 0 }, { l: 'Bench', k: 'bench', u: ' lbs', d: 0 },
       { l: 'Long Jump', k: 'longjump', u: ' in', d: 0 }, { l: '100m Sprint', k: 'sprint', u: ' sec', d: 2 }, { l: 'Pushups', k: 'pushups', u: ' reps', d: 0 }, { l: 'Pull-ups', k: 'pullups', u: ' reps', d: 0 },
-      { l: '30 Min Run', k: 'run30', u: ' km', d: 2 }, { l: '800 M Run', k: 'run800', u: ' sec', d: 0 }, { l: 'Pike', k: 'pike', u: '', d: 0 }, { l: 'Backbend', k: 'backbend', u: '', d: 0 }, { l: 'Middle Split', k: 'straddle', u: ' deg', d: 0 }
-    ].map(t => this.assessmentGraphRow(t.l, t.k === 'run800' ? effectiveRun800(inputs) : (inputs as any)[t.k], getTestHistory(t.k), t.u, c, t.d)).join('');
+      { l: '30 Min Run', k: 'run30', u: ' km', d: 2 }, { l: '400 M Run', k: 'run400', u: ' sec', d: 0 }, { l: 'Pike', k: 'pike', u: '', d: 0 }, { l: 'Backbend', k: 'backbend', u: '', d: 0 }, { l: 'Middle Split', k: 'straddle', u: ' deg', d: 0 }
+    ].map(t => this.assessmentGraphRow(t.l, t.k === 'run400' ? effectiveRun400(inputs) : (inputs as any)[t.k], getTestHistory(t.k), t.u, c, t.d)).join('');
 
     const dateLabel = new Date(panel.assessmentDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 

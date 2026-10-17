@@ -309,26 +309,26 @@
                 </select>
               </div>
             </div>
-            <div class="form-row" [style.--rbc]="testRank(panel, 'run800')?.color" [style.--rbc-bg]="testRank(panel, 'run800')?.bg"
-                 [style.--rbc-grad]="testRank(panel, 'run800')?.grad" [style.--test-label]="testRank(panel, 'run800')?.label">
+            <div class="form-row" [style.--rbc]="testRank(panel, 'run400')?.color" [style.--rbc-bg]="testRank(panel, 'run400')?.bg"
+                 [style.--rbc-grad]="testRank(panel, 'run400')?.grad" [style.--test-label]="testRank(panel, 'run400')?.label">
               <label class="fr-label">
-                <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'run800')"
-                      [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'run800', '800 M Run')">
-                  {{ testLabel(panel, 'run800', '800 M Run') }}
+                <span class="fr-label-text" [class.overridden]="isTestOverridden(panel, 'run400')"
+                      [class.editable]="panel.customizable" (click)="openTestOverride(panel, 'run400', '400 M Run')">
+                  {{ testLabel(panel, 'run400', '400 M Run') }}
                   <ion-icon *ngIf="panel.customizable" name="create-outline" class="fr-edit-icon"></ion-icon>
                 </span>
               </label>
-              <span class="fr-rank" *ngIf="testRank(panel, 'run800') as r" [style.--rbc-grad]="r.grad"
+              <span class="fr-rank" *ngIf="testRank(panel, 'run400') as r" [style.--rbc-grad]="r.grad"
                     [style.color]="r.color" [class.chroma-text]="r.isS">{{ r.glyph }}</span>
               <div class="fr-inputs">
                 <div class="fr-input-wrap">
                   <input class="fr-input" type="number" inputmode="numeric" placeholder="0" min="0"
-                         [(ngModel)]="panel.form.run800Min" (ngModelChange)="onRun800Changed(panel)" />
+                         [(ngModel)]="panel.form.run400Min" (ngModelChange)="onRun400Changed(panel)" />
                   <span class="fr-suffix">min</span>
                 </div>
                 <div class="fr-input-wrap fr-input-wrap--reps">
                   <input class="fr-input" type="number" inputmode="numeric" placeholder="0" min="0" max="59"
-                         [(ngModel)]="panel.form.run800Sec" (ngModelChange)="onRun800Changed(panel)" />
+                         [(ngModel)]="panel.form.run400Sec" (ngModelChange)="onRun400Changed(panel)" />
                   <span class="fr-suffix">sec</span>
                 </div>
               </div>

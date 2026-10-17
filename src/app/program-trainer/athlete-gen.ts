@@ -36,7 +36,7 @@ const PATTERNS: Record<number, number[][]> = {
 // Test results inside each rank, Unranked to S.
 const PUSHUPS: Array<[number, number]> = [[0, 8], [10, 20], [21, 35], [36, 50], [51, 70], [71, 90]];
 const PULLUPS: Array<[number, number]> = [[0, 0], [1, 5], [6, 10], [11, 17], [18, 25], [26, 32]];
-const RUN800_SEC: Array<[number, number]> = [[270, 330], [225, 270], [195, 225], [170, 195], [150, 170], [130, 150]];
+const RUN400_SEC: Array<[number, number]> = [[115, 140], [96, 115], [84, 96], [73, 84], [65, 73], [57, 65]];
 
 const rand = (lo: number, hi: number) => lo + Math.floor(Math.random() * (hi - lo + 1));
 const pick = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
@@ -69,7 +69,7 @@ export function practiceAthlete(): PracticeAthlete {
   const r = (spread: 1 | 2 = 1) => RANKS[near(level, spread)];
   const pushupRank = r(), pullupRank = r(), cardioRank = r();
   const lv = (x: OmniRank) => RANKS.indexOf(x);
-  const run800 = rand(...RUN800_SEC[lv(cardioRank)]);
+  const run400 = rand(...RUN400_SEC[lv(cardioRank)]);
   const state: AthleteState = {
     seed: `${name.toLowerCase()}-${Date.now()}`,
     strengthRank: r(),
@@ -80,7 +80,7 @@ export function practiceAthlete(): PracticeAthlete {
     pullupRank,
     flexibilityRanks: { pike: r(2), backbend: r(2), straddle: r(2) },
     cardioRank,
-    speed2Km: (0.8 / run800) * 120,
+    speed2Km: (0.4 / run400) * 120,
     units: 'imperial',
     powerRanks: { longjump: r(), sprint: r() },
     bodyWeight: rand(130, 220),

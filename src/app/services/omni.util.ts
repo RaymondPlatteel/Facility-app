@@ -58,7 +58,7 @@ function num(v: number | null | undefined): number {
 //
 // An override always keeps the SAME formula *shape* as the slot it's
 // replacing — a ratio-type slot (the four strength lifts, long jump) stays
-// a ratio; a curve-type slot (sprint, 30 Min Run, 800 M Run — the
+// a ratio; a curve-type slot (sprint, 30 Min Run, 400 M Run — the
 // time-based tests, all lower-raw-is-better) stays the same sqrt decay
 // curve calcPower/calcCardio use. What the coach can edit is every real
 // constant in that formula — not just the "world record," but (for
@@ -80,7 +80,7 @@ export interface TestOverride {
 
 export type TestOverrides = Partial<Record<TestKey, TestOverride>>;
 
-const LOWER_IS_BETTER: ReadonlySet<TestKey> = new Set<TestKey>(['sprint', 'run800']);
+const LOWER_IS_BETTER: ReadonlySet<TestKey> = new Set<TestKey>(['sprint', 'run400']);
 
 // Exposed so the Assessments page can show the coach the exact formula
 // (and a live preview score) while they're picking new constants for a
@@ -100,26 +100,43 @@ export function isLowerIsBetterTest(key: TestKey): boolean {
 export const CURVE_TEST_DEFAULTS: Partial<Record<TestKey, { record: number; spread: number }>> = {
   sprint: { record: 10, spread: 0.125 },
   run30: { record: 11.265408, spread: 0.11265408 },
-  run800: { record: 105, spread: 2.4 },
+  run400: { record: 46, spread: 1 },
 };
 
 export function isCurveTest(key: TestKey): boolean {
   return key in CURVE_TEST_DEFAULTS;
 }
 
-// ---------- 800 m run ----------
-// Cardio's short test is an 800 m run, in seconds (it was a 2-minute run).
-// Same shape as the 100 m sprint: 100 points at the record, falling by a
-// square root. The record is an estimated flat-shoe world record, not
-// Rudisha's 1:40.91 in spikes, and the spread is set so a typical athlete's
-// time reads as a believable 800 m. Matches the athlete app.
-export const RUN800_RECORD = 105;
-export const RUN800_SPREAD = 2.4;
+// ---------- 400 m run ----------
+// Cardio's short test is a 400 m run, in seconds (it was an 800 m run, and
+// before that a 2-minute run). Same shape as the 100 m sprint: 100 points at
+// the record, falling by a square root. The record is an estimated flat-shoe
+// time, not van Niekerk's 43.03 in spikes, and the spread is set so a
+// typical athlete's time reads as a believable 400 m. No spikes or blocks. Matches the athlete app.
+export const RUN400_RECORD = 46;
+export const RUN400_SPREAD = 1;
 
-export function run800Score(seconds: number): number {
+export function run400Score(seconds: number): number {
+  if (!(seconds > 0)) return 0;
+  const pct = (10 - Math.sqrt(Math.max(0, (seconds - RUN400_RECORD) / RUN400_SPREAD))) * 10;
+  return Math.max(0, Math.min(100, pct));
+}
+
+// The 800 m test this one replaced. Records that hold an 800 m time read it as
+// the 400 m time that scores the same, so nobody's score moves until they run
+// the 400 m.
+const RUN800_RECORD = 105;
+const RUN800_SPREAD = 2.4;
+
+function run800Score(seconds: number): number {
   if (!(seconds > 0)) return 0;
   const pct = (10 - Math.sqrt(Math.max(0, (seconds - RUN800_RECORD) / RUN800_SPREAD))) * 10;
   return Math.max(0, Math.min(100, pct));
+}
+
+function estimate400From800(seconds: number): number {
+  if (!(seconds > 0)) return 0;
+  return RUN400_RECORD + RUN400_SPREAD * Math.pow(10 - run800Score(seconds) / 10, 2);
 }
 
 // What the old 2-minute test scored, kept so every record that only has a
@@ -130,18 +147,19 @@ function twoMinuteScore(km: number): number {
   return Math.max(0, Math.min(100, pct));
 }
 
-// The 800 m time that scores exactly what a 2-minute distance scored.
-export function estimate800FromTwoMinute(km: number): number {
+// The 400 m time that scores exactly what a 2-minute distance scored.
+export function estimate400FromTwoMinute(km: number): number {
   if (!(km > 0)) return 0;
-  return RUN800_RECORD + RUN800_SPREAD * Math.pow(10 - twoMinuteScore(km) / 10, 2);
+  return RUN400_RECORD + RUN400_SPREAD * Math.pow(10 - twoMinuteScore(km) / 10, 2);
 }
 
-// A recorded 800 m time, else the one implied by the record's 2-minute
-// distance, else 0 (not tested).
-export function effectiveRun800(i: Partial<AssessmentInputs> | null | undefined): number {
+// A recorded 400 m time, else the one implied by the record's 800 m time or
+// 2-minute distance, else 0 (not tested).
+export function effectiveRun400(i: Partial<AssessmentInputs> | null | undefined): number {
   if (!i) return 0;
-  if ((i.run800 ?? 0) > 0) return i.run800 as number;
-  return estimate800FromTwoMinute(i.speed2 ?? 0);
+  if ((i.run400 ?? 0) > 0) return i.run400 as number;
+  if ((i.run800 ?? 0) > 0) return estimate400From800(i.run800 as number);
+  return estimate400FromTwoMinute(i.speed2 ?? 0);
 }
 
 // 144.87 -> "2:25". Whole seconds, rounded.
@@ -206,7 +224,7 @@ export function calcStrength(dl: number, sq: number, bn: number, overrides?: Tes
 }
 export function calcPower(lj: number, sp: number, overrides?: TestOverrides): number {
   const ljScore = slotScore(lj, 'longjump', overrides, () => lj / 147 * 100);
-  const spScore = slotScore(sp, 'sprint', overrides, () => (Math.sqrt((sp - 10) / 0.125) * -1 + 10) * 10);
+  const spScore = slotScore(sp, 'sprint', overrides, () => (Math.sqrt(Math.max(0, sp - 10) / 0.125) * -1 + 10) * 10);
   return (ljScore + spScore) / 2;
 }
 export function calcEndurance(pu: number, pulls: number, overrides?: TestOverrides): number {
@@ -214,12 +232,12 @@ export function calcEndurance(pu: number, pulls: number, overrides?: TestOverrid
   const pullsScore = slotScore(pulls, 'pullups', overrides, () => (pulls / 49) * 100);
   return (puScore + pullsScore) / 2;
 }
-export function calcCardio(r30: number, t800: number, overrides?: TestOverrides): number {
+export function calcCardio(r30: number, t400: number, overrides?: TestOverrides): number {
   const rs = slotScore(r30, 'run30', overrides, () => r30 < 4.02336
     ? (Math.sqrt((11.265408 - r30) / 0.11265408) * -1 + 10) * 10
     : r30 / 11.265408 * 100);
-  const t800Score = slotScore(t800, 'run800', overrides, () => run800Score(t800));
-  return (rs + t800Score) / 2;
+  const t400Score = slotScore(t400, 'run400', overrides, () => run400Score(t400));
+  return (rs + t400Score) / 2;
 }
 export function calcFlex(pike: number, bb: number, str: number, overrides?: TestOverrides): number {
   // Pike/backbend are entered on a 0-10 scale (see FIELD_LIMITS); clamp
@@ -240,7 +258,7 @@ export function computeOmni(i: AssessmentInputs, overrides?: TestOverrides): Omn
   const H = calcStrength(num(i.deadlift), num(i.squat), num(i.bench), overrides);
   const K = calcPower(num(i.longjump), num(i.sprint), overrides);
   const N = calcEndurance(num(i.pushups), num(i.pullups), overrides);
-  const Q = calcCardio(num(i.run30), effectiveRun800(i), overrides);
+  const Q = calcCardio(num(i.run30), effectiveRun400(i), overrides);
   const U = calcFlex(num(i.pike), num(i.backbend), num(i.straddle), overrides);
   const raw = H + K + N + Q + U;
   const exact = levelFromRaw(raw);
@@ -561,13 +579,13 @@ export function categoryBgColor(cat: OmniCategory, score: number, sex: Sex = 'ma
 // this map ranks it identically.
 export type ScoredTestKey =
   'deadlift' | 'squat' | 'bench' | 'longjump' | 'sprint' | 'pushups' |
-  'pullups' | 'run30' | 'run800' | 'pike' | 'backbend' | 'straddle';
+  'pullups' | 'run30' | 'run400' | 'pike' | 'backbend' | 'straddle';
 
 export const TEST_CATEGORY: Record<ScoredTestKey, OmniCategory> = {
   deadlift: 'strength', squat: 'strength', bench: 'strength',
   longjump: 'power', sprint: 'power',
   pushups: 'endurance', pullups: 'endurance',
-  run30: 'cardio', run800: 'cardio',
+  run30: 'cardio', run400: 'cardio',
   pike: 'flexibility', backbend: 'flexibility', straddle: 'flexibility'
 };
 
@@ -575,19 +593,19 @@ export const TEST_CATEGORY: Record<ScoredTestKey, OmniCategory> = {
 // calcStrength/calcPower/... average, overrides included. NaN (a sprint or
 // run left blank lands the sqrt below zero) ranks as UNRANKED downstream.
 export function testScore(key: ScoredTestKey, i: AssessmentInputs, overrides?: TestOverrides): number {
-  const v = key === 'run800' ? effectiveRun800(i) : num(i[key]);
+  const v = key === 'run400' ? effectiveRun400(i) : num(i[key]);
   switch (key) {
     case 'deadlift': return slotScore(v, key, overrides, () => v / 939 * 100);
     case 'squat': return slotScore(v, key, overrides, () => v / 800 * 100);
     case 'bench': return slotScore(v, key, overrides, () => v / 600 * 100);
     case 'longjump': return slotScore(v, key, overrides, () => v / 147 * 100);
-    case 'sprint': return slotScore(v, key, overrides, () => (Math.sqrt((v - 10) / 0.125) * -1 + 10) * 10);
+    case 'sprint': return slotScore(v, key, overrides, () => (Math.sqrt(Math.max(0, v - 10) / 0.125) * -1 + 10) * 10);
     case 'pushups': return slotScore(v, key, overrides, () => (v / 150) * 100);
     case 'pullups': return slotScore(v, key, overrides, () => (v / 49) * 100);
     case 'run30': return slotScore(v, key, overrides, () => v < 4.02336
       ? (Math.sqrt((11.265408 - v) / 0.11265408) * -1 + 10) * 10
       : v / 11.265408 * 100);
-    case 'run800': return slotScore(v, key, overrides, () => run800Score(v));
+    case 'run400': return slotScore(v, key, overrides, () => run400Score(v));
     case 'pike': return slotScore(v, key, overrides, () => Math.max(0, Math.min(10, v)) * 10);
     case 'backbend': return slotScore(v, key, overrides, () => Math.max(0, Math.min(10, v)) * 10);
     case 'straddle': return slotScore(v, key, overrides, () => v < 80 ? 0 : v > 180 ? 100 : v - 80);
@@ -670,7 +688,7 @@ export const ASSESSMENT_META = [
   { key: 'pushups', label: 'Pushups', unit: 'reps', step: 5, min: 0, max: 1000, decimals: 0 },
   { key: 'pullups', label: 'Pull-ups', unit: 'reps', step: 3, min: 0, max: 1000, decimals: 0 },
   { key: 'run30', label: '30 Min Run', unit: 'km', step: 0.32, min: 0, max: 50, decimals: 2 },
-  { key: 'run800', label: '800 M Run', unit: 'sec', step: 5, min: 60, max: 1200, decimals: 0 },
+  { key: 'run400', label: '400 M Run', unit: 'sec', step: 5, min: 30, max: 600, decimals: 0 },
   { key: 'pike', label: 'Pike', unit: '', step: 1, min: 0, max: 10, decimals: 0 },
   { key: 'backbend', label: 'Backbend', unit: '', step: 1, min: 0, max: 10, decimals: 0 },
   { key: 'straddle', label: 'Middle Split', unit: 'deg', step: 10, min: 0, max: 180, decimals: 0 }
@@ -681,12 +699,24 @@ export const ASSESSMENT_META = [
 // assessment's `estimatedTests` lists the tests still estimated, and the athlete stays off the standings until it is
 // empty: one proven test does not clear the others.
 export function testValue(key: ScoredTestKey, i: Partial<AssessmentInputs> | null | undefined): number {
-  return key === 'run800' ? effectiveRun800(i) : num(i?.[key]);
+  return key === 'run400' ? effectiveRun400(i) : num(i?.[key]);
 }
 
 // Every test the inputs hold a result for.
 export function estimatedTestsOf(i: Partial<AssessmentInputs> | null | undefined): ScoredTestKey[] {
   return ASSESSMENT_META.map(m => m.key as ScoredTestKey).filter(k => testValue(k, i) > 0);
+}
+
+// The numbers a member record keeps for the per-test leaderboards: every test the inputs hold a result for (the
+// lifts as their one-rep max, runs in seconds or km). Whether each is proven comes from `estimatedTests`.
+export function testScoresOf(i: Partial<AssessmentInputs> | null | undefined): Partial<Record<ScoredTestKey, number>> {
+  const out: Partial<Record<ScoredTestKey, number>> = {};
+  for (const m of ASSESSMENT_META) {
+    const key = m.key as ScoredTestKey;
+    const v = testValue(key, i);
+    if (v > 0) out[key] = Math.round(v * 1000) / 1000;
+  }
+  return out;
 }
 
 // The estimates left after a coach saves `after` over `before`: a test the coach changed, or cleared, is proven.
@@ -722,14 +752,14 @@ export function describeAssessmentChange(
   let best: { label: string; unit: string; decimals: number; oldVal: number; newVal: number; gain: number; pct: number } | null = null;
 
   for (const meta of ASSESSMENT_META) {
-    const value = (x: AssessmentInputs) => meta.key === 'run800' ? effectiveRun800(x) : num(x[meta.key]);
+    const value = (x: AssessmentInputs) => meta.key === 'run400' ? effectiveRun400(x) : num(x[meta.key]);
     const oldVal = value(prev);
     const newVal = value(curr);
     if (Math.abs(newVal - oldVal) < 1e-9) continue;
 
-    // The 800 m time replaces whatever 2-minute distance the record carried.
-    const trial = meta.key === 'run800'
-      ? { ...curr, run800: oldVal, speed2: 0 }
+    // The 400 m time replaces whatever 2-minute distance the record carried.
+    const trial = meta.key === 'run400'
+      ? { ...curr, run400: oldVal, speed2: 0 }
       : { ...curr, [meta.key]: oldVal };
     const trialExact = computeOmni(trial).exact;
     const gain = currTotals.exact - trialExact;
@@ -742,8 +772,8 @@ export function describeAssessmentChange(
   }
 
   if (!best) return { text: fallback, pct: null };
-  // The 800 m run reads best as minutes and seconds.
-  const isTime = best.label === '800 M Run';
+  // The 400 m run reads best as minutes and seconds.
+  const isTime = best.label === '400 M Run';
   const unitSuffix = best.unit ? ` ${best.unit}` : '';
   const sign = best.pct > 0 ? '+' : best.pct < 0 ? '' : '±';
   const text = isTime
@@ -765,7 +795,7 @@ export function blankAssessmentInputs(): AssessmentInputs {
     bench: 0, benchWeight: 0, benchReps: 1,
     pullup1rm: 0, pullup1rmWeight: 0, pullup1rmReps: 1,
     longjump: 0, sprint: 0, pushups: 0, pullups: 0,
-    run30: 0, run800: 0, speed2: 0, pike: 0, backbend: 0, straddle: 0
+    run30: 0, run400: 0, speed2: 0, pike: 0, backbend: 0, straddle: 0
   };
 }
 

@@ -63,6 +63,7 @@
             </select>
           </label>
           <div class="at-actions">
+            <button type="button" class="at-btn" style="margin-right:auto" (click)="openAssessments(m)">Assessments</button>
             <button type="button" class="at-btn" (click)="open = null">Cancel</button>
             <button type="button" class="at-btn primary" [disabled]="saving" (click)="save(m)">{{ saving ? 'Saving…' : 'Save' }}</button>
           </div>

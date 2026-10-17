@@ -19,7 +19,7 @@ export const TEST_VIDEOS: Array<{ key: string; title: string; group: string }> =
   { key: 'pushups', title: 'Push-ups', group: 'Endurance' },
   { key: 'pullups', title: 'Pull-ups', group: 'Endurance' },
   { key: 'run30', title: '30-Minute Run', group: 'Cardio' },
-  { key: 'run800', title: '800 m Run', group: 'Cardio' },
+  { key: 'run400', title: '400 m Run', group: 'Cardio' },
   { key: 'pike', title: 'Pike', group: 'Flexibility' },
   { key: 'backbend', title: 'Backbend', group: 'Flexibility' },
   { key: 'straddle', title: 'Middle Split', group: 'Flexibility' }

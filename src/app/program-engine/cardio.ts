@@ -11,8 +11,8 @@ import { FLEXIBILITY_FLOOR, WORKOUT_MINUTES, workMinutes } from './budget';
 //    D          1 easy day; 2 with more training days.
 //    C          2 easy days; 3 with more training days.
 //    B          3 easy days and 1 hard day.
-//    A and S    3 easy days, 1 hard day, and 1 speed day: three 800 m runs at 85% of the
-//               athlete's speed from the 800 m run assessment.
+//    A and S    3 easy days, 1 hard day, and 1 speed day: three 400 m runs at 85% of the
+//               athlete's speed from the 400 m run assessment.
 //  "More training days" means the athlete has days to place the extra session with a rest day between
 //  the sessions (D needs two such days, C needs three).
 //
@@ -137,20 +137,20 @@ export function session(kind: Kind, state: AthleteState, minutes: number): Progr
       instructions: 'Keep your heart rate between 150 and 170 bpm.'
     };
   }
-  // speed: 3 x 800 m at 85% of the speed of the 800 m run (km in 2 minutes x 30 = km/h)
+  // speed: 3 x 400 m at 85% of the speed of the 400 m run (km in 2 minutes x 30 = km/h)
   const kph = state.speed2Km * 30 * 0.85;
   const metric = state.units === 'metric';
   const target = metric ? kph : kph * 0.621371;
   const unit = metric ? 'kph' : 'mph';
   const shown = Math.round(target * 10) / 10;
-  const sec = kph > 0 ? Math.round(800 / (kph / 3.6)) : 0;
+  const sec = kph > 0 ? Math.round(400 / (kph / 3.6)) : 0;
   const time = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
   return {
     name: 'Speed intervals',
     attributes: [attr('Sets', 'Fixed', '3'), ...(sec ? [attr('Duration', 'Fixed', String(sec)), attr(unit, 'Fixed', String(shown))] : [])],
     instructions: sec
-      ? `Three 800 m runs, each in ${time} (${shown} ${unit}), which is 85% of your speed from your 800 m run assessment.`
-      : 'Three 800 m runs at 85% of your speed from your 800 m run assessment.'
+      ? `Three 400 m runs, each in ${time} (${shown} ${unit}), which is 85% of your speed from your 400 m run assessment.`
+      : 'Three 400 m runs at 85% of your speed from your 400 m run assessment.'
   };
 }
 

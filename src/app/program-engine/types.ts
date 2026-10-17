@@ -10,8 +10,8 @@ export interface AthleteState {
   pullupMax: number;        // reps in the latest assessment
   pullupRank: OmniRank;     // the pull-up TEST rank
   flexibilityRanks: Record<'pike' | 'backbend' | 'straddle', OmniRank>;   // each flexibility test ranks on its own
-  cardioRank: OmniRank;      // the cardio category rank (30 minute run and 800 m run)
-  speed2Km: number;          // km in 2 minutes implied by the 800 m run assessment
+  cardioRank: OmniRank;      // the cardio category rank (30 minute run and 400 m run)
+  speed2Km: number;          // km in 2 minutes implied by the 400 m run assessment
   units: 'imperial' | 'metric';
   powerRanks: Record<'longjump' | 'sprint', OmniRank>;   // the broad jump and the 100 m sprint, each on its own
   resilienceLoads?: Partial<Record<string, number>>;   // latest resilience test resistance, when known

@@ -47,6 +47,7 @@ export class AthletesPage implements OnInit {
   }
 
   goBack() { this.router.navigate(['/home']); }
+  openAssessments(m: Member) { this.router.navigate(['/assessments'], { queryParams: { client: m.clientName } }); }
   goMerge() { this.router.navigate(['/merge']); }
 
   count(v: View): number { return this.members.filter(m => this.inView(m, v)).length; }
