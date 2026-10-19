@@ -665,7 +665,13 @@ export class StudentsPage implements OnInit, OnDestroy {
       await this.firebase.setMemberInPerson(name.toLowerCase(), name, this.groupInPerson);
       await this.firebase.setMemberSuspended(name.toLowerCase(), name, this.groupSuspended, this.suspendReason);
       await this.firebase.setMemberFreeProgram(name.toLowerCase(), name, this.freeProgram);
-      await this.firebase.setMemberPrivate(name.toLowerCase(), name, this.groupPrivate);
+      const wasPrivate = !!(await this.firebase.getMember(name.toLowerCase()).catch(() => null))?.private;
+      if (wasPrivate !== this.groupPrivate) {
+        const ok = confirm(this.groupPrivate
+          ? `Make ${name} private? Their profile, results and videos will be hidden from other athletes, and they will be removed from the leaderboards.`
+          : `Make ${name} public? Their profile will be visible to other athletes, and all of their videos will be submitted for review.`);
+        if (ok) await this.firebase.setMemberPrivate(name.toLowerCase(), name, this.groupPrivate);
+      }
       this.panelOpen = false;
       await this.loadData(true);
     } catch (err) {

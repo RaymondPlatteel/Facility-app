@@ -82,7 +82,13 @@ export class AthletesPage implements OnInit {
       await this.firebase.setMemberInPerson(m.nameKey, m.clientName, this.draftInPerson);
       await this.firebase.setMemberSuspended(m.nameKey, m.clientName, this.draftSuspended, this.draftReason);
       await this.firebase.setMemberFreeProgram(m.nameKey, m.clientName, this.draftFree);
-      if (this.draftPrivate !== !!m.private) await this.firebase.setMemberPrivate(m.nameKey, m.clientName, this.draftPrivate);
+      if (this.draftPrivate !== !!m.private) {
+        const ok = confirm(this.draftPrivate
+          ? `Make ${m.clientName} private? Their profile, results and videos will be hidden from other athletes, and they will be removed from the leaderboards.`
+          : `Make ${m.clientName} public? Their profile will be visible to other athletes, and all of their videos will be submitted for review.`);
+        if (!ok) { this.saving = false; return; }
+        await this.firebase.setMemberPrivate(m.nameKey, m.clientName, this.draftPrivate);
+      }
       m.private = this.draftPrivate;
       m.inPerson = this.draftInPerson;
       m.suspended = this.draftSuspended;

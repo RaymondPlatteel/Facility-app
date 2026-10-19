@@ -365,6 +365,11 @@ export interface Member {
   latestRank: OmniRank | null;
   // The latest result in each test, for the athlete app's per-test and per-category leaderboards.
   testScores?: Record<string, number>;
+  verifiedLvl?: number | null;
+  verifiedRank?: OmniRank | null;
+  verifiedAt?: string | null;
+  coachSavedAt?: string | null;
+  boardGraceUntil?: string | null;
   lastActivityAt: string | null;
   lastActivityLabel: string | null;
 }
@@ -3341,7 +3346,7 @@ export class FirebaseService {
       id = docRef.id;
     }
     const change = describeAssessmentChange(previousInputs, a.inputs);
-    await this.touchMemberActivity(nameKey, a.clientName, change.text, a.lvl, a.rank, estimatedTests, testScoresOf(a.inputs));
+    await this.touchMemberActivity(nameKey, a.clientName, change.text, a.lvl, a.rank, estimatedTests, testScoresOf(a.inputs), isNaN(Date.parse(a.timestamp)) ? new Date().toISOString() : new Date(a.timestamp).toISOString());
     return id;
   }
 
@@ -3493,7 +3498,7 @@ export class FirebaseService {
   // assessment here. Best-effort — must never block the actual save.
   private async touchMemberActivity(
     nameKey: string, clientName: string, label: string, lvl: number, rank: OmniRank, estimatedTests?: string[],
-    testScores?: Record<string, number>
+    testScores?: Record<string, number>, testedAt?: string
   ): Promise<void> {
     try {
       const ref = doc(this.db, 'members', nameKey);
@@ -3505,6 +3510,10 @@ export class FirebaseService {
         // Read by the standings in Project 000: any estimate left keeps the athlete off them.
         ...(estimatedTests ? { estimatedTests } : {}),
         ...(testScores ? { testScores } : {}),
+        // What the athlete app's standings show: the Level as of the last assessment with every test verified, and
+        // when it was tested. A save that still holds an estimate leaves the last verified Level in place.
+        coachSavedAt: new Date().toISOString(),
+        ...(estimatedTests && estimatedTests.length === 0 && testedAt ? { verifiedLvl: lvl, verifiedRank: rank, verifiedAt: testedAt } : {}),
         lastActivityAt: new Date().toISOString(),
         lastActivityLabel: label
       }, { merge: true });
@@ -3536,6 +3545,35 @@ export class FirebaseService {
 
   async setMemberPrivate(nameKey: string, clientName: string, on: boolean): Promise<void> {
     await setDoc(doc(this.db, 'members', nameKey), { nameKey, clientName, private: on }, { merge: true });
+    if (!on) await this.submitPrivateProofs(nameKey, clientName);
+  }
+
+  // Made public: every video the athlete kept privately becomes a submission for review, with the results it was
+  // recorded for. Each private proof is marked as sent so it is never sent twice. Same as the athlete app.
+  async submitPrivateProofs(nameKey: string, clientName: string): Promise<number> {
+    const proofs = (await getDocs(query(collection(this.db, 'privateProofs'), where('nameKey', '==', nameKey)))).docs
+      .map(d => ({ id: d.id, ...(d.data() as any) }))
+      .filter(p => !p.submittedAt && p.proofs?.length);
+    if (!proofs.length) return 0;
+    const history = await this.listAssessmentsForClient({ clientName });
+    const latest = [...history].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+    if (!latest?.inputs) return 0;
+    const inputs = latest.inputs;
+    const sex = ((await getDoc(doc(this.db, 'members', nameKey))).data() as Member | undefined)?.sex ?? 'male';
+    const lvl = computeOmni(inputs).lvl;
+    for (const p of proofs) {
+      const now = new Date().toISOString();
+      const tests: string[] = p.proofs.map((x: any) => x.test);
+      const changed = Object.keys(inputs).filter(k => tests.some(t => k === t || k.startsWith(t + 'Weight') || k.startsWith(t + 'Reps')));
+      await addDoc(collection(this.db, 'pendingAssessments'), {
+        clientName, nameKey, timestamp: now, dateLabel: now.slice(0, 10),
+        inputs, baseInputs: inputs, changed, lvl, rank: getOmniRank(lvl, sex),
+        createdAt: now, status: 'pending', publicProof: true,
+        videoPaths: p.videoPaths ?? [], videoUrls: p.videoUrls ?? {}, proofs: p.proofs.map((x: any) => ({ test: x.test, kind: x.kind }))
+      });
+      await updateDoc(doc(this.db, 'privateProofs', p.id), { submittedAt: now });
+    }
+    return proofs.length;
   }
 
   // Once a submission is approved, the proof the athlete agreed to show goes on their profile beside each test.
