@@ -7,8 +7,8 @@ import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationP
 import type { ScheduleEntry } from './schedule.util';
 import { SYNC_CLIENT_ID, ensureExerciseKeys, isLiveWorkout, isStaleWorkout, staleCloseFields, newExerciseKey, normalizeState, sheetToSync, syncToSheet, WorkoutSyncState } from './workout-sync';
 import { environment } from '../../environments/environment';
-import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank, estimatedTestsOf, remainingEstimates, testScoresOf } from './omni.util';
-import type { TestOverrides, ResilienceInputs } from './omni.util';
+import { describeAssessmentChange, computeOmni, getOmniRank, blankResilienceInputs, calcResilience, getResilienceRank, estimatedTestsOf, remainingEstimates, testScoresOf, testValue } from './omni.util';
+import type { TestOverrides, ResilienceInputs, ScoredTestKey } from './omni.util';
 import { SplitMark, SplitSample, SplitModel, SplitStats, MODEL_SAMPLES, splitModel, splitSample, splitStats } from './split-mark.util';
 import type { RunSummary } from './run-import.util';
 
@@ -350,6 +350,10 @@ export interface Member {
   // activity feed. `suspendedReason` is the sentence they are shown.
   suspended?: boolean;
   suspendedReason?: string;
+  // A private account: seen by no other athlete, on no leaderboard, and its videos are not reviewed. Absent = public.
+  private?: boolean;
+  // Approved proof shown on the athlete's profile, keyed by test (see approvePublicProofs).
+  publicProofs?: Record<string, { url: string; kind: string; value: number; at: string }>;
   // Set by the coach only. The athlete gets their program without paying for it.
   freeProgram?: boolean;
   // Written only by the payments worker from Apple's signed receipts: the program is paid for until this time.
@@ -939,6 +943,8 @@ export interface PendingAssessment {
   videoPaths?: string[];
   videoUrls?: Record<string, string>;
   proofs?: Array<{ test: string; kind: 'video' | 'photo' | 'run' }>;
+  // Sent from athlete app 1.5 on: the athlete agreed that once approved, this proof is shown on their profile.
+  publicProof?: boolean;
   // The 30-Minute Run as scored from its recording; the file is in proof slot run.slot.
   run?: RunSummary | null;
   // The middle split as measured on its proof photo (points on the photo); the coach's points are added on review.
@@ -3275,7 +3281,8 @@ export class FirebaseService {
   // Upsert keyed by athlete + calendar day: at most one assessment per athlete
   // per day. Re-saving the same day overwrites that day's snapshot (timestamp
   // moves to the latest save); a new day creates a new entry.
-  async saveAssessment(a: Omit<FitnessAssessment, 'id'>): Promise<string> {
+  // `proven` lists tests the coach approved with proof: they are no longer estimates even when the result is unchanged.
+  async saveAssessment(a: Omit<FitnessAssessment, 'id'>, proven: string[] = []): Promise<string> {
     const now = new Date().toISOString();
     const nameKey = this.normalizeNameKey(a.clientName);
     const dayKey = (a.timestamp || '').slice(0, 10);
@@ -3298,7 +3305,7 @@ export class FirebaseService {
           return !latest || (data.timestamp || '') > (latest.timestamp || '') ? data : latest;
         }, null);
     const priorEstimated = priorDoc ? (priorDoc.estimatedTests ?? (priorDoc.selfReported ? estimatedTestsOf(priorDoc.inputs) : [])) : [];
-    const estimatedTests = remainingEstimates(priorEstimated, priorDoc?.inputs ?? null, a.inputs);
+    const estimatedTests = remainingEstimates(priorEstimated, priorDoc?.inputs ?? null, a.inputs).filter(k => !proven.includes(k));
     const payload = this.cleanForFirestore({
       clientId: a.clientId ?? null,
       clientName: a.clientName,
@@ -3525,6 +3532,37 @@ export class FirebaseService {
 
   async setMemberFreeProgram(nameKey: string, clientName: string, freeProgram: boolean): Promise<void> {
     await setDoc(doc(this.db, 'members', nameKey), { nameKey, clientName, freeProgram }, { merge: true });
+  }
+
+  async setMemberPrivate(nameKey: string, clientName: string, on: boolean): Promise<void> {
+    await setDoc(doc(this.db, 'members', nameKey), { nameKey, clientName, private: on }, { merge: true });
+  }
+
+  // Once a submission is approved, the proof the athlete agreed to show goes on their profile beside each test.
+  async approvePublicProofs(p: PendingAssessment, inputs: AssessmentInputs): Promise<void> {
+    if (!p.publicProof || !p.proofs?.length) return;
+    const member = (await getDoc(doc(this.db, 'members', p.nameKey))).data() as Member | undefined;
+    if (member?.private) return;
+    const shown: Record<string, { url: string; kind: string; value: number; at: string }> = {};
+    p.proofs.forEach((x, i) => {
+      const url = p.videoUrls?.['v' + i] ?? (i === 0 ? p.videoUrl ?? p.photoUrl : null);
+      if (url && x.kind !== 'run') shown[x.test] = { url, kind: x.kind, value: testValue(x.test as ScoredTestKey, inputs), at: p.timestamp };
+    });
+    if (Object.keys(shown).length) await setDoc(doc(this.db, 'members', p.nameKey), { publicProofs: shown }, { merge: true });
+  }
+
+  async removePublicProof(nameKey: string, test: string): Promise<void> {
+    await updateDoc(doc(this.db, 'members', nameKey), { [`publicProofs.${test}`]: deleteField() });
+  }
+
+  // Reports athletes make on proof shown on a profile.
+  async listOpenReports(): Promise<Array<{ id: string; reporterKey: string; targetKey: string; targetName: string; test: string; url: string; reason: string; createdAt: string }>> {
+    const snap = await getDocs(query(collection(this.db, 'reports'), where('status', '==', 'open')));
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  }
+
+  async closeReport(id: string, outcome: 'removed' | 'dismissed'): Promise<void> {
+    await updateDoc(doc(this.db, 'reports', id), { status: outcome, closedAt: new Date().toISOString() });
   }
 
   async setMemberSuspended(nameKey: string, clientName: string, suspended: boolean, reason: string): Promise<void> {

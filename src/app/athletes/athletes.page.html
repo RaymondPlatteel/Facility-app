@@ -20,6 +20,18 @@
       <input type="text" placeholder="Search users" [(ngModel)]="query" />
     </div>
 
+    <section class="at-reports" *ngIf="reports.length">
+      <h2>Reports <b>{{ reports.length }}</b></h2>
+      <div class="at-report" *ngFor="let r of reports">
+        <span class="at-report-text"><b>{{ r.targetName }}</b> · {{ r.test }} · {{ r.reason }}</span>
+        <span class="at-report-actions">
+          <button type="button" class="at-btn" (click)="watch(r.url)">Watch</button>
+          <button type="button" class="at-btn" (click)="removeProof(r.targetKey, r.test, r.id)">Remove Video</button>
+          <button type="button" class="at-btn" (click)="dismissReport(r.id)">Dismiss</button>
+        </span>
+      </div>
+    </section>
+
     <p class="at-error" *ngIf="error">{{ error }}</p>
     <p class="at-note" *ngIf="loading">Loading…</p>
     <p class="at-note" *ngIf="!loading && !shown.length">No users in this view.</p>
@@ -32,6 +44,7 @@
             <span class="tag" [class.ip]="m.inPerson">{{ m.inPerson ? 'In person' : 'Remote' }}</span>
             <span class="tag warn" *ngIf="m.suspended">Suspended</span>
             <span class="tag" *ngIf="m.freeProgram">Free program</span>
+            <span class="tag" *ngIf="m.private">Private</span>
           </span>
           <span class="at-lvl">{{ m.latestLvl != null ? 'Level ' + (m.latestLvl | number: '1.0-0') : '—' }}</span>
         </button>
@@ -62,6 +75,21 @@
               <option value="no">No</option>
             </select>
           </label>
+          <label class="field">
+            <span>Profile</span>
+            <select [ngModel]="draftPrivate ? 'yes' : 'no'" (ngModelChange)="draftPrivate = $event === 'yes'">
+              <option value="no">Public — on the leaderboards, profile and videos visible</option>
+              <option value="yes">Private — hidden from other athletes and off the leaderboards</option>
+            </select>
+          </label>
+          <div class="field wide" *ngIf="proofList(m).length">
+            <span>Videos on profile</span>
+            <div class="at-proof" *ngFor="let p of proofList(m)">
+              <span>{{ p.test }}</span>
+              <button type="button" class="at-btn" (click)="watch(p.url)">Watch</button>
+              <button type="button" class="at-btn" (click)="removeProof(m.nameKey, p.test)">Remove</button>
+            </div>
+          </div>
           <div class="at-actions">
             <button type="button" class="at-btn" style="margin-right:auto" (click)="openAssessments(m)">Assessments</button>
             <button type="button" class="at-btn" (click)="open = null">Cancel</button>

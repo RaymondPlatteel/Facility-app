@@ -307,7 +307,8 @@ export class PendingAssessmentsPage implements OnInit {
         inputs,
         lvl,
         rank
-      });
+      }, (p.proofs ?? []).map(x => x.test));
+      await this.firebase.approvePublicProofs(p, inputs);
       if (p.run?.key && p.changed?.includes('run30')) await this.firebase.markRunApproved(p.run.key, p.clientName);
       if (outcome) {
         await this.firebase.saveSplitReview(p.id!, outcome.split);
