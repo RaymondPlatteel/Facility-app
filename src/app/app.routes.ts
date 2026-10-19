@@ -148,6 +148,12 @@ export const routes: Routes = [
     data: { title: 'FIT Analyzer' }
   },
   {
+    path: 'ai-review',
+    canActivate: [authGuard],
+    loadComponent: () => import('./ai-review/ai-review.page').then( m => m.AiReviewPage),
+    data: { title: 'AI Review' }
+  },
+  {
     path: 'app-analytics',
     canActivate: [authGuard],
     loadComponent: () => import('./app-analytics/app-analytics.page').then( m => m.AppAnalyticsPage),

@@ -9,6 +9,9 @@ import { ASSESSMENT_META, RESILIENCE_TESTS, RESILIENCE_REPS, resilienceTestPct, 
 import { SplitPoints, splitDeg } from '../services/split-mark.util';
 import { SplitMarkEditorComponent } from '../shared/split-mark/split-mark-editor.component';
 import { RunReviewComponent } from '../shared/run-review/run-review.component';
+import { AiReviewService } from '../ai/ai-review.service';
+import type { AiReview } from '../ai/ai-review.types';
+import { AiPanelComponent } from '../ai/ai-panel.component';
 
 interface DiffRow {
   label: string;
@@ -37,7 +40,7 @@ const DIFF_META: Array<{ key: keyof AssessmentInputs; label: string; unit: strin
   standalone: true,
   templateUrl: './pending-assessments.page.html',
   styleUrls: ['./pending-assessments.page.scss'],
-  imports: [CommonModule, IonContent, IonIcon, SplitMarkEditorComponent, RunReviewComponent]
+  imports: [CommonModule, IonContent, IonIcon, SplitMarkEditorComponent, RunReviewComponent, AiPanelComponent]
 })
 export class PendingAssessmentsPage implements OnInit {
   pending: PendingAssessment[] = [];
@@ -83,7 +86,8 @@ export class PendingAssessmentsPage implements OnInit {
     private firebase: FirebaseService,
     private router: Router,
     private alertController: AlertController,
-    private toastController: ToastController
+    private toastController: ToastController,
+    public aiReview: AiReviewService
   ) {
     addIcons({ arrowBack, checkmarkCircleOutline, closeCircleOutline, chevronDownOutline, swapHorizontalOutline, chevronForwardOutline });
   }
@@ -182,6 +186,23 @@ export class PendingAssessmentsPage implements OnInit {
 
   goBack() {
     this.router.navigateByUrl('/home');
+  }
+
+  // ---------- AI review ----------
+  aiFor(p: PendingAssessment, slot: number): AiReview | undefined {
+    return this.aiReview.reviews$.value.find(r => r.id === `${p.id}_${slot}`);
+  }
+
+  // One line on the collapsed row: the worst verdict among the submission's videos.
+  aiSummary(p: PendingAssessment): { text: string; tone: 'valid' | 'invalid' | 'review' } | null {
+    const list = this.aiReview.reviews$.value.filter(r => r.pendingId === p.id);
+    if (!list.length) return null;
+    if (list.some(r => r.status === 'running')) return { text: 'analyzing', tone: 'review' };
+    const done = list.filter(r => r.status === 'done');
+    if (!done.length) return { text: 'could not read the video', tone: 'review' };
+    if (done.some(r => r.verdict === 'likely-invalid')) return { text: 'likely invalid', tone: 'invalid' };
+    if (done.some(r => r.verdict === 'needs-review')) return { text: 'needs your review', tone: 'review' };
+    return { text: 'likely valid', tone: 'valid' };
   }
 
   // Each proof on a submission, labelled with the test it is for. A url is null while the phone is still uploading.
@@ -317,6 +338,7 @@ export class PendingAssessmentsPage implements OnInit {
           .catch(err => console.error('Pending assessments: split learning failed', err));
       }
       await this.firebase.setPendingAssessmentStatus(p.id!, 'approved', note);
+      this.aiReview.recordDecision(p.id!, 'approved').catch(() => {});
       this.pending = this.pending.filter(x => x.id !== p.id);
       if (this.expandedId === p.id) this.expandedId = null;
       const t = await this.toastController.create({ message: 'Approved', duration: 1500, position: 'bottom' });
@@ -380,6 +402,7 @@ export class PendingAssessmentsPage implements OnInit {
     if (note === null) return;
     try {
       await this.firebase.setPendingAssessmentStatus(p.id!, 'rejected', note);
+      this.aiReview.recordDecision(p.id!, 'rejected').catch(() => {});
       this.pending = this.pending.filter(x => x.id !== p.id);
       if (this.expandedId === p.id) this.expandedId = null;
       const t = await this.toastController.create({ message: 'Rejected', duration: 1500, position: 'bottom' });

@@ -8,6 +8,7 @@ import { FirebaseService } from './services/firebase.service';
 import { CalendarSyncService } from './services/calendar-sync.service';
 import { TopBarActionService, TopBarAction } from './services/top-bar-action.service';
 import { ThemeService } from './services/theme.service';
+import { AiReviewService } from './ai/ai-review.service';
 import { addIcons } from 'ionicons';
 import {
   lockClosedOutline,
@@ -105,9 +106,12 @@ export class AppComponent implements OnInit, OnDestroy {
     private topBarActionService: TopBarActionService,
     private calendarSync: CalendarSyncService,
     public programReviews: ProgramReviewCountService,
-    private coachTheme: ThemeService
+    private coachTheme: ThemeService,
+    private aiReview: AiReviewService
   ) {
     this.coachTheme.init();
+    // The AI reviewer works through the video proofs whenever the coach app is open.
+    setTimeout(() => this.aiReview.start(), 4000);
     addIcons({
       scanOutline,
       lockClosedOutline,

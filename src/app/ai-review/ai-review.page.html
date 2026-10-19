@@ -1,0 +1,98 @@
+<ion-content [fullscreen]="true" class="air-content">
+  <div class="air-page">
+    <div class="air-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back"><ion-icon name="arrow-back"></ion-icon></button>
+      <div>
+        <div class="air-eyebrow">Video Proof</div>
+        <h1>AI <span>REVIEW</span></h1>
+      </div>
+    </div>
+
+    <p class="air-intro">
+      The reviewer watches every video sent with a score, checks it against the rules for that test, and writes what it
+      found under the video on the Pending page. It decides nothing: you approve or reject every submission as usual, and
+      each of your decisions becomes a lesson it learns from.
+    </p>
+
+    <!-- Status -->
+    <section class="air-card" *ngIf="state as s">
+      <div class="air-row">
+        <h2>Reviewer</h2>
+        <button type="button" class="air-switch" [class.on]="s.enabled" (click)="ai.setEnabled(!s.enabled)">{{ s.enabled ? 'On' : 'Off' }}</button>
+      </div>
+      <div class="air-now" *ngIf="s.running && s.current">
+        <span>Analyzing {{ s.current }}</span>
+        <div class="air-bar"><div [style.width.%]="s.progress * 100"></div></div>
+      </div>
+      <div class="air-now muted" *ngIf="!s.running">{{ s.enabled ? 'Idle. Every video so far has been reviewed.' : 'Paused.' }}</div>
+      <div class="air-stats">
+        <div><b>{{ s.waiting }}</b><span>Pending videos to review</span></div>
+        <div><b>{{ s.learning }}</b><span>Past videos to learn from</span></div>
+        <div><b>{{ done.length }}</b><span>Reviewed</span></div>
+        <div><b>{{ errors }}</b><span>Could not read</span></div>
+      </div>
+      <div class="air-error" *ngIf="s.lastError">{{ s.lastError }}</div>
+      <p class="air-note">It runs while the coach app is open, on this computer or the iPad.</p>
+    </section>
+
+    <!-- Learning -->
+    <section class="air-card">
+      <div class="air-row">
+        <h2>Learning</h2>
+        <button type="button" class="air-btn" [disabled]="training" (click)="retrain()">{{ training ? 'Training…' : 'Train Now' }}</button>
+      </div>
+      <div class="air-stats">
+        <div><b>{{ decided.length }}</b><span>Your decisions it has seen</span></div>
+        <div><b>{{ agreement === null ? '—' : (agreement * 100 | number:'1.0-0') + '%' }}</b><span>Agrees with you</span></div>
+        <div><b>{{ validPrecision }}</b><span>"Likely valid" you approved</span></div>
+        <div><b>{{ invalidPrecision }}</b><span>"Likely invalid" you rejected</span></div>
+      </div>
+      <p class="air-note" *ngIf="model as m">
+        Model trained on {{ m.n }} decisions ({{ m.positives }} approved, {{ m.n - m.positives }} rejected).
+        Held-out accuracy {{ m.accuracy * 100 | number:'1.0-0' }}%, against {{ m.ruleAccuracy * 100 | number:'1.0-0' }}% for the rules alone.
+        It starts shaping the verdicts once it has 20 decisions, at least 5 of each kind, and beats the rules.
+      </p>
+      <p class="air-note" *ngIf="!model">No model yet: it trains once you have decided at least 8 reviewed videos, some approved and some rejected.</p>
+    </section>
+
+    <!-- Per test -->
+    <section class="air-card" *ngIf="rows.length">
+      <h2>By Test</h2>
+      <div class="air-table">
+        <div class="air-tr head"><span>Test</span><span>Reviewed</span><span>Valid · Review · Invalid</span><span>Agrees</span></div>
+        <div class="air-tr" *ngFor="let r of rows">
+          <span>{{ r.label }}</span><span>{{ r.reviews }}</span>
+          <span>{{ r.valid }} · {{ r.review }} · {{ r.invalid }}</span>
+          <span>{{ r.agree < 0 ? '—' : r.agree + '%' }}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- How the weight is checked -->
+    <section class="air-card">
+      <h2>How It Checks the Weight</h2>
+      <ul class="air-list">
+        <li><b>Bar speed.</b> Near a true max the bar moves slowly. A new best lifted fast suggests lighter plates than claimed.</li>
+        <li><b>Fatigue.</b> In a hard set the reps slow down. Reps that stay quick to the end suggest a light load.</li>
+        <li><b>Progress.</b> A gain far beyond what training usually gives in the time since the last verified result.</li>
+        <li><b>Body weight and balance.</b> Lifts far past elite for the athlete's body weight, or out of line with their other lifts.</li>
+        <li><b>The plates.</b> Stills from the start, middle and end of each video, and your quick "looks right" or "doubtful" label, which it learns from.</li>
+        <li><b>Fakes.</b> Cuts in the video, and the same footage sent before by anyone.</li>
+      </ul>
+    </section>
+
+    <!-- Every review -->
+    <section class="air-card" *ngIf="reviews.length">
+      <h2>Reviews</h2>
+      <div class="air-review" *ngFor="let r of reviews.slice(0, 60)">
+        <button type="button" class="air-review-row" (click)="toggle(r)">
+          <span class="air-name">{{ r.clientName }}</span>
+          <span class="air-test">{{ label(r.test) }}</span>
+          <span class="air-verdict" [class.valid]="r.verdict === 'likely-valid' && r.status === 'done'" [class.invalid]="r.verdict === 'likely-invalid' && r.status === 'done'">{{ verdictText(r) }}</span>
+          <span class="air-coach" [class.valid]="r.coachDecision === 'approved'" [class.invalid]="r.coachDecision === 'rejected'">{{ r.coachDecision ? (r.coachDecision === 'approved' ? 'You approved' : 'You rejected') : 'Waiting for you' }}</span>
+        </button>
+        <app-ai-panel *ngIf="open === r.id" [review]="r"></app-ai-panel>
+      </div>
+    </section>
+  </div>
+</ion-content>

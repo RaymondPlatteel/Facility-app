@@ -491,3 +491,8 @@ ion-content {
   color: #6d8399;
   font-variant-numeric: tabular-nums;
 }
+
+// The AI reviewer's verdict on the collapsed row.
+.pending-ai { margin-top: 4px; font-size: 12px; font-weight: 600; color: #f5b942;
+  &.valid { color: #2dd36f; }
+  &.invalid { color: #ff5a6a; } }

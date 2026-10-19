@@ -34,6 +34,7 @@
     "@ebarooni/capacitor-calendar": "^7.2.0",
     "@garmin/fitsdk": "^21.208.0",
     "@ionic/angular": "^8.0.0",
+    "@mediapipe/tasks-vision": "^1.1.1",
     "firebase": "^11.9.0",
     "html2canvas": "^1.4.1",
     "ionicons": "^7.0.0",

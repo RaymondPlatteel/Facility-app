@@ -121,6 +121,7 @@
             <div class="pending-name">{{ p.clientName }}</div>
             <div class="pending-lift">LVL {{ p.lvl < 1 ? 1 : (p.lvl | number:'1.0-0') }} · {{ p.rank }}</div>
             <div class="pending-meta">{{ p.dateLabel }}<span *ngIf="p.videoUrl"> · video attached</span><span *ngIf="p.photoUrl"> · photo attached</span>{{ proofSummary(p) }}</div>
+            <div class="pending-ai" *ngIf="aiSummary(p) as s" [class.valid]="s.tone === 'valid'" [class.invalid]="s.tone === 'invalid'">AI: {{ s.text }}</div>
           </div>
           <div class="pending-actions">
             <button class="action-btn reject" (click)="reject(p)">
@@ -136,12 +137,14 @@
 
         <div class="review-panel" *ngIf="expandedId === p.id">
           <video *ngIf="p.videoUrl" class="review-video" [src]="p.videoUrl" controls playsinline></video>
+          <app-ai-panel *ngIf="p.videoUrl && !p.proofs?.length" [review]="aiFor(p, 0)"></app-ai-panel>
           <a *ngIf="p.photoUrl" [href]="p.photoUrl" target="_blank" rel="noopener"><img class="review-video" [src]="p.photoUrl" alt="Proof photo"></a>
 
           <div class="proof-item" *ngFor="let x of proofItems(p); let i = index; trackBy: trackProof">
             <div class="proof-label">{{ x.label }}</div>
             <ng-container *ngIf="x.url; else uploading">
               <video *ngIf="x.kind === 'video'" class="review-video" [src]="x.url" controls playsinline></video>
+              <app-ai-panel *ngIf="x.kind === 'video'" [review]="aiFor(p, i)"></app-ai-panel>
               <app-run-review *ngIf="x.kind === 'run' && p.run" [run]="p.run" [fileUrl]="x.url" [duplicateOf]="runDuplicate"
                               [submittedKm]="p.inputs.run30" [submittedAt]="p.timestamp"></app-run-review>
               <ng-container *ngIf="x.kind === 'photo'">
