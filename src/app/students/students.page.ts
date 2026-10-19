@@ -114,6 +114,8 @@ export class StudentsPage implements OnInit, OnDestroy {
   groupSuspended = false;
   suspendReason = '';
   freeProgram = false;
+  // Private: hidden from other athletes and off the leaderboards. Everyone is public unless set here or in the athlete app.
+  groupPrivate = false;
   linkUid = '';
   linking = false;
   clientCheckIns: CheckIn[] = [];
@@ -389,6 +391,7 @@ export class StudentsPage implements OnInit, OnDestroy {
     this.groupSuspended = false;
     this.suspendReason = '';
     this.freeProgram = false;
+    this.groupPrivate = false;
     this.panelOpen = true;
 
     this.paymentsLoading = true;
@@ -419,6 +422,7 @@ export class StudentsPage implements OnInit, OnDestroy {
       this.groupSuspended = member?.suspended ?? false;
       this.suspendReason = member?.suspendedReason ?? '';
       this.freeProgram = member?.freeProgram ?? false;
+      this.groupPrivate = member?.private ?? false;
       this.clientWaivers = waivers;
     } catch (err) {
       console.error('Clients: detail load failed', err);
@@ -454,6 +458,7 @@ export class StudentsPage implements OnInit, OnDestroy {
     this.competitorId = '';
     this.groupInPerson = true;
     this.freeProgram = false;
+    this.groupPrivate = false;
     this.panelOpen = true;
   }
 
@@ -660,6 +665,7 @@ export class StudentsPage implements OnInit, OnDestroy {
       await this.firebase.setMemberInPerson(name.toLowerCase(), name, this.groupInPerson);
       await this.firebase.setMemberSuspended(name.toLowerCase(), name, this.groupSuspended, this.suspendReason);
       await this.firebase.setMemberFreeProgram(name.toLowerCase(), name, this.freeProgram);
+      await this.firebase.setMemberPrivate(name.toLowerCase(), name, this.groupPrivate);
       this.panelOpen = false;
       await this.loadData(true);
     } catch (err) {
