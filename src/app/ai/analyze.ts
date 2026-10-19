@@ -182,7 +182,7 @@ function repsFrom(ph: Phase[], order: 'flex-ext' | 'ext-flex' | 'ext-flex-ext'):
 
 function repsCheck(seen: number, claimed: number, critical: boolean): AiCheck {
   if (!seen && claimed > 0) return check('reps', 'Reps', 'unclear', 'No complete rep could be followed. The athlete may be out of frame or hidden.');
-  if (seen >= claimed) return check('reps', 'Reps', 'pass', `${seen} seen, ${claimed} claimed.`);
+  if (seen >= claimed) return check('reps', 'Reps', 'pass', `${seen} seen, ${claimed} claimed.${seen > claimed ? ' More were seen than claimed, so the result may be understated.' : ''}`);
   if (claimed - seen <= Math.max(1, Math.round(claimed * 0.1))) return check('reps', 'Reps', 'unclear', `${seen} seen, ${claimed} claimed. Some may have been missed.`);
   return check('reps', 'Reps', 'fail', `${seen} seen, ${claimed} claimed.`, critical && seen < claimed * 0.75);
 }
@@ -201,6 +201,30 @@ function liftAnalysis(test: 'deadlift' | 'squat' | 'bench', r: VideoReading, cla
   const features: Record<string, number> = {};
   const estimates: Record<string, number | string> = {};
   const claimedReps = Math.max(1, Math.round(claim.reps ?? 1));
+
+  // Is it the right exercise at all? A pull-up filmed as a deadlift, or a standing video for a bench press, passes
+  // every later check by accident, so the posture is checked first.
+  {
+    const st0 = staturePx(frames) ?? 0;
+    let seen = 0, handsUp = 0, upright = 0, torsoSeen = 0;
+    for (const f of frames) {
+      const nose = pt(f, J.nose), wr = avgY(f, J.lWr, J.rWr);
+      if (nose && wr !== null) { seen++; if (wr < nose.y - 0.05 * st0) handsUp++; }
+      const sh = pt(f, S.sh), hip = pt(f, S.hip);
+      if (sh && hip) { torsoSeen++; if (Math.abs(sh.y - hip.y) > Math.abs(sh.x - hip.x)) upright++; }
+    }
+    const handsUpFrac = seen ? handsUp / seen : 0, uprightFrac = torsoSeen ? upright / torsoSeen : 0;
+    features['handsUpFrac'] = handsUpFrac;
+    features['uprightFrac'] = uprightFrac;
+    if (test !== 'bench' && seen > 6) {
+      checks.push(check('movement', `Looks like a ${test}`, handsUpFrac > 0.3 ? 'fail' : 'pass',
+        handsUpFrac > 0.3 ? `The hands were above the head for ${fmt(handsUpFrac * 100)}% of the video. This looks like a pull-up or an overhead movement.` : 'The hands stayed below the head, as in this lift.', handsUpFrac > 0.3));
+    }
+    if (test === 'bench' && torsoSeen > 6) {
+      checks.push(check('movement', 'Looks like a bench press', uprightFrac > 0.6 ? 'fail' : 'pass',
+        uprightFrac > 0.6 ? `The lifter was upright for ${fmt(uprightFrac * 100)}% of the video. A bench press is done lying down.` : 'The lifter was lying down.', uprightFrac > 0.6));
+    }
+  }
 
   // The driving joint: hips for the deadlift, knees for the squat, elbows for the bench press.
   const drive = test === 'deadlift' ? angleSeries(frames, s => [s.sh, s.hip, s.kn])

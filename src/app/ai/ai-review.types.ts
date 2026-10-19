@@ -78,4 +78,4 @@ export interface AiModel {
   trainedAt: string;
 }
 
-export const MODEL_VERSION = 'v4';
+export const MODEL_VERSION = 'v5';
