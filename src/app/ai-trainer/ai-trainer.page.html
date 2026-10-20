@@ -1,0 +1,65 @@
+<ion-content [fullscreen]="true" class="at-content">
+  <div class="at-page">
+    <div class="at-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back"><ion-icon name="arrow-back"></ion-icon></button>
+      <div>
+        <div class="at-eyebrow">Teach the AI</div>
+        <h1>AI <span>TRAINER</span></h1>
+      </div>
+    </div>
+
+    <p class="at-intro">
+      One trainer for each test, plus weight and video integrity. In each you judge what the AI found on real videos,
+      tune how strict it is, and add videos of your own. Every judgement is kept and the AI learns from all of them.
+    </p>
+
+    <div class="at-summary" *ngIf="state as s">
+      <div><b>{{ taughtTotal }}</b><span>Videos taught</span></div>
+      <div><b>{{ attentionTotal }}</b><span>Need your eye</span></div>
+      <div><b>{{ s.waiting + s.learning }}</b><span>Still being analysed</span></div>
+    </div>
+
+    <h2 class="at-section">Video tests</h2>
+    <div class="at-grid">
+      <button type="button" class="at-card" *ngFor="let c of tests" (click)="open(c)">
+        <div class="at-card-head">
+          <span class="at-card-title">{{ c.title }}</span>
+          <span class="at-chip" [class]="c.stats!.status">{{ statusText[c.stats!.status] }}</span>
+        </div>
+        <p>{{ c.blurb }}</p>
+        <div class="at-card-stats">
+          <span><b>{{ c.stats!.examples }}</b> reviewed</span>
+          <span><b>{{ c.stats!.taught }}</b> taught</span>
+          <span><b>{{ c.stats!.agree === null ? '—' : (c.stats!.agree! * 100 | number:'1.0-0') + '%' }}</b> agrees</span>
+        </div>
+        <span class="at-card-go" *ngIf="c.stats!.attention">{{ c.stats!.attention }} need{{ c.stats!.attention === 1 ? 's' : '' }} your eye <ion-icon name="chevron-forward-outline"></ion-icon></span>
+      </button>
+    </div>
+
+    <h2 class="at-section">Across every test</h2>
+    <div class="at-grid">
+      <button type="button" class="at-card" *ngFor="let c of special" (click)="open(c)">
+        <div class="at-card-head">
+          <span class="at-card-title">{{ c.title }}</span>
+          <span class="at-chip" [class]="c.stats!.status">{{ statusText[c.stats!.status] }}</span>
+        </div>
+        <p>{{ c.blurb }}</p>
+        <div class="at-card-stats">
+          <span><b>{{ c.stats!.examples }}</b> videos</span>
+          <span><b>{{ c.stats!.taught }}</b> taught</span>
+          <span>{{ c.stats!.extra }}</span>
+        </div>
+        <span class="at-card-go" *ngIf="c.stats!.attention">{{ c.stats!.attention }} to look at <ion-icon name="chevron-forward-outline"></ion-icon></span>
+      </button>
+    </div>
+
+    <h2 class="at-section">Other trainers</h2>
+    <div class="at-grid">
+      <button type="button" class="at-card" *ngFor="let c of others" (click)="open(c)">
+        <div class="at-card-head"><span class="at-card-title">{{ c.title }}</span></div>
+        <p>{{ c.blurb }}</p>
+        <span class="at-card-go">Open <ion-icon name="chevron-forward-outline"></ion-icon></span>
+      </button>
+    </div>
+  </div>
+</ion-content>

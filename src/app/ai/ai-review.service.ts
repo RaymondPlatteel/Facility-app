@@ -6,8 +6,9 @@ import {
 import { FirebaseService, PendingAssessment, AssessmentInputs } from '../services/firebase.service';
 import { testValue } from '../services/omni.util';
 import type { ScoredTestKey } from '../services/omni.util';
-import { AiModel, AiReview, MODEL_VERSION, VIDEO_TESTS, VideoTest } from './ai-review.types';
+import { AiModel, AiReview, AiTrainingVideo, MODEL_VERSION, TrainerFeedback, VIDEO_TESTS, VideoTest, decisionOf, actualWeightOf } from './ai-review.types';
 import { readVideo, hamming } from './pose-video';
+import { setThresholds, getOverrides, thr } from './thresholds';
 import { analyze, ruleVerdict, learnVector, LEARN_FEATURES, AthleteContext, weightVector, WEIGHT_FEATURES, WeightModel } from './analyze';
 import { train, predict, looAccuracy, trainRidge, looMae } from './learn';
 
@@ -50,6 +51,8 @@ export class AiReviewService {
   private unsub: Unsubscribe[] = [];
   private pending: PendingAssessment[] = [];
   private decided: PendingAssessment[] = [];
+  private trainingDecided: PendingAssessment[] = [];
+  readonly trainingVideos$ = new BehaviorSubject<AiTrainingVideo[]>([]);
   private hashIndex: Array<{ id: string; pendingId: string; nameKey: string; clientName: string; hashes: string[] }> = [];
   private retrainTimer: ReturnType<typeof setTimeout> | null = null;
   private failures = new Map<string, number>();
@@ -82,12 +85,24 @@ export class AiReviewService {
     this.unsub.push(onSnapshot(doc(this.db, 'aiModels', 'global'), snap => {
       this.zone.run(() => this.model$.next(snap.exists() ? (snap.data() as AiModel) : null));
     }));
+    // The coach's tuned thresholds (AI Trainer), applied to every review made after they change.
+    this.unsub.push(onSnapshot(doc(this.db, 'aiConfig', 'thresholds'), snap => {
+      setThresholds((snap.data() as any)?.values ?? {});
+    }, () => { /* defaults */ }));
     this.unsub.push(onSnapshot(doc(this.db, 'aiModels', 'weight'), snap => {
       this.zone.run(() => this.weightModel$.next(snap.exists() ? (snap.data() as AiModel) : null));
     }));
     // Submissions waiting for the coach, live.
     this.unsub.push(onSnapshot(query(collection(this.db, 'pendingAssessments'), where('status', '==', 'pending')), snap => {
       this.pending = snap.docs.map(d => ({ id: d.id, ...(d.data() as PendingAssessment) }));
+      this.refreshCounts();
+      this.pump();
+    }));
+    // Videos the coach added in the AI Trainer, learned from like decided submissions.
+    this.unsub.push(onSnapshot(collection(this.db, 'aiTrainingVideos'), snap => {
+      const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as AiTrainingVideo) }));
+      this.zone.run(() => this.trainingVideos$.next(list));
+      this.trainingDecided = list.map(v => this.pseudoSubmission(v));
       this.refreshCounts();
       this.pump();
     }));
@@ -103,6 +118,18 @@ export class AiReviewService {
     getDocs(collection(this.db, 'aiHashes')).then(snap => {
       this.hashIndex = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
     }).catch(() => { /* first run: no index yet */ });
+  }
+
+  // A training video, shaped like a decided submission so the same review pipeline handles it.
+  private pseudoSubmission(v: AiTrainingVideo): PendingAssessment {
+    const inputs: any = { bodyWeight: v.bodyWeightLb ?? 0, height: v.heightIn ?? 0 };
+    inputs[v.test] = v.claimed.value;
+    if (v.test === 'deadlift' || v.test === 'squat' || v.test === 'bench') { inputs[v.test + 'Weight'] = v.claimed.weight ?? 0; inputs[v.test + 'Reps'] = v.claimed.reps ?? 1; }
+    return {
+      id: 'tv_' + v.id, nameKey: 'ai-training', clientName: v.name || 'Training video', timestamp: v.createdAt, dateLabel: v.createdAt.slice(0, 10),
+      inputs, lvl: 0, rank: 'UNRANKED', createdAt: v.createdAt, status: v.label === 'valid' ? 'approved' : 'rejected',
+      reviewedAt: v.createdAt, proofs: [{ test: v.test, kind: 'video' }], videoUrls: { v0: v.url }, changed: [v.test]
+    } as unknown as PendingAssessment;
   }
 
   // ---------- the queue ----------
@@ -140,7 +167,7 @@ export class AiReviewService {
   private refreshCounts() {
     const jobs = (list: PendingAssessment[]) => list.reduce<Job[]>((all, p) => all.concat(this.jobsOf(p)), []);
     const waiting = jobs(this.pending).filter(j => this.needsWork(j)).length;
-    const learning = jobs(this.decided).filter(j => this.needsWork(j)).length;
+    const learning = jobs(this.decided.concat(this.trainingDecided)).filter(j => this.needsWork(j)).length;
     this.patch({ waiting, learning });
   }
 
@@ -148,7 +175,7 @@ export class AiReviewService {
     for (const p of [...this.pending].sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''))) {
       for (const j of this.jobsOf(p)) if (this.needsWork(j) && (this.failures.get(`${p.id}_${j.slot}`) ?? 0) < 2) return j;
     }
-    for (const p of this.decided) {
+    for (const p of this.trainingDecided.concat(this.decided)) {
       for (const j of this.jobsOf(p)) if (this.needsWork(j) && (this.failures.get(`${p.id}_${j.slot}`) ?? 0) < 2) return j;
     }
     return null;
@@ -208,7 +235,7 @@ export class AiReviewService {
       if (reading.hashes.length >= 3) {
         for (const h of this.hashIndex) {
           if (h.pendingId === p.id) continue;
-          const matches = reading.hashes.filter(a => h.hashes.some(b => hamming(a, b) <= 6)).length;
+          const matches = reading.hashes.filter(a => h.hashes.some(b => hamming(a, b) <= thr('*', 'duplicate'))).length;
           if (matches >= 3) {
             if (h.nameKey === p.nameKey) ownRepeat = true;
             else { duplicateOf = h.clientName; break; }
@@ -261,7 +288,7 @@ export class AiReviewService {
         this.hashIndex = [...this.hashIndex.filter(x => x.id !== id), { id, ...h }];
       }
       this.patch({ done: this.state$.value.done + 1 });
-      if (review.coachDecision) this.scheduleRetrain();
+      if (decisionOf(review)) this.scheduleRetrain();
     } catch (err: any) {
       this.failures.set(id, (this.failures.get(id) ?? 0) + 1);
       const msg = String(err?.message ?? err);
@@ -309,6 +336,57 @@ export class AiReviewService {
     this.scheduleRetrain();
   }
 
+  // ---------- the AI Trainer ----------
+
+  // What the coach taught on one review: its label, which checks were right, the real weight. Merged, never replaced.
+  async saveTrainer(reviewId: string, fb: Partial<TrainerFeedback>) {
+    if (!this.db) this.db = getFirestore();
+    const cur = this.reviewFor(reviewId)?.trainer ?? ({ at: '' } as TrainerFeedback);
+    const next: TrainerFeedback = { ...cur, ...fb, checks: { ...(cur.checks ?? {}), ...(fb.checks ?? {}) }, at: new Date().toISOString() };
+    await updateDoc(doc(this.db, 'aiReviews', reviewId), { trainer: JSON.parse(JSON.stringify(next)) });
+    this.scheduleRetrain();
+  }
+
+  // The thresholds the coach has tuned for one test ('*' for the settings every video shares).
+  async saveThresholds(test: string, values: Record<string, number>) {
+    if (!this.db) this.db = getFirestore();
+    const all = { ...getOverrides(), [test]: values };
+    for (const k of Object.keys(all)) if (!Object.keys(all[k]).length) delete all[k];
+    await setDoc(doc(this.db, 'aiConfig', 'thresholds'), { values: all, updatedAt: new Date().toISOString() });
+  }
+
+  // Analyses every video of one test again with the thresholds now in force.
+  async rerunTest(test: VideoTest | 'all') {
+    if (!this.db) this.db = getFirestore();
+    const list = this.reviews$.value.filter(r => (test === 'all' || r.test === test) && r.status !== 'running');
+    for (const r of list) {
+      this.failures.delete(r.id!);
+      await updateDoc(doc(this.db, 'aiReviews', r.id!), { modelVersion: 'rerun' }).catch(() => {});
+    }
+    setTimeout(() => { this.refreshCounts(); this.pump(); }, 800);
+    return list.length;
+  }
+
+  // A video the coach adds to teach a test directly.
+  async addTrainingVideo(file: File, meta: Omit<AiTrainingVideo, 'id' | 'url' | 'path' | 'createdAt' | 'name'>, name: string): Promise<void> {
+    if (!this.db) this.db = getFirestore();
+    const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+    const path = `aiTraining/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name.replace(/[^\w.-]+/g, '_')}`;
+    const r = ref(getStorage(), path);
+    await uploadBytes(r, file, { contentType: file.type || 'video/mp4' });
+    const url = await getDownloadURL(r);
+    const doc0: Omit<AiTrainingVideo, 'id'> = { ...meta, url, path, name, createdAt: new Date().toISOString() };
+    await setDoc(doc(this.db, 'aiTrainingVideos', Math.random().toString(36).slice(2, 12)), JSON.parse(JSON.stringify(doc0)));
+  }
+
+  async deleteTrainingVideo(id: string) {
+    if (!this.db) this.db = getFirestore();
+    const { deleteDoc } = await import('firebase/firestore');
+    await deleteDoc(doc(this.db, 'aiTrainingVideos', id));
+    const rv = this.reviews$.value.find(r => r.id === `tv_${id}_0`);
+    if (rv) await deleteDoc(doc(this.db, 'aiReviews', rv.id!)).catch(() => {});
+  }
+
   // The weight that was really on the bar, as the coach confirms it. This is what teaches the weight estimate.
   async labelActualWeight(reviewId: string, lb: number | null) {
     if (!this.db) this.db = getFirestore();
@@ -333,7 +411,7 @@ export class AiReviewService {
     const rows = this.reviews$.value.filter(r => r.status === 'done' && ['deadlift', 'squat', 'bench'].includes(r.test) && r.features && r.weight?.reference);
     const X: number[][] = [], y: number[] = [], generic: number[] = [];
     for (const r of rows) {
-      const actual = r.coachLabels?.actualWeight ?? (r.coachDecision === 'approved' && r.coachLabels?.weight !== 'doubtful' ? r.claimed.weight : null);
+      const actual = actualWeightOf(r) ?? (decisionOf(r) === 'approved' && r.coachLabels?.weight !== 'doubtful' ? r.claimed.weight : null);
       if (!actual || actual <= 0) continue;
       const f = r.features as Record<string, number>;
       if (!(f['pctOfMax'] > 0) || f['speedUnreliable']) continue;
@@ -356,14 +434,14 @@ export class AiReviewService {
 
   async retrain(): Promise<AiModel | null> {
     this.retrainWeight().catch(() => {});
-    const labelled = this.reviews$.value.filter(r => r.status === 'done' && r.coachDecision && Array.isArray((r as any).vector));
+    const labelled = this.reviews$.value.filter(r => r.status === 'done' && decisionOf(r) && Array.isArray((r as any).vector));
     if (labelled.length < 8) return null;
     const X = labelled.map(r => (r as any).vector as number[]);
-    const y = labelled.map(r => (r.coachDecision === 'approved' ? 1 : 0));
+    const y = labelled.map(r => (decisionOf(r) === 'approved' ? 1 : 0));
     if (new Set(y).size < 2) return null;
     const m = train(X, y);
     const accuracy = looAccuracy(X, y);
-    const ruleAccuracy = labelled.filter(r => ((r.verdict ?? 'needs-review') !== 'likely-invalid' ? 1 : 0) === (r.coachDecision === 'approved' ? 1 : 0)).length / labelled.length;
+    const ruleAccuracy = labelled.filter(r => ((r.verdict ?? 'needs-review') !== 'likely-invalid' ? 1 : 0) === (decisionOf(r) === 'approved' ? 1 : 0)).length / labelled.length;
     const model: AiModel = {
       kind: 'logistic', featureNames: [...LEARN_FEATURES], weights: m.weights, mean: m.mean, std: m.std,
       n: labelled.length, positives: y.filter(v => v === 1).length, accuracy, ruleAccuracy, trainedAt: new Date().toISOString()

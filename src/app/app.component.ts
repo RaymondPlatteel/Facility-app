@@ -41,7 +41,8 @@ import {
   menuOutline,
   arrowBack,
   addOutline,
-  scanOutline
+  scanOutline,
+  sparklesOutline
 } from 'ionicons/icons';
 
 @Component({
@@ -114,6 +115,7 @@ export class AppComponent implements OnInit, OnDestroy {
     setTimeout(() => this.aiReview.start(), 4000);
     addIcons({
       scanOutline,
+      sparklesOutline,
       lockClosedOutline,
       keypadOutline,
       schoolOutline,

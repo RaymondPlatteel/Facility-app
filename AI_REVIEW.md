@@ -89,3 +89,14 @@ Running in an open coach app suits the first few thousand videos. For millions:
 3. **Plates.** Train a small plate detector and reader on the confirmed lifts (the stills and their weights) once there are thousands.
 4. **Auto-approval** comes last: only for tests where the model's held-out agreement with the coach is very high, only
    for confident "likely valid" calls, and never automatic rejection.
+
+## AI Trainer
+
+The sidebar group "AI Trainer" holds `/ai-trainer` (a card for every video test, Weight on the Bar and Video Integrity, linking to the Middle Split and Program trainers) and `/ai-trainer/:area` for each.
+
+Each page lets the coach:
+- judge the AI's checks on real videos (Right or Wrong per check, Valid or Invalid for the video, the real weight for lifts). Unjudged and least-certain videos come first. A Valid or Invalid label counts as the coach's decision for learning (`decisionOf`), and a real weight as the weight label (`actualWeightOf`);
+- tune the thresholds the checks use (`ai/thresholds.ts`, stored at `aiConfig/thresholds`), then analyse the videos again;
+- add training videos (Storage `aiTraining/`, Firestore `aiTrainingVideos`), analysed as pseudo-submissions (`tv_<id>_0`).
+
+Plate reading from the video still needs many confirmed lifts to learn from; it improves as real weights are entered.

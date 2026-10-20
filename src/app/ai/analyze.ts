@@ -1,5 +1,6 @@
 import type { AiCheck, AiVerdict, VideoTest, WeightEstimate } from './ai-review.types';
 import { predictRidge, Trained } from './learn';
+import { thr } from './thresholds';
 import type { PoseFrame, Point, VideoReading } from './pose-video';
 
 // The checks for each video test. Everything here is plain arithmetic on the landmarks MediaPipe finds in each frame,
@@ -229,7 +230,7 @@ export function estimateWeight(
 
   let share = pct / 100;
   let method: WeightEstimate['method'] = 'speed';
-  let spread = ctx.refMax ? 0.14 : 0.3;
+  let spread = ctx.refMax ? thr(test, 'weightSpread') / 100 : 0.3;
   if (model && model.ok) {
     const x = weightVector(f);
     const learned = predictRidge(model, x);
@@ -304,12 +305,12 @@ function liftAnalysis(test: 'deadlift' | 'squat' | 'bench', r: VideoReading, cla
     features['handsUpFrac'] = handsUpFrac;
     features['uprightFrac'] = uprightFrac;
     if (test !== 'bench' && seen > 6) {
-      checks.push(check('movement', `Looks like a ${test}`, handsUpFrac > 0.3 ? 'fail' : 'pass',
-        handsUpFrac > 0.3 ? `The hands were above the head for ${fmt(handsUpFrac * 100)}% of the video. This looks like a pull-up or an overhead movement.` : 'The hands stayed below the head, as in this lift.', handsUpFrac > 0.3));
+      checks.push(check('movement', `Looks like a ${test}`, handsUpFrac > thr('*', 'handsUp') / 100 ? 'fail' : 'pass',
+        handsUpFrac > thr('*', 'handsUp') / 100 ? `The hands were above the head for ${fmt(handsUpFrac * 100)}% of the video. This looks like a pull-up or an overhead movement.` : 'The hands stayed below the head, as in this lift.', handsUpFrac > thr('*', 'handsUp') / 100));
     }
     if (test === 'bench' && torsoSeen > 6) {
-      checks.push(check('movement', 'Looks like a bench press', uprightFrac > 0.6 ? 'fail' : 'pass',
-        uprightFrac > 0.6 ? `The lifter was upright for ${fmt(uprightFrac * 100)}% of the video. A bench press is done lying down.` : 'The lifter was lying down.', uprightFrac > 0.6));
+      checks.push(check('movement', 'Looks like a bench press', uprightFrac > thr('*', 'upright') / 100 ? 'fail' : 'pass',
+        uprightFrac > thr('*', 'upright') / 100 ? `The lifter was upright for ${fmt(uprightFrac * 100)}% of the video. A bench press is done lying down.` : 'The lifter was lying down.', uprightFrac > thr('*', 'upright') / 100));
     }
   }
 
@@ -358,15 +359,15 @@ function liftAnalysis(test: 'deadlift' | 'squat' | 'bench', r: VideoReading, cla
     let lockOk: boolean, depthOk: boolean;
     if (test === 'deadlift') {
       const k = Math.max(...[knee[rep.ext.i], knee[Math.min(knee.length - 1, rep.ext.i + 1)]].filter((x): x is number => x !== null), 0);
-      lockOk = top >= 160 && (k === 0 || k >= 155);
-      depthOk = bottom <= 120;   // hips well bent: the bar started from the floor
+      lockOk = top >= thr('deadlift', 'lockout') && (k === 0 || k >= thr('deadlift', 'knee'));
+      depthOk = bottom <= thr('deadlift', 'floor');   // hips well bent: the bar started from the floor
     } else if (test === 'squat') {
-      lockOk = top >= 155;
+      lockOk = top >= thr('squat', 'lockout');
       const f = frames[rep.flex.i], hip = pt(f, S.hip), kn = pt(f, S.kn);
-      depthOk = bottom <= 95 || (!!hip && !!kn && hip.y >= kn.y - 0.02 * st);   // hip crease below the top of the knee
+      depthOk = bottom <= thr('squat', 'depth') || (!!hip && !!kn && hip.y >= kn.y - 0.02 * st);   // hip crease below the top of the knee
     } else {
-      lockOk = top >= 155;
-      depthOk = bottom <= 95;    // elbows bent to the chest
+      lockOk = top >= thr('bench', 'lockout');
+      depthOk = bottom <= thr('bench', 'depth');    // elbows bent to the chest
     }
     if (lockOk) locked++;
     if (depthOk) deep++;
@@ -395,7 +396,7 @@ function liftAnalysis(test: 'deadlift' | 'squat' | 'bench', r: VideoReading, cla
     if (hips.length > 6 && arm > 0) {
       const lift = (pctile(hips, 95) - pctile(hips, 5)) / arm;
       features['hipRise'] = lift;
-      checks.push(check('bench-contact', 'Hips stay on the bench', lift <= 0.18 ? 'pass' : lift <= 0.3 ? 'unclear' : 'fail', `The hips moved ${fmt(lift * 100)}% of an arm's length.`));
+      checks.push(check('bench-contact', 'Hips stay on the bench', lift <= thr('bench', 'hipRise') / 100 ? 'pass' : lift <= thr('bench', 'hipRise') / 100 * 1.7 ? 'unclear' : 'fail', `The hips moved ${fmt(lift * 100)}% of an arm's length.`));
     }
   }
 
@@ -467,7 +468,7 @@ function liftAnalysis(test: 'deadlift' | 'squat' | 'bench', r: VideoReading, cla
     features['claimIsBest'] = isBest ? 1 : 0;
     if (isBest && claimedReps <= 3) {
       // Measured from one camera, bar speed is a hint, not proof: it can raise a question but never fail a lift.
-      checks.push(check('bar-speed', 'Bar speed fits a max effort', pct >= 72 ? 'pass' : 'unclear',
+      checks.push(check('bar-speed', 'Bar speed fits a max effort', pct >= thr(test, 'speedPass') ? 'pass' : 'unclear',
         `The slowest rep rose at ${fmt(slowest, 2)} m/s, about ${fmt(pct)}% of a max. A new best is usually slow.${ctx.heightIn ? '' : ' Height unknown, so the scale is assumed.'}`));
     }
     if (claimedReps >= 4 && speeds.length >= 4) {
@@ -507,12 +508,12 @@ function bodyweightAnalysis(test: 'pushups' | 'pullups', r: VideoReading, claim:
     if (test === 'pushups') {
       const f = frames[rep.flex.i];
       const line = angle(pt(f, S.sh), pt(f, S.hip), pt(f, S.an));
-      const bendOk = bent <= 100, lockOk = straight >= 150, lineOk = line === null || line >= 150;
+      const bendOk = bent <= thr('pushups', 'bend'), lockOk = straight >= thr('pushups', 'lockout'), lineOk = line === null || line >= thr('pushups', 'line');
       if (bendOk) a++; if (lockOk) b++; if (lineOk) c++;
       if (bendOk && lockOk && lineOk) good++;
     } else {
       const f = frames[rep.flex.i], nose = pt(f, J.nose), wr = avgY(f, J.lWr, J.rWr);
-      const hangOk = straight >= 145, chinOk = nose && wr !== null ? nose.y <= wr + 0.03 * st : bent <= 70;
+      const hangOk = straight >= thr('pullups', 'hang'), chinOk = nose && wr !== null ? nose.y <= wr + 0.03 * st : bent <= 70;
       if (hangOk) a++; if (chinOk) b++;
       if (hangOk && chinOk) good++;
     }
@@ -522,12 +523,14 @@ function bodyweightAnalysis(test: 'pushups' | 'pullups', r: VideoReading, claim:
   if (reps.length) estimates['Reps meeting the standard'] = `${good} of ${reps.length}`;
   if (reps.length) {
     if (test === 'pushups') {
-      checks.push(share(a, reps.length, 'Elbows bend to 90 degrees', 'bend', 0.9, 0.6));
-      checks.push(share(b, reps.length, 'Arms lock out at the top', 'lockout', 0.9, 0.6));
-      checks.push(share(c, reps.length, 'Body in a straight line', 'line', 0.9, 0.6));
+      const ps = thr('pushups', 'passShare') / 100;
+      checks.push(share(a, reps.length, 'Elbows bend to 90 degrees', 'bend', ps, 0.6));
+      checks.push(share(b, reps.length, 'Arms lock out at the top', 'lockout', ps, 0.6));
+      checks.push(share(c, reps.length, 'Body in a straight line', 'line', ps, 0.6));
     } else {
-      checks.push(share(a, reps.length, 'Full hang between reps', 'hang', 0.9, 0.6));
-      checks.push(share(b, reps.length, 'Chin clears the bar', 'chin', 0.9, 0.6));
+      const ps = thr('pullups', 'passShare') / 100;
+      checks.push(share(a, reps.length, 'Full hang between reps', 'hang', ps, 0.6));
+      checks.push(share(b, reps.length, 'Chin clears the bar', 'chin', ps, 0.6));
     }
   }
 
@@ -539,7 +542,7 @@ function bodyweightAnalysis(test: 'pushups' | 'pullups', r: VideoReading, claim:
     if (hx.length > 6 && torso.length) {
       const swing = (pctile(hx, 95) - pctile(hx, 5)) / median(torso);
       features['swing'] = swing;
-      checks.push(check('kip', 'No kipping or swinging', swing <= 0.35 ? 'pass' : swing <= 0.6 ? 'unclear' : 'fail', `The hips swung ${fmt(swing * 100)}% of the torso length.`));
+      checks.push(check('kip', 'No kipping or swinging', swing <= thr('pullups', 'kip') / 100 ? 'pass' : swing <= thr('pullups', 'kip') / 100 * 1.7 ? 'unclear' : 'fail', `The hips swung ${fmt(swing * 100)}% of the torso length.`));
     }
   }
 
@@ -602,7 +605,7 @@ function longJumpAnalysis(r: VideoReading, claim: Claim, ctx: AthleteContext): A
     const ratio = claimedM > 0 ? meters / claimedM : 0;
     features['jumpRatio'] = ratio;
     estimates['Distance measured'] = `${fmt(meters / 0.0254)} in`;
-    checks.push(check('distance', 'Distance matches the claim', ratio >= 0.85 ? 'pass' : ratio >= 0.6 ? 'unclear' : 'fail',
+    checks.push(check('distance', 'Distance matches the claim', ratio >= thr('longjump', 'distance') / 100 ? 'pass' : ratio >= thr('longjump', 'distance') / 100 - 0.25 ? 'unclear' : 'fail',
       `Measured about ${fmt(meters / 0.0254)} in against ${fmt(claim.value)} in claimed${ctx.heightIn ? '' : ' (height unknown, scale assumed)'}. Camera angle can shorten it.`));
   } else {
     checks.push(check('distance', 'Distance matches the claim', 'unclear', 'The feet were not clear at take-off or landing.'));
@@ -618,7 +621,7 @@ function runAnalysis(test: 'sprint' | 'run400', r: VideoReading, claim: Claim): 
   const ratio = claimed > 0 ? r.duration / claimed : 0;
   features['durationRatio'] = ratio;
   estimates['Video length'] = `${fmt(r.duration, 1)} s`;
-  const tol = test === 'sprint' ? 0.4 : 1.5;
+  const tol = thr(test, 'length');
   checks.push(check('length', 'Video covers the whole run', r.duration + tol >= claimed ? 'pass' : 'fail',
     `The video is ${fmt(r.duration, 1)} s long; ${fmt(claimed, test === 'sprint' ? 2 : 0)} s claimed.`, r.duration + tol < claimed));
   // Running: the feet keep moving apart and together.
@@ -656,7 +659,7 @@ function holdAnalysis(test: 'pike' | 'backbend', r: VideoReading, claim: Claim):
   }
   features['holdSeconds'] = best;
   estimates['Held for'] = `${fmt(best, 1)} s`;
-  checks.push(check('hold', 'Held for 5 seconds', best >= 4.5 ? 'pass' : best >= 2 ? 'unclear' : test === 'backbend' && claim.value <= 1 ? 'unclear' : 'fail',
+  checks.push(check('hold', 'Held for 5 seconds', best >= thr(test, 'hold') ? 'pass' : best >= 2 ? 'unclear' : test === 'backbend' && claim.value <= 1 ? 'unclear' : 'fail',
     best > 0 ? `Held about ${fmt(best, 1)} s.` : 'The position was not recognised.'));
 
   if (test === 'pike') {
@@ -709,7 +712,7 @@ function universal(test: VideoTest, r: VideoReading, claim: Claim, ctx: AthleteC
   features['presence'] = presence;
   features['duration'] = r.duration;
   const runLike = test === 'sprint' || test === 'run400';
-  checks.push(check('visible', 'Athlete visible', presence >= (runLike ? 0.3 : 0.7) ? 'pass' : presence >= 0.25 ? 'unclear' : 'fail',
+  checks.push(check('visible', 'Athlete visible', presence >= thr(test, 'visible') / 100 ? 'pass' : presence >= 0.25 ? 'unclear' : 'fail',
     `Found in ${fmt(presence * 100)}% of the frames.`));
 
   // Cuts: a frame that changes far more than its neighbours. A handheld camera following a runner moves a lot, so
@@ -717,7 +720,7 @@ function universal(test: VideoTest, r: VideoReading, claim: Claim, ctx: AthleteC
   if (r.diffs.length > 8) {
     const m = median(r.diffs);
     const cutIdx: number[] = [];
-    r.diffs.forEach((d, i) => { if (i > 1 && i < r.diffs.length - 2 && d > Math.max(28, 6 * m)) cutIdx.push(i); });
+    r.diffs.forEach((d, i) => { if (i > 1 && i < r.diffs.length - 2 && d > Math.max(28, thr('*', 'cut') * m)) cutIdx.push(i); });
     // The athlete jumping across the frame between two samples points the same way.
     let jumps = 0;
     const st = staturePx(r.frames) ?? 0;
@@ -746,7 +749,7 @@ function universal(test: VideoTest, r: VideoReading, claim: Claim, ctx: AthleteC
     const gain = lowerBetter ? (ctx.prevValue - claim.value) / ctx.prevValue : (claim.value - ctx.prevValue) / ctx.prevValue;
     const days = ctx.prevDate ? Math.max(1, (Date.now() - Date.parse(ctx.prevDate)) / 86400000) : 60;
     const monthly: Record<VideoTest, number> = { deadlift: 0.06, squat: 0.06, bench: 0.05, longjump: 0.04, sprint: 0.025, run400: 0.04, pushups: 0.2, pullups: 0.2, pike: 0.15, backbend: 0.15 };
-    const allowed = 0.04 + monthly[test] * Math.max(0.5, days / 30);
+    const allowed = (0.04 + monthly[test] * Math.max(0.5, days / 30)) * (thr(test, 'progress') / 100);
     features['gain'] = gain;
     features['gainVsUsual'] = allowed > 0 ? gain / allowed : 0;
     estimates['Change from last verified'] = `${gain >= 0 ? '+' : ''}${fmt(gain * 100, 1)}% in ${fmt(days)} days`;

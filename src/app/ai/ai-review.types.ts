@@ -64,6 +64,42 @@ export interface AiReview {
   coachLabels?: { weight?: 'ok' | 'doubtful'; actualWeight?: number | null } | null;
   // The weight check: what the video suggests the bar held, against what was claimed. Made before any other check.
   weight?: WeightEstimate | null;
+  // What the coach taught in the AI Trainer: whether the video should be approved, which of the AI's checks were right,
+  // and the real weight on the bar. A trainer label counts as the coach's decision for learning.
+  trainer?: TrainerFeedback | null;
+}
+
+export interface TrainerFeedback {
+  label?: 'valid' | 'invalid' | null;
+  checks?: Record<string, 'right' | 'wrong'>;
+  actualWeight?: number | null;
+  note?: string;
+  at: string;
+}
+
+// A video the coach added to teach a test directly, not from an athlete's submission.
+export interface AiTrainingVideo {
+  id?: string;
+  test: VideoTest;
+  url: string;
+  path: string;
+  claimed: { value: number; weight?: number | null; reps?: number | null };
+  label: 'valid' | 'invalid';
+  heightIn?: number | null;
+  bodyWeightLb?: number | null;
+  name: string;
+  createdAt: string;
+}
+
+// The decision a review teaches from: the trainer's label first, else what the coach did with the submission.
+export function decisionOf(r: Pick<AiReview, 'trainer' | 'coachDecision'>): 'approved' | 'rejected' | null {
+  if (r.trainer?.label) return r.trainer.label === 'valid' ? 'approved' : 'rejected';
+  return r.coachDecision ?? null;
+}
+
+// The real weight on the bar when the coach has said what it is.
+export function actualWeightOf(r: Pick<AiReview, 'trainer' | 'coachLabels'>): number | null {
+  return r.trainer?.actualWeight ?? r.coachLabels?.actualWeight ?? null;
 }
 
 export interface WeightEstimate {
