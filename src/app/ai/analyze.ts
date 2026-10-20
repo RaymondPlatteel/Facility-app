@@ -1,4 +1,4 @@
-import type { AiCheck, AiVerdict, VideoTest, WeightEstimate, PlateReading } from './ai-review.types';
+import type { AiCheck, AiVerdict, VideoTest, WeightEstimate } from './ai-review.types';
 import { predictRidge, Trained } from './learn';
 import type { PoseFrame, Point, VideoReading } from './pose-video';
 
@@ -197,32 +197,27 @@ function share(n: number, of: number, label: string, id: string, passAt = 0.99, 
 
 
 // ---------- the weight check ----------
-// The first check on a lift: what the video suggests the bar held, against what was claimed. Two routes:
+// The first check on a lift: what the video suggests the bar held, against what was claimed. Two routes, both built on
+// this app's own data, with nothing sent anywhere:
 //  1. Bar speed. Close to a true max the bar moves slowly, so the speed of the first rep says what share of a max the
-//     load was. Against the athlete's best verified result that gives a weight.
+//     load was. Against the athlete's best verified result that gives a weight. It can doubt a claim but not confirm one.
 //  2. A learned correction, once the coach has confirmed enough weights: a small regression on the bar speed and what the
-//     plates looked like (their colours and how much of the frame they fill), trained on this gym's real lifts.
+//     plates looked like (their colours and how much of the frame they fill), trained on the lifts submitted here, from
+//     every gym and every brand of plate. It is only used once it beats the plain speed estimate on held-out lifts.
 // The estimate always carries a range, and the check says plainly when the video cannot support one.
 
-export const WEIGHT_FEATURES = ['pct', 'plateSat', 'plateBlobs', 'reps'] as const;
+export const WEIGHT_FEATURES = ['pct', 'plateSat', 'plateBlobs', 'reps', 'plateRed', 'plateYellow', 'plateBlue', 'plateGreen'] as const;
 
 export function weightVector(f: Record<string, number>): number[] {
-  return [(f['pctOfMax'] ?? 0) / 100, f['plateSat'] ?? 0, f['plateBlobs'] ?? 0, Math.min(10, f['repsClaimed'] ?? 1)];
+  return [(f['pctOfMax'] ?? 0) / 100, f['plateSat'] ?? 0, f['plateBlobs'] ?? 0, Math.min(10, f['repsClaimed'] ?? 1), f['plateRed'] ?? 0, f['plateYellow'] ?? 0, f['plateBlue'] ?? 0, f['plateGreen'] ?? 0];
 }
 
 export function estimateWeight(
-  test: VideoTest, f: Record<string, number>, claim: Claim, ctx: AthleteContext, model: (Trained & { n: number; ok: boolean }) | null,
-  plates: PlateReading | null = null
+  test: VideoTest, f: Record<string, number>, claim: Claim, ctx: AthleteContext, model: (Trained & { n: number; ok: boolean }) | null
 ): WeightEstimate {
   const claimed = claim.weight && claim.weight > 0 ? claim.weight : null;
   const none = (basis: string): WeightEstimate => ({ claimed, estimate: null, low: null, high: null, ratio: null, method: 'none', basis, reference: ctx.refMax });
   if (test !== 'deadlift' && test !== 'squat' && test !== 'bench') return none('Not a loaded lift.');
-  // Plates read from the video: the only direct evidence of the load, so it wins when the reader is sure.
-  if (plates && plates.totalLb && plates.totalLb > 0 && plates.confidence !== 'low') {
-    const e = Math.round(plates.totalLb), tol = plates.confidence === 'high' ? 0.03 : 0.07;
-    return { claimed, estimate: e, low: Math.round(e * (1 - tol)), high: Math.round(e * (1 + tol)), ratio: claimed ? claimed / e : null, method: 'plates',
-      basis: `The plates were read from the video (${plates.confidence} confidence). ${plates.notes}`, reference: ctx.refMax };
-  }
   if (f['speedUnreliable'] || !(f['pctOfMax'] > 0) || !(f['vFirst'] > 0)) return none('The bar speed could not be measured reliably from this video (the angle, or part of the rep off camera).');
 
   // The share of a max the first rep's speed corresponds to.
@@ -263,7 +258,7 @@ export function weightCheck(w: WeightEstimate): AiCheck {
   const text = `The video suggests about ${w.estimate} lb (${range}); ${Math.round(w.claimed)} lb was claimed. ${w.basis}`;
   const over = w.claimed > (w.high as number);
   const pct = Math.round(Math.abs(r - 1) * 100);
-  if (w.method === 'plates' || w.method === 'learned') {
+  if (w.method === 'learned') {
     if (!over && r >= 0.8) return check('weight', 'Weight on the bar', 'pass', text);
     if (!over) return check('weight', 'Weight on the bar', 'unclear', `${text} The claim is ${pct}% under the estimate.`);
     return check('weight', 'Weight on the bar', 'fail', `${text} The claim is ${pct}% above the estimate. Check the plates.`);
@@ -784,7 +779,7 @@ function universal(test: VideoTest, r: VideoReading, claim: Claim, ctx: AthleteC
 export type WeightModel = (Trained & { n: number; ok: boolean }) | null;
 
 // Runs every check for one video. On a lift the weight check comes first, with its own estimate; the other checks follow.
-export function analyze(test: VideoTest, r: VideoReading, claim: Claim, ctx: AthleteContext, duplicateOf: string | null, ownRepeat = false, weightModel: WeightModel = null, plates: PlateReading | null = null): Analysis {
+export function analyze(test: VideoTest, r: VideoReading, claim: Claim, ctx: AthleteContext, duplicateOf: string | null, ownRepeat = false, weightModel: WeightModel = null): Analysis {
   const u = universal(test, r, claim, ctx, duplicateOf, ownRepeat);
   const t = test === 'deadlift' || test === 'squat' || test === 'bench' ? liftAnalysis(test, r, claim, ctx)
     : test === 'pushups' || test === 'pullups' ? bodyweightAnalysis(test, r, claim)
@@ -798,7 +793,7 @@ export function analyze(test: VideoTest, r: VideoReading, claim: Claim, ctx: Ath
   let weight: WeightEstimate | null = null;
   const checks = [...t.checks, ...u.checks];
   if (lift) {
-    weight = estimateWeight(test, features, claim, ctx, weightModel, plates);
+    weight = estimateWeight(test, features, claim, ctx, weightModel);
     checks.unshift(weightCheck(weight));
     const ordered: Record<string, number | string> = {};
     ordered['Estimated weight'] = weight.estimate === null ? 'could not be estimated' : `about ${weight.estimate} lb (${weight.low}\u2013${weight.high})`;

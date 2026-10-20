@@ -42,26 +42,27 @@ does not matter, and neither does the camera's distance.
 ## Weight (checked first)
 
 On every lift the first check is the weight: what the video suggests the bar held, against what was claimed, with a
-range, shown at the top of the panel ("About 485 lb (417-553), claimed 475 lb"). Three routes, best first:
+range, shown at the top of the panel. Everything is this app's own code and data, and nothing is sent to any outside
+service.
 
-1. **Plates read by a vision model.** The only direct evidence of the load. Three stills go to a small Cloudflare Worker
-   (`workers/plate-reader`) that asks a vision model to read each plate's colour, size and printed weight and add up
-   both sides. Off until the worker's address is set in the database (`config/ai.plateReaderUrl`), so switching it on
-   needs no app update. See the worker file for the three deploy steps (it needs an Anthropic API key).
-2. **A learned correction.** Once the coach has confirmed 8 or more weights (typing the real weight under a video, or
-   approving a lift), a ridge regression on the bar speed and what the plates looked like (their colours, how much of
-   the frame they fill) is trained on this gym's real lifts (`aiModels/weight`). It is used only when it beats the plain
-   speed estimate on held-out lifts, and the AI Review page shows both errors.
-3. **Bar speed.** The plates are followed through the video (their colours, red, yellow and blue), so the bar's own rise
+1. **Bar speed.** The plates are followed through the video (their colours, red, yellow and blue), so the bar's own rise
    gives its speed. Near a true max the bar moves slowly, which against the athlete's best verified result gives a
    weight. This can **doubt** a claim (a claim far above the estimate fails the check) but cannot **confirm** one: a
-   slow, controlled pull looks like a heavy one. So a match on speed alone is reported as "can't confirm, check the
-   plates", never as a pass.
+   slow, controlled pull looks like a heavy one. So a match on speed alone is reported as "can't confirm", not a pass.
+2. **A learned correction.** Under every video the coach can enter the real weight on the bar; approving a lift also
+   counts. Once there are 8 confirmed weights, a ridge regression on the bar speed and what the plates looked like
+   (their colours and how much of the frame they fill) is trained on the lifts submitted here, from every gym and every
+   brand of plate (`aiModels/weight`). It is used only when it beats the plain speed estimate on held-out lifts, and the
+   AI Review page shows both errors.
+
+Reading the plates directly, so a 365 lb bar cannot be claimed as 475, needs a model trained on a lot of confirmed
+lifts: plates differ by brand and country (kilograms or pounds, colour codes, stamped numbers), so no fixed list works.
+Every lift the coach confirms adds to that training set. Until it is large enough the weight check is a hint and the
+coach's eyes on the plates are the check.
 
 The other signals (fatigue across reps, progress, body weight, balance with the athlete's other lifts, cuts, reused
 footage) follow as separate checks. A rep counts only if the bar went up with the lifter, so setting the bar down and
-standing up again is not a second rep. Under every video the coach can enter the real weight on the bar; that number is
-the training label for the weight model.
+standing up again is not a second rep.
 
 ## Learning
 
@@ -85,6 +86,6 @@ Running in an open coach app suits the first few thousand videos. For millions:
    iOS), and only the measurements are uploaded. The server re-checks a sample.
 2. **On a server.** The same `analyze.ts` runs in a Cloud Run or Cloud Function job triggered by each new submission,
    with the pose model on a GPU worker.
-3. **Plates.** Keep the vision-model plate reader, or train a small detector on the stills the coach has labelled once there are thousands.
+3. **Plates.** Train a small plate detector and reader on the confirmed lifts (the stills and their weights) once there are thousands.
 4. **Auto-approval** comes last: only for tests where the model's held-out agreement with the coach is very high, only
    for confident "likely valid" calls, and never automatic rejection.

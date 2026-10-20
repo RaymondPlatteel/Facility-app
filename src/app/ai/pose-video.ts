@@ -23,8 +23,6 @@ export interface VideoReading {
   // coloured blobs there were. Kept as features for the weight model; they are only useful once it has been taught
   // what this gym's plates weigh.
   plates: { sat: number; red: number; blue: number; yellow: number; green: number; blobs: number } | null;
-  // Larger stills (about 640 px wide) for reading the plates, only when asked for. Never stored.
-  stills: string[];
 }
 
 let landmarker: Promise<PoseLandmarker> | null = null;
@@ -92,7 +90,7 @@ export function hamming(a: string, b: string): number {
   return n;
 }
 
-export async function readVideo(url: string, onProgress?: (f: number) => void, wantStills = false): Promise<VideoReading> {
+export async function readVideo(url: string, onProgress?: (f: number) => void): Promise<VideoReading> {
   const pose = await loadLandmarker();
   const video = document.createElement('video');
   video.crossOrigin = 'anonymous';
@@ -228,19 +226,7 @@ export async function readVideo(url: string, onProgress?: (f: number) => void, w
         thumbs.push(tc.toDataURL('image/jpeg', 0.6));
       }
     }
-    const stills: string[] = [];
-    if (canRead && wantStills) {
-      const sw = Math.min(640, width), sh = Math.round((sw * height) / width);
-      const sc = document.createElement('canvas'); sc.width = sw; sc.height = sh;
-      const sx = sc.getContext('2d')!;
-      for (const f of [0.03, 0.4, 0.97]) {
-        video.currentTime = f * duration;
-        await once(video, 'seeked', 15000);
-        sx.drawImage(video, 0, 0, sw, sh);
-        stills.push(sc.toDataURL('image/jpeg', 0.75));
-      }
-    }
-    return { duration, width, height, frames, diffs, hashes, thumbs, plates, stills };
+    return { duration, width, height, frames, diffs, hashes, thumbs, plates };
   } finally {
     video.removeAttribute('src');
     video.load();

@@ -10,7 +10,6 @@ import { AiModel, AiReview, MODEL_VERSION, VIDEO_TESTS, VideoTest } from './ai-r
 import { readVideo, hamming } from './pose-video';
 import { analyze, ruleVerdict, learnVector, LEARN_FEATURES, AthleteContext, weightVector, WEIGHT_FEATURES, WeightModel } from './analyze';
 import { train, predict, looAccuracy, trainRidge, looMae } from './learn';
-import { readPlates } from './plate-reader';
 
 // The AI reviewer. While the coach app is open it works through the video proofs on its own: first every submission
 // waiting for the coach, then (to learn from) the ones the coach has already decided. For each video it records what
@@ -54,7 +53,6 @@ export class AiReviewService {
   private hashIndex: Array<{ id: string; pendingId: string; nameKey: string; clientName: string; hashes: string[] }> = [];
   private retrainTimer: ReturnType<typeof setTimeout> | null = null;
   private failures = new Map<string, number>();
-  private plateReaderUrl = '';
 
   constructor(private firebase: FirebaseService, private zone: NgZone) {}
 
@@ -84,10 +82,6 @@ export class AiReviewService {
     this.unsub.push(onSnapshot(doc(this.db, 'aiModels', 'global'), snap => {
       this.zone.run(() => this.model$.next(snap.exists() ? (snap.data() as AiModel) : null));
     }));
-    // Plate reading is switched on by an address in config/ai, so it needs no app update.
-    this.unsub.push(onSnapshot(doc(this.db, 'config', 'ai'), snap => {
-      this.plateReaderUrl = String((snap.data() as any)?.plateReaderUrl ?? '');
-    }, () => { /* no config: plates are not read */ }));
     this.unsub.push(onSnapshot(doc(this.db, 'aiModels', 'weight'), snap => {
       this.zone.run(() => this.weightModel$.next(snap.exists() ? (snap.data() as AiModel) : null));
     }));
@@ -206,7 +200,7 @@ export class AiReviewService {
     const beat = setInterval(() => { updateDoc(ref, { startedAt: new Date().toISOString() }).catch(() => {}); }, 20000);
     try {
       await setDoc(ref, base);
-      const reading = await readVideo(j.url, f => this.patch({ progress: f }), !!this.plateReaderUrl && isLift);
+      const reading = await readVideo(j.url, f => this.patch({ progress: f }));
       const ctx = await this.context(p, j.test);
 
       // The same footage sent before: by another athlete is a fake; by the same athlete, worth a look.
@@ -225,9 +219,7 @@ export class AiReviewService {
       const wm = this.weightModel$.value;
       const weightModel: WeightModel = wm && wm.n >= 8 && wm.accuracy < wm.ruleAccuracy && wm.featureNames.join() === WEIGHT_FEATURES.join()
         ? { weights: wm.weights, mean: wm.mean, std: wm.std, n: wm.n, ok: true } : null;
-      const plateReading = this.plateReaderUrl && isLift && reading.stills.length
-        ? await readPlates(this.plateReaderUrl, reading.stills, j.test, base.claimed.weight ?? null) : null;
-      const a = analyze(j.test, reading, base.claimed, ctx, duplicateOf, ownRepeat, weightModel, plateReading);
+      const a = analyze(j.test, reading, base.claimed, ctx, duplicateOf, ownRepeat, weightModel);
       const presence = a.features['presence'] ?? 0;
       const rv = ruleVerdict(a.checks, presence);
       const vector = learnVector(a.features, a.checks, rv.score);
@@ -251,7 +243,6 @@ export class AiReviewService {
         video: { duration: reading.duration, width: reading.width, height: reading.height, frames: reading.frames.length, personFrames: reading.frames.filter(f => !!f.pts).length },
         checks: a.checks,
         weight: a.weight ?? null,
-        plateReading: plateReading ?? null,
         features: Object.keys(a.features).reduce<Record<string, number>>((o, k) => { const v = a.features[k]; o[k] = isFinite(v) ? Math.round(v * 10000) / 10000 : 0; return o; }, {}),
         estimates: a.estimates,
         ruleScore: Math.round(rv.score * 1000) / 1000,

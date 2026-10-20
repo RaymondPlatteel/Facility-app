@@ -64,7 +64,6 @@ export interface AiReview {
   coachLabels?: { weight?: 'ok' | 'doubtful'; actualWeight?: number | null } | null;
   // The weight check: what the video suggests the bar held, against what was claimed. Made before any other check.
   weight?: WeightEstimate | null;
-  plateReading?: PlateReading | null;
 }
 
 export interface WeightEstimate {
@@ -73,16 +72,9 @@ export interface WeightEstimate {
   low: number | null;
   high: number | null;
   ratio: number | null;        // claimed / estimate
-  method: 'speed' | 'learned' | 'plates' | 'none';
+  method: 'speed' | 'learned' | 'none';
   basis: string;               // how it was worked out, in words
   reference: number | null;    // the athlete's best verified result in this test, the estimate's anchor
-}
-
-// What a vision model made of the plates on the bar, when plate reading is switched on (config/ai.plateReaderUrl).
-export interface PlateReading {
-  totalLb: number | null;      // bar plus plates, in lb
-  confidence: 'low' | 'medium' | 'high';
-  notes: string;               // e.g. "Left: 45 + 25. Right: 45 + 25. 45 lb bar."
 }
 
 export interface AiModel {
@@ -99,4 +91,4 @@ export interface AiModel {
   trainedAt: string;
 }
 
-export const MODEL_VERSION = 'v8';
+export const MODEL_VERSION = 'v9';
