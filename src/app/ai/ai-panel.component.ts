@@ -27,6 +27,23 @@ import { AiReviewService } from './ai-review.service';
       <div class="ai-error" *ngIf="review?.status === 'error'">{{ review?.error }}</div>
 
       <ng-container *ngIf="review?.status === 'done'">
+        <!-- The weight comes first: what the video suggests the bar held, against the claim. -->
+        <div class="ai-weight" *ngIf="isLift && review!.weight as w" [class.bad]="weightBad">
+          <div class="ai-weight-head">
+            <span class="ai-sub">Weight on the bar</span>
+            <span class="ai-weight-est" *ngIf="w.estimate !== null">About <b>{{ w.estimate }} lb</b> <small>({{ w.low }}\u2013{{ w.high }})</small></span>
+            <span class="ai-weight-est" *ngIf="w.estimate === null">Could not be estimated</span>
+            <span class="ai-weight-claim" *ngIf="w.claimed">Claimed <b>{{ w.claimed | number:'1.0-0' }} lb</b></span>
+          </div>
+          <div class="ai-weight-basis">{{ w.basis }}</div>
+          <div class="ai-weight-set">
+            <label>Actual weight on the bar
+              <input type="number" inputmode="decimal" placeholder="lb" [value]="review!.coachLabels?.actualWeight ?? ''" (change)="actual($any($event.target).value)">
+            </label>
+            <span class="ai-sub">Enter what you see on the bar. It teaches the estimate.</span>
+          </div>
+        </div>
+
         <ul class="ai-checks">
           <li *ngFor="let c of review!.checks" [class]="c.result">
             <span class="ai-mark">{{ c.result === 'pass' ? '✓' : c.result === 'fail' ? '✕' : '?' }}</span>
@@ -65,6 +82,16 @@ import { AiReviewService } from './ai-review.service';
     .ai.invalid .ai-verdict { color: #ff5a6a; }
     .ai-conf, .ai-muted { color: var(--hud-text-mute, #79899a); }
     .ai-error { margin-top: 6px; color: #ff8a95; }
+    .ai-weight { margin: 12px 0 4px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--hud-text, #fff) 5%, transparent); border: 1px solid transparent; }
+    .ai-weight.bad { border-color: color-mix(in srgb, #ff5a6a 55%, transparent); }
+    .ai-weight-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+    .ai-weight-est { font-size: 15px; color: var(--hud-text, #fff); b { font-size: 18px; } small { color: var(--hud-text-mute, #79899a); } }
+    .ai-weight-claim { color: var(--hud-text-dim, #9fb0bd); b { color: var(--hud-text, #fff); } }
+    .ai-weight-basis { margin-top: 6px; font-size: 12px; line-height: 1.4; color: var(--hud-text-mute, #79899a); }
+    .ai-weight-set { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+      label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+      input { width: 90px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--hud-border, #2a3340); background: transparent; color: var(--hud-text, #fff); font: inherit; }
+      .ai-sub { margin: 0; } }
     .ai-checks { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 5px; }
     .ai-checks li { display: flex; gap: 8px; line-height: 1.35; }
     .ai-mark { flex: 0 0 16px; font-weight: 800; text-align: center; }
@@ -100,6 +127,12 @@ export class AiPanelComponent {
 
   get estimateRows(): Array<{ k: string; v: string }> {
     return Object.entries(this.review?.estimates ?? {}).map(([k, v]) => ({ k, v: String(v) }));
+  }
+
+  get weightBad(): boolean { return this.review?.checks?.find(c => c.id === 'weight')?.result === 'fail'; }
+  actual(v: string) {
+    const n = parseFloat(v);
+    if (this.review?.id) this.ai.labelActualWeight(this.review.id, isFinite(n) && n > 0 ? n : null).catch(() => {});
   }
 
   label(l: 'ok' | 'doubtful') { if (this.review?.id) this.ai.labelWeight(this.review.id, l).catch(() => {}); }

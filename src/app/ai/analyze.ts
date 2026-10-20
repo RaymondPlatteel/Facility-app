@@ -1,4 +1,5 @@
-import type { AiCheck, AiVerdict, VideoTest } from './ai-review.types';
+import type { AiCheck, AiVerdict, VideoTest, WeightEstimate, PlateReading } from './ai-review.types';
+import { predictRidge, Trained } from './learn';
 import type { PoseFrame, Point, VideoReading } from './pose-video';
 
 // The checks for each video test. Everything here is plain arithmetic on the landmarks MediaPipe finds in each frame,
@@ -15,6 +16,7 @@ export interface AthleteContext {
   sex: 'male' | 'female';
   prevValue: number | null;    // the last verified result for this test, before this submission
   prevDate: string | null;
+  refMax: number | null;       // the athlete's best verified result in this test, before this submission (the weight estimate's anchor)
   lifts: { deadlift: number; squat: number; bench: number };  // the athlete's current one-rep maxes, lb
 }
 
@@ -24,6 +26,7 @@ export interface Analysis {
   checks: AiCheck[];
   features: Record<string, number>;
   estimates: Record<string, number | string>;
+  weight?: WeightEstimate | null;
 }
 
 const VIS = 0.35;
@@ -192,6 +195,95 @@ function share(n: number, of: number, label: string, id: string, passAt = 0.99, 
   return check(id, label, !of ? 'unclear' : r >= passAt ? 'pass' : r >= unclearAt ? 'unclear' : 'fail', of ? `${n} of ${of} reps.${detail}` : 'Not clear enough to measure.');
 }
 
+
+// ---------- the weight check ----------
+// The first check on a lift: what the video suggests the bar held, against what was claimed. Two routes:
+//  1. Bar speed. Close to a true max the bar moves slowly, so the speed of the first rep says what share of a max the
+//     load was. Against the athlete's best verified result that gives a weight.
+//  2. A learned correction, once the coach has confirmed enough weights: a small regression on the bar speed and what the
+//     plates looked like (their colours and how much of the frame they fill), trained on this gym's real lifts.
+// The estimate always carries a range, and the check says plainly when the video cannot support one.
+
+export const WEIGHT_FEATURES = ['pct', 'plateSat', 'plateBlobs', 'reps'] as const;
+
+export function weightVector(f: Record<string, number>): number[] {
+  return [(f['pctOfMax'] ?? 0) / 100, f['plateSat'] ?? 0, f['plateBlobs'] ?? 0, Math.min(10, f['repsClaimed'] ?? 1)];
+}
+
+export function estimateWeight(
+  test: VideoTest, f: Record<string, number>, claim: Claim, ctx: AthleteContext, model: (Trained & { n: number; ok: boolean }) | null,
+  plates: PlateReading | null = null
+): WeightEstimate {
+  const claimed = claim.weight && claim.weight > 0 ? claim.weight : null;
+  const none = (basis: string): WeightEstimate => ({ claimed, estimate: null, low: null, high: null, ratio: null, method: 'none', basis, reference: ctx.refMax });
+  if (test !== 'deadlift' && test !== 'squat' && test !== 'bench') return none('Not a loaded lift.');
+  // Plates read from the video: the only direct evidence of the load, so it wins when the reader is sure.
+  if (plates && plates.totalLb && plates.totalLb > 0 && plates.confidence !== 'low') {
+    const e = Math.round(plates.totalLb), tol = plates.confidence === 'high' ? 0.03 : 0.07;
+    return { claimed, estimate: e, low: Math.round(e * (1 - tol)), high: Math.round(e * (1 + tol)), ratio: claimed ? claimed / e : null, method: 'plates',
+      basis: `The plates were read from the video (${plates.confidence} confidence). ${plates.notes}`, reference: ctx.refMax };
+  }
+  if (f['speedUnreliable'] || !(f['pctOfMax'] > 0) || !(f['vFirst'] > 0)) return none('The bar speed could not be measured reliably from this video (the angle, or part of the rep off camera).');
+
+  // The share of a max the first rep's speed corresponds to.
+  const pct = f['pctOfMax'];
+  const bw = ctx.bodyWeightLb ?? 0;
+  const typical = ctx.sex === 'female' ? { deadlift: 1.3, squat: 1.1, bench: 0.7 } : { deadlift: 1.7, squat: 1.45, bench: 1.1 };
+  const ref = ctx.refMax && ctx.refMax > 0 ? ctx.refMax : bw > 0 ? bw * typical[test] : null;
+  if (!ref) return none('There is no earlier verified result or body weight to anchor an estimate to.');
+
+  let share = pct / 100;
+  let method: WeightEstimate['method'] = 'speed';
+  let spread = ctx.refMax ? 0.14 : 0.3;
+  if (model && model.ok) {
+    const x = weightVector(f);
+    const learned = predictRidge(model, x);
+    if (isFinite(learned) && learned > 0.2 && learned < 1.3) { share = learned; method = 'learned'; spread = ctx.refMax ? 0.09 : 0.25; }
+  }
+  if ((f['repsClaimed'] ?? 1) > 1 && method === 'speed') {
+    // A set is lighter than a single at the same first-rep speed, and the extra reps raise the question further.
+    spread += 0.04;
+  }
+  if (!f['heightKnown']) spread += 0.05;
+  const estimate = Math.round(share * ref);
+  const low = Math.round(estimate * (1 - spread)), high = Math.round(estimate * (1 + spread));
+  const basis = method === 'learned'
+    ? `A model trained on weights you confirmed, from the bar speed and the plates, against ${ctx.refMax ? `their best verified ${Math.round(ref)} lb` : `a typical ${Math.round(ref)} lb for their body weight`}.`
+    : `The bar rose at ${(f['vFirst'] ?? 0).toFixed(2)} m/s, about ${Math.round(pct)}% of a max, against ${ctx.refMax ? `their best verified ${Math.round(ref)} lb` : `a typical ${Math.round(ref)} lb for their body weight (no verified result yet)`}.`;
+  return { claimed, estimate, low, high, ratio: claimed ? claimed / estimate : null, method, basis, reference: ctx.refMax };
+}
+
+export function weightCheck(w: WeightEstimate): AiCheck {
+  if (w.estimate === null) {
+    return check('weight', 'Weight on the bar', 'unclear', `Could not be estimated. ${w.basis}${w.claimed ? ` The claim is ${Math.round(w.claimed)} lb: check the plates yourself.` : ''}`);
+  }
+  const range = `${w.low}\u2013${w.high} lb`;
+  if (!w.claimed) return check('weight', 'Weight on the bar', 'unclear', `The video suggests about ${w.estimate} lb (${range}). ${w.basis} No weight was claimed to compare.`);
+  const r = w.claimed / w.estimate;
+  const text = `The video suggests about ${w.estimate} lb (${range}); ${Math.round(w.claimed)} lb was claimed. ${w.basis}`;
+  const over = w.claimed > (w.high as number);
+  const pct = Math.round(Math.abs(r - 1) * 100);
+  if (w.method === 'plates' || w.method === 'learned') {
+    if (!over && r >= 0.8) return check('weight', 'Weight on the bar', 'pass', text);
+    if (!over) return check('weight', 'Weight on the bar', 'unclear', `${text} The claim is ${pct}% under the estimate.`);
+    return check('weight', 'Weight on the bar', 'fail', `${text} The claim is ${pct}% above the estimate. Check the plates.`);
+  }
+  // From bar speed alone the weight can be doubted but not confirmed: a slow, controlled pull looks like a heavy one.
+  if (over) return check('weight', 'Weight on the bar', 'fail', `${text} The claim is ${pct}% above the estimate. Check the plates.`);
+  return check('weight', 'Weight on the bar', 'unclear', `${text} Bar speed alone cannot confirm a weight (a slow, controlled pull looks like a heavy one), so check the plates.`);
+}
+
+// The bar's height over time, from the coloured plates (metres above the lowest point seen), or null when the plates
+// were not visible enough to follow.
+function barHeights(frames: PoseFrame[], mPerPx: number): Array<number | null> | null {
+  const ys = frames.map(f => (f.bar && f.bar.n >= 6 ? f.bar.y : null));
+  const have = ys.filter((v): v is number => v !== null);
+  if (have.length < frames.length * 0.6 || have.length < 8) return null;
+  const sm = clean(ys, 4);
+  const low = pctile(have, 98);   // the lowest the plates get (the largest y)
+  return sm.map(v => (v === null ? null : (low - v) * mPerPx));
+}
+
 // ---------- each test ----------
 
 function liftAnalysis(test: 'deadlift' | 'squat' | 'bench', r: VideoReading, claim: Claim, ctx: AthleteContext): Analysis {
@@ -232,11 +324,36 @@ function liftAnalysis(test: 'deadlift' | 'squat' | 'bench', r: VideoReading, cla
     : angleSeries(frames, s => [s.sh, s.el, s.wr]);
   const knee = angleSeries(frames, s => [s.hip, s.kn, s.an]);
   const th = test === 'deadlift' ? { flex: 135, ext: 150 } : test === 'squat' ? { flex: 120, ext: 150 } : { flex: 110, ext: 140 };
-  const reps = repsFrom(phases(drive, th.flex, th.ext), test === 'deadlift' ? 'flex-ext' : 'ext-flex-ext');
+  let reps = repsFrom(phases(drive, th.flex, th.ext), test === 'deadlift' ? 'flex-ext' : 'ext-flex-ext');
+  // The bar itself, followed through the coloured plates. A rep only counts if the bar went up with the lifter: this
+  // keeps a lifter who set the bar down and stood up again from being counted twice, and it measures the bar's own speed.
+  const heightM0 = ctx.heightIn ? ctx.heightIn * 0.0254 : 1.75;
+  const shinsA: number[] = [];
+  for (const f of frames) { const k = pt(f, S.kn), a = pt(f, S.an); if (k && a) shinsA.push(Math.hypot(k.x - a.x, k.y - a.y)); }
+  const mPerPxBar = shinsA.length ? (0.246 * heightM0) / pctile(shinsA, 75) : 0;
+  const bar = mPerPxBar > 0 && test !== 'squat' ? barHeights(frames, mPerPxBar) : null;
+  features['barTracked'] = bar ? 1 : 0;
+  let allReps = reps;
+  if (bar) {
+    const minRise = test === 'bench' ? 0.15 : 0.2;
+    const moved = (rep: { flex: Phase; ext: Phase }) => {
+      let lo = Infinity, hi = -Infinity;
+      for (let q = Math.max(0, rep.flex.i - 2); q <= Math.min(frames.length - 1, rep.ext.i + 2); q++) {
+        const v = bar[q];
+        if (v !== null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+      }
+      return hi - lo;
+    };
+    const kept = reps.filter(rep => moved(rep) >= minRise);
+    features['repsBodyOnly'] = reps.length - kept.length;
+    if (kept.length !== reps.length) estimates['Rises without the bar'] = reps.length - kept.length;
+    reps = kept;
+  }
   features['repsSeen'] = reps.length;
   features['repsClaimed'] = claimedReps;
   estimates['Reps seen'] = reps.length;
   checks.push(repsCheck(reps.length, claimedReps, true));
+  void allReps;
 
   // The top and bottom of each rep against the rules.
   const st = staturePx(frames) ?? 1000;
@@ -309,18 +426,23 @@ function liftAnalysis(test: 'deadlift' | 'squat' | 'bench', r: VideoReading, cla
   }));
   const speeds: number[] = [];
   for (const rep of reps) {
-    const a = rep.flex.i, b = rep.ext.i;
-    if (b <= a) continue;
-    const ha = carrier[a], hb = carrier[b];
-    if (ha === null || hb === null) continue;
-    const span = hb - ha;
+    // With the plates tracked, the bar's own rise is used (from its lowest point before the top to its highest point in
+    // the rep); otherwise the body's.
+    const series = bar ?? carrier;
+    const a0 = Math.max(0, rep.flex.i - 12), b0 = Math.min(frames.length - 1, rep.ext.i + 12);
+    let top = -1, hi = -Infinity;
+    for (let q = a0; q <= b0; q++) { const v = series[q]; if (v !== null && v > hi) { hi = v; top = q; } }
+    if (top < 0) continue;
+    let bot = a0, lo = Infinity;
+    for (let q = a0; q <= top; q++) { const v = series[q]; if (v !== null && v < lo) { lo = v; bot = q; } }
+    const span = hi - lo;
     // Only a rep seen from bottom to top: a recording that starts late shows only the end of the lift.
     if (span < (test === 'bench' ? 0.2 : 0.25)) continue;
     // From the last moment near the bottom to the first moment near the top.
-    let j = a, e = b;
-    for (let q = a; q <= b; q++) { const v = carrier[q]; if (v !== null && v <= ha + 0.08 * span) j = q; }
-    for (let q = b; q >= a; q--) { const v = carrier[q]; if (v !== null && v >= hb - 0.08 * span) e = q; }
-    const dt = frames[e].t - frames[j].t, dh = (carrier[e] as number) - (carrier[j] as number);
+    let j = bot, e = top;
+    for (let q = bot; q <= top; q++) { const v = series[q]; if (v !== null && v <= lo + 0.08 * span) j = q; }
+    for (let q = top; q >= bot; q--) { const v = series[q]; if (v !== null && v >= hi - 0.08 * span) e = q; }
+    const dt = frames[e].t - frames[j].t, dh = (series[e] as number) - (series[j] as number);
     if (dt > 0.08 && dh > 0.08) speeds.push(dh / dt);
   }
   // Faster than any loaded lift can move means the measurement is off (a partial view, a bad scale): leave it out.
@@ -659,18 +781,32 @@ function universal(test: VideoTest, r: VideoReading, claim: Claim, ctx: AthleteC
   return { checks, features, estimates };
 }
 
-export function analyze(test: VideoTest, r: VideoReading, claim: Claim, ctx: AthleteContext, duplicateOf: string | null, ownRepeat = false): Analysis {
+export type WeightModel = (Trained & { n: number; ok: boolean }) | null;
+
+// Runs every check for one video. On a lift the weight check comes first, with its own estimate; the other checks follow.
+export function analyze(test: VideoTest, r: VideoReading, claim: Claim, ctx: AthleteContext, duplicateOf: string | null, ownRepeat = false, weightModel: WeightModel = null, plates: PlateReading | null = null): Analysis {
   const u = universal(test, r, claim, ctx, duplicateOf, ownRepeat);
   const t = test === 'deadlift' || test === 'squat' || test === 'bench' ? liftAnalysis(test, r, claim, ctx)
     : test === 'pushups' || test === 'pullups' ? bodyweightAnalysis(test, r, claim)
     : test === 'longjump' ? longJumpAnalysis(r, claim, ctx)
     : test === 'sprint' || test === 'run400' ? runAnalysis(test, r, claim)
     : holdAnalysis(test, r, claim);
-  return {
-    checks: [...t.checks, ...u.checks],
-    features: { ...u.features, ...t.features },
-    estimates: { ...t.estimates, ...u.estimates }
-  };
+  const features = { ...u.features, ...t.features };
+  if (r.plates) { features['plateSat'] = r.plates.sat; features['plateBlobs'] = r.plates.blobs; features['plateRed'] = r.plates.red; features['plateBlue'] = r.plates.blue; features['plateYellow'] = r.plates.yellow; features['plateGreen'] = r.plates.green; }
+  const estimates = { ...t.estimates, ...u.estimates };
+  const lift = test === 'deadlift' || test === 'squat' || test === 'bench';
+  let weight: WeightEstimate | null = null;
+  const checks = [...t.checks, ...u.checks];
+  if (lift) {
+    weight = estimateWeight(test, features, claim, ctx, weightModel, plates);
+    checks.unshift(weightCheck(weight));
+    const ordered: Record<string, number | string> = {};
+    ordered['Estimated weight'] = weight.estimate === null ? 'could not be estimated' : `about ${weight.estimate} lb (${weight.low}\u2013${weight.high})`;
+    if (weight.claimed) ordered['Claimed weight'] = `${Math.round(weight.claimed)} lb`;
+    for (const k of Object.keys(estimates)) if (!k.startsWith('1RM from')) ordered[k] = estimates[k];
+    return { checks, features, estimates: ordered, weight };
+  }
+  return { checks, features, estimates, weight };
 }
 
 // The verdict from the checks alone: any critical failure makes it likely invalid; any failure or open question sends

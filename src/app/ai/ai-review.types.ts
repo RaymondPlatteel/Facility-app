@@ -61,12 +61,33 @@ export interface AiReview {
   coachDecision: 'approved' | 'rejected' | null;
   decidedAt?: string | null;
   // Optional quick labels the coach can add while reviewing, the first being whether the weight looked right.
-  coachLabels?: { weight?: 'ok' | 'doubtful' } | null;
+  coachLabels?: { weight?: 'ok' | 'doubtful'; actualWeight?: number | null } | null;
+  // The weight check: what the video suggests the bar held, against what was claimed. Made before any other check.
+  weight?: WeightEstimate | null;
+  plateReading?: PlateReading | null;
+}
+
+export interface WeightEstimate {
+  claimed: number | null;
+  estimate: number | null;     // lb; null when the video cannot support one
+  low: number | null;
+  high: number | null;
+  ratio: number | null;        // claimed / estimate
+  method: 'speed' | 'learned' | 'plates' | 'none';
+  basis: string;               // how it was worked out, in words
+  reference: number | null;    // the athlete's best verified result in this test, the estimate's anchor
+}
+
+// What a vision model made of the plates on the bar, when plate reading is switched on (config/ai.plateReaderUrl).
+export interface PlateReading {
+  totalLb: number | null;      // bar plus plates, in lb
+  confidence: 'low' | 'medium' | 'high';
+  notes: string;               // e.g. "Left: 45 + 25. Right: 45 + 25. 45 lb bar."
 }
 
 export interface AiModel {
   id?: string;
-  kind: 'logistic';
+  kind: 'logistic' | 'weight';
   featureNames: string[];
   weights: number[];           // bias first
   mean: number[];
@@ -74,8 +95,8 @@ export interface AiModel {
   n: number;
   positives: number;
   accuracy: number;            // leave-one-out accuracy on the labelled reviews
-  ruleAccuracy: number;        // how often the rules alone agreed with the coach on the same reviews
+  ruleAccuracy: number;        // how often the rules alone agreed with the coach on the same reviews (for the weight model: the error of the plain speed estimate)
   trainedAt: string;
 }
 
-export const MODEL_VERSION = 'v5';
+export const MODEL_VERSION = 'v8';

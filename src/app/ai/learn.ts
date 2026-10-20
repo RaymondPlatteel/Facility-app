@@ -68,3 +68,51 @@ export function looAccuracy(X: number[][], y: number[]): number {
   }
   return right / X.length;
 }
+
+// ---------- weight: a small ridge regression ----------
+// Predicts what the bar held, as a share of the athlete's best verified result, from the bar speed (as a share of a max)
+// and what the plates looked like. Trained on the weights the coach has confirmed. Solved exactly: (XtX + lambda I) w = Xt y.
+export function trainRidge(X: number[][], y: number[], lambda = 0.5): Trained {
+  const d = X[0]?.length ?? 0;
+  const mean = Array.from({ length: d }, (_, j) => X.reduce((s, r) => s + r[j], 0) / X.length);
+  const std = Array.from({ length: d }, (_, j) => Math.sqrt(X.reduce((s, r) => s + (r[j] - mean[j]) ** 2, 0) / X.length) || 1);
+  const Z = X.map(r => [1, ...r.map((v, j) => (v - mean[j]) / std[j])]);
+  const n = d + 1;
+  const A = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => Z.reduce((s, r) => s + r[i] * r[j], 0) + (i === j && i > 0 ? lambda : 0)));
+  const b = Array.from({ length: n }, (_, i) => Z.reduce((s, r, k) => s + r[i] * y[k], 0));
+  for (let c = 0; c < n; c++) {
+    let p = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+    const div = A[c][c] || 1e-9;
+    for (let r = c + 1; r < n; r++) {
+      const f = A[r][c] / div;
+      for (let k = c; k < n; k++) A[r][k] -= f * A[c][k];
+      b[r] -= f * b[c];
+    }
+  }
+  const w = new Array(n).fill(0);
+  for (let r = n - 1; r >= 0; r--) {
+    let s = b[r];
+    for (let k = r + 1; k < n; k++) s -= A[r][k] * w[k];
+    w[r] = s / (A[r][r] || 1e-9);
+  }
+  return { weights: w, mean, std };
+}
+
+export function predictRidge(m: Trained, x: number[]): number {
+  let z = m.weights[0];
+  for (let i = 0; i < x.length; i++) z += m.weights[i + 1] * ((x[i] - m.mean[i]) / m.std[i]);
+  return z;
+}
+
+// Mean absolute error with each example predicted by a model trained without it.
+export function looMae(X: number[][], y: number[]): number {
+  if (X.length < 4) return Infinity;
+  let err = 0;
+  for (let i = 0; i < X.length; i++) {
+    const m = trainRidge(X.filter((_, k) => k !== i), y.filter((_, k) => k !== i));
+    err += Math.abs(predictRidge(m, X[i]) - y[i]);
+  }
+  return err / X.length;
+}

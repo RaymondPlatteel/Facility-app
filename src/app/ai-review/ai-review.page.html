@@ -55,6 +55,18 @@
       <p class="air-note" *ngIf="!model">No model yet: it trains once you have decided at least 8 reviewed videos, some approved and some rejected.</p>
     </section>
 
+    <!-- Weight -->
+    <section class="air-card">
+      <h2>Weight Estimate</h2>
+      <div class="air-stats" *ngIf="weightError as we; else noWeight">
+        <div><b>{{ we.n }}</b><span>Lifts with a confirmed weight</span></div>
+        <div><b>{{ we.mean * 100 | number:'1.0-0' }}%</b><span>Average error of the estimate</span></div>
+      </div>
+      <ng-template #noWeight><p class="air-note">Enter the real weight on a lift (under its video on the Pending page) to see how far off the estimate is.</p></ng-template>
+      <p class="air-note" *ngIf="weightModel as wm">A model trained on {{ wm.n }} confirmed weights is {{ wm.accuracy < wm.ruleAccuracy ? 'now correcting' : 'not yet better than' }} the plain bar-speed estimate (error {{ wm.accuracy * 100 | number:'1.0-0' }}% against {{ wm.ruleAccuracy * 100 | number:'1.0-0' }}%).</p>
+      <p class="air-note" *ngIf="!weightModel">The estimate comes from bar speed against the athlete's best verified result. After 8 lifts with a confirmed weight it also learns from the plates.</p>
+    </section>
+
     <!-- Per test -->
     <section class="air-card" *ngIf="rows.length">
       <h2>By Test</h2>

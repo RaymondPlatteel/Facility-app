@@ -39,18 +39,29 @@ the athlete's other lifts.
 Reps are read from joint angles, not from where the hands or the bar are, so a rack upright or a plate hiding the hands
 does not matter, and neither does the camera's distance.
 
-## Weight
+## Weight (checked first)
 
-The video cannot read the plates by itself yet, so the weight is judged from several independent signals:
+On every lift the first check is the weight: what the video suggests the bar held, against what was claimed, with a
+range, shown at the top of the panel ("About 485 lb (417-553), claimed 475 lb"). Three routes, best first:
 
-- **Bar speed.** Near a true max the bar moves slowly (about 0.2 m/s on a deadlift). A new best lifted fast suggests
-  lighter plates. Speed is measured against the athlete's own body in the same frame (shin or arm length), so a drifting
-  handheld camera does not change it, and only when the whole rep is on camera. It can raise a question but never fail
-  a lift on its own.
-- **Fatigue.** In a hard set the reps slow down; reps that stay fast to the end suggest a light load.
-- **Progress, body weight and balance** (above).
-- **The plates.** Three stills (start, middle, end) under every video, and the coach's one-tap "looks right" or
-  "doubtful" label. Those labels are the training data for a plate-reading model later.
+1. **Plates read by a vision model.** The only direct evidence of the load. Three stills go to a small Cloudflare Worker
+   (`workers/plate-reader`) that asks a vision model to read each plate's colour, size and printed weight and add up
+   both sides. Off until the worker's address is set in the database (`config/ai.plateReaderUrl`), so switching it on
+   needs no app update. See the worker file for the three deploy steps (it needs an Anthropic API key).
+2. **A learned correction.** Once the coach has confirmed 8 or more weights (typing the real weight under a video, or
+   approving a lift), a ridge regression on the bar speed and what the plates looked like (their colours, how much of
+   the frame they fill) is trained on this gym's real lifts (`aiModels/weight`). It is used only when it beats the plain
+   speed estimate on held-out lifts, and the AI Review page shows both errors.
+3. **Bar speed.** The plates are followed through the video (their colours, red, yellow and blue), so the bar's own rise
+   gives its speed. Near a true max the bar moves slowly, which against the athlete's best verified result gives a
+   weight. This can **doubt** a claim (a claim far above the estimate fails the check) but cannot **confirm** one: a
+   slow, controlled pull looks like a heavy one. So a match on speed alone is reported as "can't confirm, check the
+   plates", never as a pass.
+
+The other signals (fatigue across reps, progress, body weight, balance with the athlete's other lifts, cuts, reused
+footage) follow as separate checks. A rep counts only if the bar went up with the lifter, so setting the bar down and
+standing up again is not a second rep. Under every video the coach can enter the real weight on the bar; that number is
+the training label for the weight model.
 
 ## Learning
 
@@ -74,6 +85,6 @@ Running in an open coach app suits the first few thousand videos. For millions:
    iOS), and only the measurements are uploaded. The server re-checks a sample.
 2. **On a server.** The same `analyze.ts` runs in a Cloud Run or Cloud Function job triggered by each new submission,
    with the pose model on a GPU worker.
-3. **Plates.** A small object detector trained on the stills the coach has labelled reads the plate colours and sizes.
+3. **Plates.** Keep the vision-model plate reader, or train a small detector on the stills the coach has labelled once there are thousands.
 4. **Auto-approval** comes last: only for tests where the model's held-out agreement with the coach is very high, only
    for confident "likely valid" calls, and never automatic rejection.

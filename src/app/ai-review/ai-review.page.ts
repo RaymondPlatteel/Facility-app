@@ -24,6 +24,7 @@ export class AiReviewPage implements OnDestroy {
   state: ReviewerState | null = null;
   reviews: AiReview[] = [];
   model: AiModel | null = null;
+  weightModel: AiModel | null = null;
   open: string | null = null;
   training = false;
   private subs = new Subscription();
@@ -34,6 +35,7 @@ export class AiReviewPage implements OnDestroy {
     this.subs.add(this.ai.state$.subscribe(s => this.state = s));
     this.subs.add(this.ai.reviews$.subscribe(r => this.reviews = [...r].sort((a, b) => (b.analyzedAt || b.startedAt || '').localeCompare(a.analyzedAt || a.startedAt || ''))));
     this.subs.add(this.ai.model$.subscribe(m => this.model = m));
+    this.subs.add(this.ai.weightModel$.subscribe(m => this.weightModel = m));
   }
 
   ngOnDestroy() { this.subs.unsubscribe(); }
@@ -71,6 +73,14 @@ export class AiReviewPage implements OnDestroy {
         invalid: list.filter(r => r.verdict === 'likely-invalid').length
       };
     }).filter(r => r.reviews > 0);
+  }
+
+  // How far the weight estimate was from the real weight on the lifts where the coach confirmed it.
+  get weightError(): { n: number; mean: number } | null {
+    const rows = this.done.filter(r => r.weight?.estimate && r.coachLabels?.actualWeight);
+    if (!rows.length) return null;
+    const errs = rows.map(r => Math.abs((r.weight!.estimate as number) - (r.coachLabels!.actualWeight as number)) / (r.coachLabels!.actualWeight as number));
+    return { n: rows.length, mean: errs.reduce((a, b) => a + b, 0) / errs.length };
   }
 
   get errors(): number { return this.reviews.filter(r => r.status === 'error').length; }

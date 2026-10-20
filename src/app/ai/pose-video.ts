@@ -5,7 +5,9 @@ import type { PoseLandmarker } from '@mediapipe/tasks-vision';
 // video sent twice, and three small stills for the coach.
 
 export interface Point { x: number; y: number; v: number }   // pixels in the video, and the model's visibility 0-1
-export interface PoseFrame { t: number; pts: Point[] | null }  // seconds; null when no person was found
+// seconds; null when no person was found. `bar` is where the coloured plates are in the frame (their centre, in video pixels,
+// and how many plate pixels there were): a direct measure of where the bar is, whatever the pose model makes of the hands.
+export interface PoseFrame { t: number; pts: Point[] | null; bar?: { x: number; y: number; n: number } | null }
 
 export interface VideoReading {
   duration: number;
@@ -16,6 +18,13 @@ export interface VideoReading {
   diffs: number[];
   hashes: string[];
   thumbs: string[];
+  // What the plates looked like, averaged over three frames: the share of the frame that is strongly coloured plate
+  // (bumper plates are bright red, blue, yellow, green or white), in total and by colour, and how many separate
+  // coloured blobs there were. Kept as features for the weight model; they are only useful once it has been taught
+  // what this gym's plates weigh.
+  plates: { sat: number; red: number; blue: number; yellow: number; green: number; blobs: number } | null;
+  // Larger stills (about 640 px wide) for reading the plates, only when asked for. Never stored.
+  stills: string[];
 }
 
 let landmarker: Promise<PoseLandmarker> | null = null;
@@ -83,7 +92,7 @@ export function hamming(a: string, b: string): number {
   return n;
 }
 
-export async function readVideo(url: string, onProgress?: (f: number) => void): Promise<VideoReading> {
+export async function readVideo(url: string, onProgress?: (f: number) => void, wantStills = false): Promise<VideoReading> {
   const pose = await loadLandmarker();
   const video = document.createElement('video');
   video.crossOrigin = 'anonymous';
@@ -102,6 +111,8 @@ export async function readVideo(url: string, onProgress?: (f: number) => void): 
     const step = 1 / fps;
     const small = document.createElement('canvas'); small.width = 32; small.height = 18;
     const sctx = small.getContext('2d', { willReadFrequently: true })!;
+    const bcan = document.createElement('canvas'); bcan.width = 96; bcan.height = Math.max(1, Math.round((96 * height) / width));
+    const bctx = bcan.getContext('2d', { willReadFrequently: true })!;
     const hcan = document.createElement('canvas'); hcan.width = 9; hcan.height = 8;
     const hctx = hcan.getContext('2d', { willReadFrequently: true })!;
     const frames: PoseFrame[] = [];
@@ -126,6 +137,21 @@ export async function readVideo(url: string, onProgress?: (f: number) => void): 
       });
       if (canRead) {
         try {
+          // The plates: the centre of the strongly coloured pixels (red, yellow, green, blue).
+          bctx.drawImage(video, 0, 0, bcan.width, bcan.height);
+          const bd = bctx.getImageData(0, 0, bcan.width, bcan.height).data;
+          let bn = 0, bx = 0, by = 0;
+          for (let q = 0; q < bcan.width * bcan.height; q++) {
+            const r = bd[q * 4] / 255, g = bd[q * 4 + 1] / 255, b = bd[q * 4 + 2] / 255;
+            const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+            if (mx < 0.3 || d / (mx || 1) < 0.55) continue;
+            let h = d === 0 ? 0 : mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+            h = (h * 60 + 360) % 360;
+            // Red, yellow and blue only: green is the grass outside a window far more often than a plate.
+            if (!((h < 20 || h >= 340) || (h >= 40 && h < 70) || (h >= 190 && h < 260))) continue;
+            bn++; bx += q % bcan.width; by += Math.floor(q / bcan.width);
+          }
+          frames[frames.length - 1].bar = bn >= 6 ? { x: (bx / bn) * (width / bcan.width), y: (by / bn) * (height / bcan.height), n: bn } : null;
           sctx.drawImage(video, 0, 0, 32, 18);
           const d = sctx.getImageData(0, 0, 32, 18).data;
           if (prev) {
@@ -145,7 +171,53 @@ export async function readVideo(url: string, onProgress?: (f: number) => void): 
 
     // Three stills, 240 px wide, for checking the plates and the setting at a glance.
     const thumbs: string[] = [];
+    let plates: VideoReading['plates'] = null;
     if (canRead) {
+      const pc = document.createElement('canvas'); pc.width = 160; pc.height = Math.round((160 * height) / width);
+      const pctx = pc.getContext('2d', { willReadFrequently: true })!;
+      const tot = { sat: 0, red: 0, blue: 0, yellow: 0, green: 0, blobs: 0 };
+      let nF = 0;
+      for (const f of [0.04, 0.5, 0.96]) {
+        video.currentTime = f * duration;
+        await once(video, 'seeked', 15000);
+        pctx.drawImage(video, 0, 0, pc.width, pc.height);
+        const img = pctx.getImageData(0, 0, pc.width, pc.height).data;
+        const W = pc.width, H = pc.height, mask = new Uint8Array(W * H);
+        let sat = 0, red = 0, blue = 0, yellow = 0, green = 0;
+        for (let i = 0; i < W * H; i++) {
+          const r = img[i * 4] / 255, g = img[i * 4 + 1] / 255, b = img[i * 4 + 2] / 255;
+          const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+          if (mx < 0.3 || d / (mx || 1) < 0.55) continue;
+          let h = d === 0 ? 0 : mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+          h = (h * 60 + 360) % 360;
+          const k = h < 20 || h >= 340 ? 'red' : h >= 40 && h < 70 ? 'yellow' : h >= 90 && h < 165 ? 'green' : h >= 190 && h < 260 ? 'blue' : '';
+          if (!k) continue;
+          mask[i] = 1; sat++;
+          if (k === 'red') red++; else if (k === 'yellow') yellow++; else if (k === 'green') green++; else blue++;
+        }
+        // Blobs of 12 or more connected coloured pixels.
+        const seen = new Uint8Array(W * H);
+        let blobs = 0;
+        for (let i = 0; i < W * H; i++) {
+          if (!mask[i] || seen[i]) continue;
+          let n = 0; const stack = [i]; seen[i] = 1;
+          while (stack.length) {
+            const q = stack.pop()!; n++;
+            const x = q % W, y = (q / W) | 0;
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const nx = x + dx, ny = y + dy;
+              if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+              const ni = ny * W + nx;
+              if (mask[ni] && !seen[ni]) { seen[ni] = 1; stack.push(ni); }
+            }
+          }
+          if (n >= 12) blobs++;
+        }
+        const area = W * H;
+        tot.sat += sat / area; tot.red += red / area; tot.blue += blue / area; tot.yellow += yellow / area; tot.green += green / area; tot.blobs += blobs;
+        nF++;
+      }
+      plates = { sat: tot.sat / nF, red: tot.red / nF, blue: tot.blue / nF, yellow: tot.yellow / nF, green: tot.green / nF, blobs: tot.blobs / nF };
       const tw = 240, th = Math.round((240 * height) / width);
       const tc = document.createElement('canvas'); tc.width = tw; tc.height = th;
       const tctx = tc.getContext('2d')!;
@@ -156,7 +228,19 @@ export async function readVideo(url: string, onProgress?: (f: number) => void): 
         thumbs.push(tc.toDataURL('image/jpeg', 0.6));
       }
     }
-    return { duration, width, height, frames, diffs, hashes, thumbs };
+    const stills: string[] = [];
+    if (canRead && wantStills) {
+      const sw = Math.min(640, width), sh = Math.round((sw * height) / width);
+      const sc = document.createElement('canvas'); sc.width = sw; sc.height = sh;
+      const sx = sc.getContext('2d')!;
+      for (const f of [0.03, 0.4, 0.97]) {
+        video.currentTime = f * duration;
+        await once(video, 'seeked', 15000);
+        sx.drawImage(video, 0, 0, sw, sh);
+        stills.push(sc.toDataURL('image/jpeg', 0.75));
+      }
+    }
+    return { duration, width, height, frames, diffs, hashes, thumbs, plates, stills };
   } finally {
     video.removeAttribute('src');
     video.load();
