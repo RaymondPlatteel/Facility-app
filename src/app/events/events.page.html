@@ -159,7 +159,7 @@
       <section *ngFor="let e of events" class="ev-card ev-row">
         <div class="ev-row-main" (click)="edit(e)">
           <div class="ev-row-title">{{ e.title }} <span class="ev-chip" [ngClass]="e.status">{{ e.status }}</span><span class="ev-chip" *ngIf="e.audience && e.audience !== 'everyone'">{{ audienceLabel(e.audience) }}</span></div>
-          <div class="ev-row-meta">{{ dates(e) }}<span *ngIf="e.venueName"> · {{ e.venueName }}</span></div>
+          <div class="ev-row-meta">{{ dates(e) }}<span *ngIf="e.venueName"> · {{ e.venueName }}</span><span *ngIf="e.locationTbd"> · Location TBD<ng-container *ngIf="e.locationState">, {{ e.locationState }}</ng-container></span></div>
           <div class="ev-row-meta">{{ e.registered }}<span *ngIf="e.capacity"> of {{ e.capacity }}</span> registered<span *ngIf="e.prizePool"> · {{ e.prizePool | currency:'USD':'symbol':'1.0-0' }} prize pool</span></div>
         </div>
         <button class="ev-link" (click)="duplicate(e)">Duplicate</button>
@@ -208,6 +208,14 @@
             </div>
           </ng-container>
 
+          <span class="ev-image-title">Custom animation (advanced)</span>
+          <p class="hint">Write HTML, CSS and SVG, with CSS animations or SVG animation. It shows behind the event's words on every phone, with no app update. JavaScript is blocked, so nothing written here can run code on an athlete's phone. Keep it light, because it runs on their battery. <b>--accent</b> is the athlete's rank color and <b>--text</b> is the text color.</p>
+          <div class="ev-float-chips">
+            <button type="button" *ngFor="let s of starters" (click)="insertStarter(s)">Start from: {{ s.label }}</button>
+            <button type="button" *ngIf="form.customHtml" (click)="form.customHtml = ''">Remove</button>
+          </div>
+          <textarea class="ev-code" rows="12" spellcheck="false" [(ngModel)]="form.customHtml" placeholder="<div>…</div>"></textarea>
+
           <div class="ev-image" *ngIf="form.backdrop === 'photo'">
             <div class="ev-image-box" [style.background-image]="form.image ? 'url(' + form.image + ')' : null">
               <span *ngIf="!form.image">No photo yet</span>
@@ -232,18 +240,27 @@
 
       <section class="ev-card">
         <h3>When &amp; where</h3>
-        <label class="ev-check"><input type="checkbox" [ngModel]="form.multiSite" (ngModelChange)="setMultiSite($event)"><span>A different location each day</span></label>
+        <label class="ev-check"><input type="checkbox" [(ngModel)]="form.locationTbd"><span>Location to be decided (TBD)</span></label>
+        <label class="ev-check" *ngIf="!form.locationTbd"><input type="checkbox" [ngModel]="form.multiSite" (ngModelChange)="setMultiSite($event)"><span>A different location each day</span></label>
 
-        <ng-container *ngIf="!form.multiSite">
+        <ng-container *ngIf="!form.multiSite || form.locationTbd">
           <div class="ev-grid">
             <label><span>Start date</span><input type="date" [(ngModel)]="form.startDate"></label>
             <label><span>End date (optional)</span><input type="date" [(ngModel)]="form.endDate"></label>
-            <label><span>Venue</span><input type="text" [(ngModel)]="form.venueName" placeholder="e.g. Harvard Stadium"></label>
-            <label><span>Address</span><input type="text" [(ngModel)]="form.venueAddress"></label>
+            <ng-container *ngIf="!form.locationTbd">
+              <label><span>Venue</span><input type="text" [(ngModel)]="form.venueName" placeholder="e.g. Harvard Stadium"></label>
+              <label><span>Address</span><input type="text" [(ngModel)]="form.venueAddress"></label>
+            </ng-container>
+            <label *ngIf="form.locationTbd"><span>State (optional)</span>
+              <select [(ngModel)]="form.locationState">
+                <option value="">Not chosen yet</option>
+                <option *ngFor="let s of states" [value]="s">{{ s }}</option>
+              </select>
+            </label>
           </div>
         </ng-container>
 
-        <ng-container *ngIf="form.multiSite">
+        <ng-container *ngIf="form.multiSite && !form.locationTbd">
           <div *ngFor="let d of form.days; let i = index" class="ev-day">
             <div class="ev-grid">
               <label><span>Day {{ i + 1 }}</span><input type="date" [(ngModel)]="d.date"></label>
@@ -303,13 +320,30 @@
         <p class="hint">Each line becomes an item the attendee must tick (rules for a competition, terms or safety notes for a hike or trip). A non-refundable fee line is added automatically when there’s an entry fee. The athlete app hides the number of spots left until half are gone.</p>
       </section>
 
+      <section class="ev-card">
+        <h3>Rewards</h3>
+        <p class="hint">What athletes receive for taking part. The cash prize above is shared by the athletes verified at S-Rank at the event.</p>
+        <div class="ev-grid">
+          <label><span>Somas for every athlete who attends</span><input type="number" min="0" [(ngModel)]="form.somasReward" placeholder="e.g. 1000"></label>
+        </div>
+        <span class="ev-image-title">Merch discount by rank (%)</span>
+        <div class="ev-grid ev-rank-grid">
+          <label *ngFor="let r of discountRanks"><span>{{ r }}-Rank</span><input type="number" min="0" max="100" [(ngModel)]="form.merchDiscounts[r]" placeholder="0"></label>
+        </div>
+        <p class="hint">For athletes who attend. Leave a rank at 0 for no discount.</p>
+      </section>
+
       <section class="ev-card" *ngIf="form.id">
         <div class="ev-reg-head">
           <h3>Registrations ({{ registrations.length }}<span *ngIf="form.capacity"> of {{ form.capacity }}</span>)</h3>
           <button class="ev-link" *ngIf="registrations.length" (click)="exportCsv()">Export CSV</button>
         </div>
         <p class="hint" *ngIf="!registrations.length">Nobody has registered yet.</p>
-        <p class="hint" *ngIf="registrations.length">{{ paidCount }} paid · {{ guestCount }} guest{{ guestCount === 1 ? '' : 's' }}</p>
+        <p class="hint" *ngIf="registrations.length">{{ paidCount }} paid · {{ guestCount }} guest{{ guestCount === 1 ? '' : 's' }} · {{ attendedCount }} attended</p>
+        <div class="ev-reg-head" *ngIf="form.somasReward && attendedCount">
+          <span class="hint">{{ awardable.length }} of {{ attendedCount }} attended athletes still to be paid {{ form.somasReward | number }} somas.</span>
+          <button class="ev-btn small" *ngIf="awardable.length" [disabled]="awarding" (click)="awardSomas()">{{ awarding ? 'Awarding…' : 'Award somas' }}</button>
+        </div>
         <p class="hint" *ngIf="form.slots.length > 1 && form.timeSelection && registrations.length">
           <span *ngFor="let t of form.slots; let last = last">{{ slotText(t) }}: {{ slotCount(t.id) }}<span *ngIf="!last"> · </span></span>
         </p>
@@ -322,6 +356,7 @@
             <div class="ev-row-meta" *ngIf="r.medicalNotes">Medical: {{ r.medicalNotes }}</div>
           </div>
           <button class="ev-link" *ngIf="r.fee > 0" (click)="togglePaid(r)">{{ r.feeStatus === 'paid' ? 'Paid ✓' : 'Mark paid' }}</button>
+          <button class="ev-link" (click)="toggleAttended(r)">{{ r.attended ? 'Attended ✓' : 'Mark attended' }}<span *ngIf="r.somasAwarded"> · paid</span></button>
           <button class="icon-btn" (click)="removeRegistration(r)" aria-label="Remove"><ion-icon name="trash-outline"></ion-icon></button>
         </div>
       </section>
@@ -402,32 +437,48 @@
               </ng-container>
             </div>
 
-            <div class="pv-page" *ngIf="previewScreen === 'world'" [ngClass]="'pv-' + form.backdrop" [class.chromeRank]="previewRank === 'S'">
-              <div class="pv-bg" *ngIf="form.backdrop === 'photo' && form.image" [style.background-image]="'url(' + form.image + ')'"></div>
-              <div class="pv-bg pv-chrome" *ngIf="form.backdrop === 'chrome'" [style.background-image]="chromeRamp"></div>
-              <div class="pv-bg pv-aurora" *ngIf="form.backdrop === 'aurora'"></div>
-              <div class="pv-bg pv-spotlight" *ngIf="form.backdrop === 'spotlight'"></div>
-              <div class="pv-bg pv-dusk" *ngIf="form.backdrop === 'dusk'"></div>
-              <div class="pv-bg pv-deep" *ngIf="form.backdrop === 'deep'"></div>
-              <div class="pv-bg" *ngIf="scenes.includes(form.backdrop)" [ngClass]="'scene-' + form.backdrop"></div>
-              <ng-container *ngIf="form.backdrop !== 'photo'">
-                <div class="pv-ticker" *ngIf="form.float === 'zeros'"><span>000 000 000 000 000 000 000 000 </span></div>
-                <div class="pv-fx" *ngIf="form.float !== 'none' && form.float !== 'zeros'" [ngClass]="'fx-' + form.float">
-                  <i *ngFor="let f of fxItems" [style.--x]="f.x" [style.--y]="f.y" [style.--s]="f.s" [style.--d]="f.d" [style.--w]="f.w"></i>
+            <div class="pv-page pv-world" *ngIf="previewScreen === 'world'" [class.chromeRank]="previewRank === 'S'">
+              <!-- The hero, the same height and type as on the World page -->
+              <div class="pv-hero" [class.pv-midnight]="form.backdrop === 'midnight'">
+                <div class="pv-bg" *ngIf="form.backdrop === 'photo' && form.image" [style.background-image]="'url(' + form.image + ')'"></div>
+                <div class="pv-bg pv-chrome" *ngIf="form.backdrop === 'chrome'" [style.background-image]="chromeRamp"></div>
+                <div class="pv-bg pv-aurora" *ngIf="form.backdrop === 'aurora'"></div>
+                <div class="pv-bg pv-spotlight" *ngIf="form.backdrop === 'spotlight'"></div>
+                <div class="pv-bg pv-dusk" *ngIf="form.backdrop === 'dusk'"></div>
+                <div class="pv-bg pv-deep" *ngIf="form.backdrop === 'deep'"></div>
+                <div class="pv-bg" *ngIf="scenes.includes(form.backdrop)" [ngClass]="'scene-' + form.backdrop"></div>
+                <ng-container *ngIf="form.backdrop !== 'photo'">
+                  <div class="pv-emblem" *ngIf="form.float === 'zeros'">
+                    <svg viewBox="66 183 1074 786" fill="currentColor" aria-hidden="true">
+                      <g><polygon class="pe-piece" *ngFor="let p of emblemFeathers; let i = index" [ngClass]="'pe-p' + i" [attr.points]="p" [style.--dy]="emblemDys[i]"/></g>
+                      <g transform="translate(1206,0) scale(-1,1)"><g><polygon class="pe-piece" *ngFor="let p of emblemFeathers; let i = index" [ngClass]="'pe-p' + i" [attr.points]="p" [style.--dy]="emblemDys[i]"/></g></g>
+                      <path class="pe-core" fill-rule="evenodd" d="M603,524 L721,683 L603,887 L485,683 Z M603,578 L682,685 L603,817 L524,685 Z"/>
+                      <polygon class="pe-tail" points="519,830 603,961 687,830 629,872 603,911 577,872"/>
+                    </svg>
+                  </div>
+                  <div class="pv-fx" *ngIf="form.float !== 'none' && form.float !== 'zeros'" [ngClass]="'fx-' + form.float">
+                    <i *ngFor="let f of fxItems" [style.--x]="f.x" [style.--y]="f.y" [style.--s]="f.s" [style.--d]="f.d" [style.--w]="f.w"></i>
+                  </div>
+                </ng-container>
+                <iframe class="pv-custom" *ngIf="form.customHtml.trim()" sandbox="" [srcdoc]="previewDoc" tabindex="-1" aria-hidden="true"></iframe>
+                <div class="pv-content">
+                  <h1 class="pv-title">{{ form.title || 'Event title' }}</h1>
+                  <div class="pv-prize" *ngIf="form.prizePool"><span>{{ c('prizeLabel') }}</span><b>{{ form.prizePool | currency:'USD':'symbol':'1.0-0' }}</b></div>
+                  <p class="pv-caption" *ngIf="form.caption">{{ form.caption }}</p>
+                  <p class="pv-dates" *ngIf="previewDates">{{ previewDates }}</p>
+                  <div class="pv-stats">
+                    <div *ngIf="previewDaysToGo !== null"><strong>{{ previewDaysToGo }}</strong><span>{{ previewDaysToGo === 1 ? 'Day' : 'Days' }} to go</span></div>
+                    <div *ngIf="previewSite as site"><strong>{{ site.value }}</strong><span>{{ site.label }}</span></div>
+                  </div>
+                  <div class="pv-cta" *ngIf="form.registrationOpen" (click)="previewScreen = 'intro'">{{ c('reserveButton') }}</div>
                 </div>
-              </ng-container>
-              <div class="pv-content">
-                <h1 class="pv-title">{{ form.title || 'Event title' }}</h1>
-                <div class="pv-prize" *ngIf="form.prizePool"><span>{{ c('prizeLabel') }}</span><b>{{ form.prizePool | currency:'USD':'symbol':'1.0-0' }}</b></div>
-                <p class="pv-caption" *ngIf="form.caption">{{ form.caption }}</p>
-                <p class="pv-dates" *ngIf="previewDates">{{ previewDates }}</p>
-                <div class="pv-stats">
-                  <div *ngIf="previewDaysToGo !== null"><strong>{{ previewDaysToGo }}</strong><span>{{ previewDaysToGo === 1 ? 'Day' : 'Days' }} to go</span></div>
-                  <div *ngIf="previewSite as site"><strong>{{ site.value }}</strong><span>{{ site.label }}</span></div>
-                </div>
-                <div class="pv-bar"><i></i><i></i><i></i><i></i><i class="grey"></i></div>
-                <div class="pv-cta" *ngIf="form.registrationOpen" (click)="previewScreen = 'intro'">{{ c('reserveButton') }}</div>
                 <div class="pv-dots"><i class="on"></i><i></i></div>
+              </div>
+              <!-- A glimpse of the page under it -->
+              <div class="pv-rest">
+                <div class="pv-chip"><span>Recent update</span><b>Athlete · Deadlift 455 → 465 lbs</b></div>
+                <span class="pv-rest-label">Competitors</span>
+                <div class="pv-tiles"><i><b>S</b>Rank</i><i><b>A</b>Rank</i><i><b>B</b>Rank</i><i><b>C</b>Rank</i></div>
               </div>
             </div>
             <div class="pv-tabs"><i></i><i></i><i></i><i></i></div>

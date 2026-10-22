@@ -1,0 +1,118 @@
+<ion-content [fullscreen]="true" class="at-content">
+  <div class="at-page">
+    <div class="at-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back"><ion-icon name="arrow-back"></ion-icon></button>
+      <div>
+        <div class="at-eyebrow">AI Trainer · {{ subtitle }}</div>
+        <h1>{{ title }}</h1>
+      </div>
+    </div>
+
+    <p class="comp-what">{{ part.what }}</p>
+
+    <div class="comp-acc">
+      <div class="acc-num">
+        <b>{{ stats.accuracy === null ? '—' : (stats.accuracy * 100 | number:'1.0-0') + '%' }}</b>
+        <span>{{ isWeight ? 'accurate' : 'accuracy' }}</span>
+      </div>
+      <div class="acc-meta">
+        <span class="at-chip" [class]="stats.status">{{ statusText[stats.status] }}</span>
+        <span><b>{{ stats.seen }}</b> video{{ stats.seen === 1 ? '' : 's' }} checked</span>
+        <span><b>{{ stats.judged }}</b> judged</span>
+        <span *ngIf="stats.extra">{{ stats.extra }}</span>
+      </div>
+    </div>
+
+    <div class="at-block" *ngIf="isWeight && stats.weight as w">
+      <h2>Accuracy by method</h2>
+      <p class="sub" *ngIf="!w.labelled">Add a training video with the real weight, or enter the weight on a video below, to measure both methods.</p>
+      <table class="cmp" *ngIf="w.labelled">
+        <thead><tr><th></th><th>Estimated</th><th>Average error</th><th>Within 10%</th><th>Real weight in range</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let m of [w.plates, w.speed]">
+            <th>{{ m.label }}</th>
+            <td>{{ m.estimated }} of {{ w.labelled }}</td>
+            <td>{{ pctText(m.error) }}</td>
+            <td>{{ m.within10 }}</td>
+            <td>{{ m.inRange }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="sub" *ngIf="w.commonN">On the {{ w.commonN }} video{{ w.commonN === 1 ? '' : 's' }} where both gave an estimate, the plate reading was off by {{ pctText(w.commonPlates) }} on average and bar speed by {{ pctText(w.commonSpeed) }}.</p>
+      <p class="sub" *ngIf="w.labelled && w.plates.estimated < w.labelled">The plates could not be read on {{ w.labelled - w.plates.estimated }} of {{ w.labelled }} videos. No weight is estimated for those, and they count against the accuracy above.</p>
+    </div>
+
+    <div class="msg" *ngIf="message">{{ message }}</div>
+
+    <div class="at-block" *ngIf="isWeight">
+      <h2>Add a training video</h2>
+      <p class="sub" *ngIf="!isWeight">Upload a video where you know what this component should find. It is analysed like an athlete's, then the AI is marked against your answer. Only this component is judged; the rest of the checklist is left alone.</p>
+      <p class="sub" *ngIf="isWeight">Upload any lift where you know the weight on the bar. The plates are read from the video and compared with this weight. Film so the ends of the bar and the plates are in view, ideally from the front or back.</p>
+      <div class="form">
+        <label *ngIf="isShared">Test
+          <select [(ngModel)]="form.test">
+            <option *ngFor="let t of part.tests" [ngValue]="t">{{ labels[t] }}</option>
+          </select>
+        </label>
+        <label *ngIf="!isWeight">This video should
+          <select [(ngModel)]="form.expected"><option value="pass">Pass</option><option value="fail">Fail</option></select>
+        </label>
+        <label *ngIf="isWeight">Weight on the bar (lb)
+          <input type="number" inputmode="decimal" [(ngModel)]="form.weight">
+        </label>
+        <label *ngIf="!isWeight">Claimed result{{ needsClaim ? '' : ' (optional)' }}
+          <input type="number" inputmode="decimal" [(ngModel)]="form.value" placeholder="Score">
+        </label>
+        <label *ngIf="!isWeight && formLift">Weight (lb)
+          <input type="number" inputmode="decimal" [(ngModel)]="form.weight">
+        </label>
+        <label>Reps
+          <input type="number" inputmode="numeric" [(ngModel)]="form.reps" placeholder="1">
+        </label>
+        <label>Height (in)
+          <input type="number" inputmode="decimal" [(ngModel)]="form.height">
+        </label>
+        <label>Video
+          <input type="file" accept="video/*" (change)="pick($event)">
+        </label>
+      </div>
+      <div class="row">
+        <button class="btn primary" [disabled]="!canAdd" (click)="add()">{{ busy === 'add' ? 'Uploading…' : 'Add Video' }}</button>
+        <span class="why" *ngIf="missing && !busy">{{ missing }}</span>
+      </div>
+
+      <div *ngFor="let v of mine" class="tv-card">
+        <video class="vid vid-sm" [src]="v.url" controls playsinline preload="metadata"></video>
+        <div class="tv-info">
+          <b>{{ labels[v.test] }} · {{ v.name }}</b>
+          <span>{{ isWeight ? 'Real weight ' + v.actualWeight + ' lb' : (v.expected === 'pass' ? 'Should pass' : 'Should fail') }}</span>
+          <span class="tv-out">{{ outcome(v) }}</span>
+          <button class="btn" (click)="remove(v)">Remove</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="at-block" *ngIf="tunables.length">
+      <h2>How strict it is</h2>
+      <p class="sub">These are the numbers this component judges by. Changes apply when the videos are analysed again.</p>
+      <div class="tune">
+        <div class="tune-row" *ngFor="let x of tunables">
+          <div class="top"><span>{{ x.t.label }}</span><b>{{ values[x.t.key] }}{{ x.t.unit }}</b></div>
+          <input type="range" [min]="x.t.min" [max]="x.t.max" [step]="x.t.step" [(ngModel)]="values[x.t.key]">
+          <small>{{ x.t.hint }}</small>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn primary" [disabled]="!dirty || !!busy" (click)="saveValues()">Save Settings</button>
+        <button class="btn" [disabled]="!tuned" (click)="resetValues()">Restore Defaults</button>
+        <button class="btn" [disabled]="!!busy" (click)="rerunAll()">Analyse Again</button>
+      </div>
+    </div>
+
+    <div class="at-block">
+      <h2>Submissions</h2>
+      <p class="sub">{{ isWeight ? 'Every lift video with a weight' : 'Every video this was checked on' }}, the athletes' and the ones you added. Open one to watch it and compare the AI's checklist with yours.</p>
+      <app-ai-submissions [rows]="rows"></app-ai-submissions>
+    </div>
+  </div>
+</ion-content>

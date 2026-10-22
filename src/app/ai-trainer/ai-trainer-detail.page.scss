@@ -27,3 +27,21 @@
   input, select { padding: 7px 8px; border-radius: 8px; border: 1px solid var(--hud-border, #2a3340); background: transparent; color: var(--hud-text, #fff); font: inherit; } }
 .tv { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--hud-border, #2a3340); font-size: 13px; }
 .stat-line { margin-top: 6px; font-size: 13px; color: var(--hud-text-dim, #9fb0bd); b { color: var(--hud-text, #fff); } }
+
+.comp-list { display: flex; flex-direction: column; gap: 8px; }
+.comp { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--hud-border, #2a3340); background: transparent;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+  &:hover { border-color: var(--hud-accent, #00d4ff); } }
+.comp-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  b { font-size: 14.5px; color: var(--hud-text, #fff); } small { font-size: 12px; line-height: 1.35; color: var(--hud-text-mute, #79899a); } }
+.shared-tag { color: var(--hud-accent, #00d4ff) !important; }
+.comp-acc-num { min-width: 46px; text-align: right; font-size: 18px; font-weight: 700; color: var(--hud-text, #fff); }
+
+.cmp { width: 100%; margin-top: 10px; border-collapse: collapse; font-size: 13px;
+  th { text-align: left; padding: 6px 8px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; color: var(--hud-text-mute, #79899a); border-bottom: 1px solid var(--hud-border, #2a3340); }
+  td { padding: 9px 8px; vertical-align: top; border-bottom: 1px solid var(--hud-border, #2a3340); }
+  td b { display: block; color: var(--hud-text, #fff); } td small { display: block; margin-top: 2px; line-height: 1.35; color: var(--hud-text-mute, #79899a); }
+  .res { font-weight: 700; &.pass { color: #2dd36f; } &.fail { color: #ff5a6a; } &.unclear { color: #f5b942; } }
+  .you { white-space: nowrap; .pill + .pill { margin-left: 6px; } }
+  .agree { width: 24px; font-weight: 800; text-align: center; &.match { color: #2dd36f; } &.differ { color: #ff5a6a; } &.unsure { color: #f5b942; } } }
+@media (max-width: 560px) { .cmp td small { display: none; } }

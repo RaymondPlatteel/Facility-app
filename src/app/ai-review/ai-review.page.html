@@ -63,8 +63,7 @@
         <div><b>{{ we.mean * 100 | number:'1.0-0' }}%</b><span>Average error of the estimate</span></div>
       </div>
       <ng-template #noWeight><p class="air-note">Enter the real weight on a lift (under its video on the Pending page) to see how far off the estimate is.</p></ng-template>
-      <p class="air-note" *ngIf="weightModel as wm">A model trained on {{ wm.n }} confirmed weights is {{ wm.accuracy < wm.ruleAccuracy ? 'now correcting' : 'not yet better than' }} the plain bar-speed estimate (error {{ wm.accuracy * 100 | number:'1.0-0' }}% against {{ wm.ruleAccuracy * 100 | number:'1.0-0' }}%).</p>
-      <p class="air-note" *ngIf="!weightModel">The estimate comes from bar speed against the athlete's best verified result. After 8 lifts with a confirmed weight it also learns from the plates.</p>
+      <p class="air-note">The estimate is read from the plates on the bar: how many there are on each end and how big they are, measured against the athlete’s height. Bar speed is a secondary check. When the plates cannot be seen, no weight is estimated.</p>
     </section>
 
     <!-- Per test -->

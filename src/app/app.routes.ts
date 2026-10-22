@@ -154,6 +154,18 @@ export const routes: Routes = [
     data: { title: 'AI Trainer' }
   },
   {
+    path: 'ai-trainer/review/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./ai-trainer/ai-submission.page').then( m => m.AiSubmissionPage),
+    data: { title: 'AI Trainer' }
+  },
+  {
+    path: 'ai-trainer/:area/:component',
+    canActivate: [authGuard],
+    loadComponent: () => import('./ai-trainer/ai-component.page').then( m => m.AiComponentPage),
+    data: { title: 'AI Trainer' }
+  },
+  {
     path: 'ai-trainer/:area',
     canActivate: [authGuard],
     loadComponent: () => import('./ai-trainer/ai-trainer-detail.page').then( m => m.AiTrainerDetailPage),

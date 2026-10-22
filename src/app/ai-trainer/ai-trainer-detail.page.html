@@ -10,120 +10,61 @@
 
     <div class="stat-line">
       <span class="at-chip" [class]="stats.status">{{ statusText[stats.status] }}</span>
-      &nbsp;<b>{{ stats.examples }}</b> reviewed · <b>{{ stats.taught }}</b> taught
-      <ng-container *ngIf="stats.agree !== null"> · <b>{{ stats.agree * 100 | number:'1.0-0' }}%</b> {{ area === 'weight' ? 'accurate' : 'agrees' }}</ng-container>
-      <ng-container *ngIf="stats.extra"> · {{ stats.extra }}</ng-container>
+      &nbsp;<b>{{ stats.examples }}</b> videos · <b>{{ stats.taught }}</b> judged
+      <ng-container *ngIf="stats.agree !== null"> · <b>{{ stats.agree * 100 | number:'1.0-0' }}%</b> agrees with you</ng-container>
     </div>
 
     <div class="msg" *ngIf="message">{{ message }}</div>
 
-    <div class="at-block" *ngIf="tunables.length">
-      <h2>How strict it is</h2>
-      <p class="sub">These are the numbers the checks judge by. Changes apply when the videos are analysed again.</p>
-      <div class="tune">
-        <div class="tune-row" *ngFor="let t of tunables">
-          <div class="top"><span>{{ t.label }}</span><b>{{ values[t.key] }}{{ t.unit }}</b></div>
-          <input type="range" [min]="t.min" [max]="t.max" [step]="t.step" [(ngModel)]="values[t.key]">
-          <small>{{ t.hint }}</small>
-        </div>
-      </div>
-      <div class="row">
-        <button class="btn primary" [disabled]="!dirty || !!busy" (click)="saveValues()">Save Settings</button>
-        <button class="btn" [disabled]="!tuned" (click)="resetValues()">Restore Defaults</button>
-        <button class="btn" [disabled]="!!busy" (click)="rerunAll()">Analyse Again</button>
-      </div>
-    </div>
-
-    <div class="at-block" *ngIf="area === 'weight'">
-      <h2>How it learns the weight</h2>
-      <p class="sub">The weight cannot be read from bar speed alone. Enter the real weight on the bar for each lift below. After eight, the AI learns from them; the more it sees, the closer its estimate gets.</p>
-    </div>
-
     <div class="at-block">
-      <h2>Videos to judge</h2>
-      <p class="sub" *ngIf="area !== 'weight' && area !== 'integrity'">Mark each check right or wrong, and whether the video should be approved. The ones the AI is least sure of come first.</p>
-      <p class="sub" *ngIf="area === 'integrity'">Videos where a cut, a repeat, the wrong exercise or a missing athlete was flagged. Mark each flag right or wrong.</p>
-      <p class="sub" *ngIf="area === 'weight'">Lifts with a weight estimate. Enter the weight you see on the bar.</p>
-
-      <div *ngIf="!examples.length" class="sub">No videos yet. Athletes' submissions appear here as they are analysed, or add one below.</div>
-
-      <div class="ex" *ngFor="let r of examples; trackBy: trackId" [class.done]="area === 'weight' ? !!actual(r) : !!decision(r)">
-        <div class="ex-head">
-          <b>{{ when(r) }}</b><span *ngIf="area === 'weight' || area === 'integrity'">{{ labels[r.test] }}</span>
-          <span class="verdict" [class]="r.verdict">{{ verdictText(r) }}</span>
-          <small>{{ (r.confidence ?? 0) * 100 | number:'1.0-0' }}% confidence</small>
-          <small *ngIf="r.coachDecision">Coach: {{ r.coachDecision }}</small>
-        </div>
-        <div class="thumbs" *ngIf="r.thumbs?.length"><img *ngFor="let t of r.thumbs" [src]="t" alt=""></div>
-
-        <div class="stat-line" *ngIf="r.weight && isLift(r) && area !== 'integrity'">
-          Estimate <b>{{ r.weight.estimate ?? '—' }}<ng-container *ngIf="r.weight.estimate"> lb</ng-container></b>
-          <ng-container *ngIf="r.weight.low"> ({{ r.weight.low }}–{{ r.weight.high }})</ng-container>
-          <ng-container *ngIf="r.claimed.weight"> · Claimed <b>{{ r.claimed.weight }} lb</b></ng-container>
-        </div>
-
-        <ul class="checks" *ngIf="area !== 'weight'">
-          <li *ngFor="let c of checksOf(r)">
-            <span class="mk" [class]="c.result">{{ c.result === 'pass' ? '✓' : c.result === 'fail' ? '✕' : '?' }}</span>
-            <span class="tx"><b>{{ c.label }}</b> {{ c.detail }}</span>
-            <button type="button" class="pill right" [class.on]="mark(r, c.id) === 'right'" (click)="setCheck(r, c.id, 'right')">Right</button>
-            <button type="button" class="pill wrong" [class.on]="mark(r, c.id) === 'wrong'" (click)="setCheck(r, c.id, 'wrong')">Wrong</button>
-          </li>
-        </ul>
-
-        <div class="judge">
-          <ng-container *ngIf="area !== 'integrity' && area !== 'weight'">
-            <span>Should this video be approved?</span>
-            <button type="button" class="pill valid" [class.on]="r.trainer?.label === 'valid'" (click)="setLabel(r, 'valid')">Valid</button>
-            <button type="button" class="pill invalid" [class.on]="r.trainer?.label === 'invalid'" (click)="setLabel(r, 'invalid')">Invalid</button>
-          </ng-container>
-          <label *ngIf="isLift(r) && area !== 'integrity'">Real weight on the bar
-            <input type="number" inputmode="decimal" placeholder="lb" [value]="actual(r)" (change)="setActual(r, $any($event.target).value)">
-          </label>
-        </div>
-      </div>
-
-      <div class="row" *ngIf="total > 12">
-        <button class="btn" (click)="showAll = !showAll">{{ showAll ? 'Show Fewer' : 'Show All ' + total }}</button>
-      </div>
-    </div>
-
-    <div class="at-block" *ngIf="area !== 'integrity'">
-      <h2>Add a training video</h2>
-      <p class="sub">Upload a video you know the answer to. It is analysed like an athlete's, marked as you say, and the AI learns from it.</p>
+      <h2>Add a video</h2>
+      <p class="sub">Upload a video of a {{ title.toLowerCase() }}. The AI fills out its checklist for it, then you open it below and fill out yours.</p>
       <div class="form">
-        <label *ngIf="!isTest || true">Test
-          <select [(ngModel)]="form.test" [disabled]="isTest">
-            <option *ngFor="let t of tests" [ngValue]="t" [hidden]="area === 'weight' && ['deadlift','squat','bench'].indexOf(t) < 0">{{ labels[t] }}</option>
-          </select>
-        </label>
-        <label>This video is
-          <select [(ngModel)]="form.label"><option value="valid">Valid</option><option value="invalid">Invalid</option></select>
-        </label>
-        <label>Claimed result
-          <input type="number" inputmode="decimal" [(ngModel)]="form.value" placeholder="Score">
-        </label>
-        <label *ngIf="formLift">Weight (lb)
-          <input type="number" inputmode="decimal" [(ngModel)]="form.weight">
-        </label>
-        <label>Reps
-          <input type="number" inputmode="numeric" [(ngModel)]="form.reps">
-        </label>
-        <label>Height (in)
-          <input type="number" inputmode="decimal" [(ngModel)]="form.height">
-        </label>
-        <label>Body weight (lb)
-          <input type="number" inputmode="decimal" [(ngModel)]="form.body">
-        </label>
         <label>Video
           <input type="file" accept="video/*" (change)="pick($event)">
         </label>
+        <label>Claimed result <small>(optional)</small>
+          <input type="number" inputmode="decimal" [(ngModel)]="form.value" placeholder="Score">
+        </label>
+        <label *ngIf="formLift">Weight on the bar (lb) <small>(optional)</small>
+          <input type="number" inputmode="decimal" [(ngModel)]="form.weight">
+        </label>
+        <label>Reps <small>(optional)</small>
+          <input type="number" inputmode="numeric" [(ngModel)]="form.reps">
+        </label>
+        <label>Height (in) <small>(optional)</small>
+          <input type="number" inputmode="decimal" [(ngModel)]="form.height">
+        </label>
       </div>
-      <div class="row"><button class="btn primary" [disabled]="!canAdd" (click)="add()">{{ busy === 'add' ? 'Uploading…' : 'Add Video' }}</button></div>
+      <div class="row">
+        <button class="btn primary" [disabled]="!form.file || !!busy" (click)="add()">{{ busy === 'add' ? 'Uploading…' : 'Add Video' }}</button>
+        <span class="why" *ngIf="!form.file && !busy">Choose a video file.</span>
+      </div>
+    </div>
 
-      <div *ngFor="let v of mine" class="tv">
-        <span>{{ labels[v.test] }} · {{ v.name }} · {{ v.label === 'valid' ? 'Valid' : 'Invalid' }}</span>
-        <button class="btn" (click)="remove(v)">Remove</button>
+    <div class="at-block">
+      <h2>Submissions</h2>
+      <p class="sub">The videos you added and the athletes' own submissions. Open one to watch it and compare the AI's checklist with yours.</p>
+      <app-ai-submissions [rows]="rows"></app-ai-submissions>
+    </div>
+
+    <div class="at-block" *ngIf="isTest">
+      <h2>Components</h2>
+      <p class="sub">A video passes when every item passes. Open an item to see how often the AI gets it right and to change how strict it is.</p>
+      <div class="comp-list">
+        <button type="button" class="comp" *ngFor="let c of checklist; trackBy: byId" (click)="openComponent(c.link)">
+          <span class="comp-main">
+            <b>{{ c.label }}</b>
+            <small>{{ c.what }}</small>
+            <small *ngIf="c.shared" class="shared-tag">Shared with other tests</small>
+          </span>
+          <span class="comp-acc-num">{{ c.stats.accuracy === null ? '—' : (c.stats.accuracy * 100 | number:'1.0-0') + '%' }}</span>
+          <span class="at-chip" [class]="c.stats.status">{{ componentStatus[c.stats.status] }}</span>
+          <ion-icon name="chevron-forward-outline"></ion-icon>
+        </button>
+      </div>
+      <div class="row">
+        <button class="btn" [disabled]="!!busy" (click)="rerunAll()">Analyse All Videos Again</button>
       </div>
     </div>
   </div>

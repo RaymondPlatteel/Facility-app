@@ -1,4 +1,5 @@
 import { AiReview, TEST_LABELS, VIDEO_TESTS, VideoTest, decisionOf, actualWeightOf } from '../ai/ai-review.types';
+import { weightScores } from './ai-trainer.components';
 
 export type Area = VideoTest | 'weight' | 'integrity';
 export const LIFTS: readonly VideoTest[] = ['deadlift', 'squat', 'bench'];
@@ -25,12 +26,12 @@ export function statsFor(area: Area, reviews: AiReview[]): AreaStats {
   const done = reviews.filter(r => r.status === 'done');
   if (area === 'weight') {
     const lifts = done.filter(r => (LIFTS as readonly string[]).includes(r.test) && r.weight);
-    const known = lifts.filter(r => actualWeightOf(r) && r.weight!.estimate);
-    const err = known.length ? known.reduce((s, r) => s + Math.abs((r.weight!.estimate as number) - (actualWeightOf(r) as number)) / (actualWeightOf(r) as number), 0) / known.length : null;
-    return { examples: lifts.length, taught: known.length, agree: err === null ? null : Math.max(0, 1 - err),
+    const w = weightScores(done);
+    const err = w.plates.error;
+    return { examples: lifts.length, taught: w.labelled, agree: w.labelled && err !== null ? Math.max(0, 1 - err) * (w.plates.estimated / w.labelled) : w.labelled ? 0 : null,
       attention: lifts.filter(r => !actualWeightOf(r)).length,
-      status: known.length === 0 ? 'empty' : known.length < 8 ? 'few' : known.length < 30 ? 'learning' : 'reliable',
-      extra: err === null ? 'No real weights entered yet' : `Estimate off by ${Math.round(err * 100)}% on average` };
+      status: w.labelled === 0 ? 'empty' : w.labelled < 8 ? 'few' : w.labelled < 30 ? 'learning' : 'reliable',
+      extra: err === null ? (w.labelled ? 'Plates not read on the videos with a real weight' : 'No real weights entered yet') : `Plate reading off by ${Math.round(err * 100)}% on average` };
   }
   if (area === 'integrity') {
     const flagged = done.filter(r => (r.checks ?? []).some(c => INTEGRITY_CHECKS.includes(c.id) && c.result !== 'pass'));

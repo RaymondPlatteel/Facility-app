@@ -1,4 +1,5 @@
 import type { PoseLandmarker } from '@mediapipe/tasks-vision';
+import { PlateReading, readPlatesFromVideo } from './plates';
 
 // Reads a proof video frame by frame: the body's 33 landmarks in each sampled frame (Google's MediaPipe pose model,
 // run here in the browser), a tiny grey copy of each frame to spot cuts, fingerprints of a few frames to spot a
@@ -23,7 +24,11 @@ export interface VideoReading {
   // coloured blobs there were. Kept as features for the weight model; they are only useful once it has been taught
   // what this gym's plates weigh.
   plates: { sat: number; red: number; blue: number; yellow: number; green: number; blobs: number } | null;
+  // The plates counted at the ends of the bar (see plates.ts). Only read for the lifts, when `opts.test` is given.
+  plateRead: PlateReading | null;
 }
+
+export interface ReadOptions { test?: string; heightM?: number | null }
 
 let landmarker: Promise<PoseLandmarker> | null = null;
 // The model in video mode needs every timestamp to be later than the last one it saw, across all videos, so each
@@ -90,7 +95,7 @@ export function hamming(a: string, b: string): number {
   return n;
 }
 
-export async function readVideo(url: string, onProgress?: (f: number) => void): Promise<VideoReading> {
+export async function readVideo(url: string, onProgress?: (f: number) => void, opts: ReadOptions = {}): Promise<VideoReading> {
   const pose = await loadLandmarker();
   const video = document.createElement('video');
   video.crossOrigin = 'anonymous';
@@ -226,7 +231,13 @@ export async function readVideo(url: string, onProgress?: (f: number) => void): 
         thumbs.push(tc.toDataURL('image/jpeg', 0.6));
       }
     }
-    return { duration, width, height, frames, diffs, hashes, thumbs, plates };
+    let plateRead: PlateReading | null = null;
+    if (canRead && (opts.test === 'deadlift' || opts.test === 'squat' || opts.test === 'bench')) {
+      try {
+        plateRead = await readPlatesFromVideo(video, frames, opts.test, opts.heightM ?? null, async t => { video.currentTime = Math.abs(video.currentTime - t) < 0.002 ? t + 0.004 : t; await once(video, 'seeked', 15000); });
+      } catch { plateRead = null; }
+    }
+    return { duration, width, height, frames, diffs, hashes, thumbs, plates, plateRead };
   } finally {
     video.removeAttribute('src');
     video.load();

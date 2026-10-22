@@ -8,8 +8,9 @@ import { arrowBack, chevronForwardOutline } from 'ionicons/icons';
 import { AiReviewService, ReviewerState } from '../ai/ai-review.service';
 import { AiReview, TEST_LABELS, VIDEO_TESTS } from '../ai/ai-review.types';
 import { Area, AreaStats, STATUS_TEXT, areaTitle, statsFor } from './ai-trainer.shared';
+import { COMPONENTS, COMPONENT_STATUS, ComponentStats, VIDEO_COMPONENTS, componentStats, componentsOf } from './ai-trainer.components';
 
-interface Card { area: Area | 'split' | 'program'; title: string; blurb: string; link: string; stats: AreaStats | null }
+interface Card { area: Area | 'split' | 'program' | 'review'; title: string; blurb: string; link: string; stats: AreaStats | null }
 
 // Every trainer in one place. Each video test has its own: the coach teaches it by judging its checks on real videos,
 // tuning what it demands, and adding videos of their own. Weight and video integrity have theirs, and the middle split and
@@ -27,7 +28,7 @@ export class AiTrainerPage implements OnDestroy {
   private subs = new Subscription();
   readonly statusText = STATUS_TEXT;
 
-  constructor(private ai: AiReviewService, private router: Router) {
+  constructor(private ai: AiReviewService, public router: Router) {
     addIcons({ arrowBack, chevronForwardOutline });
     this.ai.start();
     this.subs.add(this.ai.state$.subscribe(s => this.state = s));
@@ -35,19 +36,29 @@ export class AiTrainerPage implements OnDestroy {
   }
   ngOnDestroy() { this.subs.unsubscribe(); }
 
+  // The lists are rebuilt on every update, so the cards are matched by what they are. Without this the button under a press
+  // is replaced before the release and the tap is lost.
+  byArea = (_: number, c: { area: string }) => c.area;
+  byId = (_: number, c: { id: string }) => c.id;
+
   goBack() { this.router.navigateByUrl('/home'); }
   open(c: Card) { this.router.navigateByUrl(c.link); }
 
   get tests(): Card[] {
     return VIDEO_TESTS.map(t => ({ area: t, title: TEST_LABELS[t], blurb: this.blurbOf(t), link: `/ai-trainer/${t}`, stats: statsFor(t, this.reviews) }));
   }
-  get special(): Card[] {
-    return [
-      { area: 'weight', title: 'Weight on the Bar', blurb: 'Learns the weight from the video. Enter what was really on the bar and it gets better at estimating.', link: '/ai-trainer/weight', stats: statsFor('weight', this.reviews) },
-      { area: 'integrity', title: 'Video Integrity', blurb: 'Catches cut and edited videos, footage sent twice, and the wrong exercise. Tell it which flags were right.', link: '/ai-trainer/integrity', stats: statsFor('integrity', this.reviews) }
-    ];
+  // The components every test shares: the weight on the bar, and the checks of the video itself. Each is trained once, on the
+  // videos of every test that has it.
+  get shared(): Array<{ id: string; title: string; blurb: string; link: string; stats: ComponentStats }> {
+    return ['weight', ...VIDEO_COMPONENTS].map(id => {
+      const c = COMPONENTS.find(x => x.id === id)!;
+      return { id, title: c.label, blurb: c.what, link: `/ai-trainer/all/${id}`, stats: componentStats(c, this.reviews) };
+    });
   }
+  readonly componentStatus = COMPONENT_STATUS;
+  checklist(t: string) { return componentsOf(t as any); }
   readonly others: Card[] = [
+    { area: 'review', title: 'AI Review', blurb: 'The reviewer itself: switch it on or off, see what it is analysing and the models it has learned.', link: '/ai-review', stats: null },
     { area: 'split', title: 'Middle Split', blurb: 'Teaches detection where the hip and ankles are on a photo.', link: '/split-training', stats: null },
     { area: 'program', title: 'Programs', blurb: 'Teaches the program builder by correcting the weeks it writes.', link: '/program-trainer', stats: null }
   ];

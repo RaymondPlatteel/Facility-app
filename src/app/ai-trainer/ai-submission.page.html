@@ -1,0 +1,103 @@
+<ion-content [fullscreen]="true" class="at-content">
+  <div class="at-page">
+    <div class="at-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back"><ion-icon name="arrow-back"></ion-icon></button>
+      <div>
+        <div class="at-eyebrow">AI Trainer · {{ r ? labels[r.test] : '' }}</div>
+        <h1>{{ title }}</h1>
+      </div>
+    </div>
+
+    <p class="sub" *ngIf="!r && !loaded">Loading…</p>
+    <p class="sub" *ngIf="!r && loaded">This video could not be found. It may have been removed.</p>
+
+    <ng-container *ngIf="r">
+      <p class="sub-line">
+        {{ isTraining ? 'Training video' : 'Athlete submission' }} · {{ (r.analyzedAt || r.submittedAt) | date:'MMM d, y' }}
+        <ng-container *ngIf="running"> · Being analysed again</ng-container>
+        <ng-container *ngIf="r.status === 'error'"> · Could not be analysed: {{ r.error }}</ng-container>
+      </p>
+
+      <video class="vid vid-main" *ngIf="r.videoUrl" [src]="r.videoUrl" controls playsinline preload="metadata" [poster]="r.thumbs?.[1] || ''"></video>
+      <div class="msg" *ngIf="message">{{ message }}</div>
+
+      <div class="msg" *ngIf="running && r.checks?.length">The AI is analysing this video again. Your answers are kept, and its side updates when it finishes.</div>
+      <div class="rv" *ngIf="r.checks?.length">
+        <div class="rv-head">
+          <div class="rv-col"><span class="vs-head">The AI's checklist</span><small>What it found and what it saw</small></div>
+          <div class="rv-col"><span class="vs-head">Your checklist</span><small>{{ answered }}/{{ checks.length }} answered</small></div>
+        </div>
+
+        <div class="rv-row" *ngFor="let c of checks">
+          <div class="rv-col rv-ai">
+            <div class="rv-title"><b>{{ c.label }}</b><span class="res" [class]="c.result">{{ glyph(c.result) }} {{ resText(c.result) }}</span></div>
+            <p>{{ c.detail }}</p>
+            <ng-container *ngIf="c.id === 'weight' && r.weight">
+              <small *ngIf="r.weight.plates?.perSide">Counted {{ r.weight.plates!.perSide }} plate{{ r.weight.plates!.perSide === 1 ? '' : 's' }} on each side<ng-container *ngIf="r.weight.plates!.plateLabel">, {{ r.weight.plates!.plateLabel }} each</ng-container>.</small>
+              <small *ngIf="r.weight.estimate">The AI's weight: {{ r.weight.estimate }} lb<ng-container *ngIf="r.weight.low"> ({{ r.weight.low }}–{{ r.weight.high }})</ng-container><ng-container *ngIf="r.weight.confidence"> · {{ r.weight.confidence }} confidence</ng-container>.</small>
+              <small *ngIf="r.weight.speed?.estimate">Bar speed alone would say about {{ r.weight.speed!.estimate }} lb.</small>
+            </ng-container>
+          </div>
+          <div class="rv-col rv-you" [class.differ]="agrees(c) === 'differ'" [class.match]="agrees(c) === 'match'">
+            <div class="rv-title">
+              <b>{{ c.label }}</b>
+              <span class="rv-btns">
+                <button type="button" class="pill valid" [class.on]="answer(c) === 'pass'" (click)="setAnswer(c, 'pass')">Pass</button>
+                <button type="button" class="pill invalid" [class.on]="answer(c) === 'fail'" (click)="setAnswer(c, 'fail')">Fail</button>
+              </span>
+            </div>
+            <label class="rv-weight" *ngIf="c.id === 'weight'">Real weight on the bar
+              <input type="number" inputmode="decimal" placeholder="lb" [value]="realWeight" (change)="setActual($any($event.target).value)">
+            </label>
+            <label class="rv-weight" *ngIf="measure(c) as m">{{ m.label }}
+              <span class="rv-unit"><input type="number" inputmode="decimal" [value]="value(c)" (change)="setValue(c, $any($event.target).value)"> {{ m.unit }}</span>
+            </label>
+            <small class="vs-agree" [class]="agrees(c)" *ngIf="agrees(c)">
+              {{ agrees(c) === 'match' ? 'The AI agrees with you.' : agrees(c) === 'differ' ? 'The AI got this one wrong.' : 'The AI was not sure.' }}
+            </small>
+          </div>
+        </div>
+
+        <div class="rv-row rv-overall">
+          <div class="rv-col rv-ai">
+            <div class="rv-title"><b>Overall</b><span class="res" [class]="r.verdict === 'likely-valid' ? 'pass' : r.verdict === 'likely-invalid' ? 'fail' : 'unclear'">{{ verdictText() }}</span></div>
+            <p>{{ (r.confidence ?? 0) * 100 | number:'1.0-0' }}% confident<ng-container *ngIf="r.coachDecision"> · you {{ r.coachDecision }} the submission</ng-container></p>
+          </div>
+          <div class="rv-col rv-you">
+            <div class="rv-title"><b>Should this video be approved?</b></div>
+            <span class="rv-btns">
+              <button type="button" class="pill valid" [class.on]="r.trainer?.label === 'valid'" (click)="setLabel('valid')">Valid</button>
+              <button type="button" class="pill invalid" [class.on]="r.trainer?.label === 'invalid'" (click)="setLabel('invalid')">Invalid</button>
+            </span>
+          </div>
+        </div>
+
+        <div class="rv-done" *ngIf="!completed">
+          <button type="button" class="btn primary rv-complete" [disabled]="!allAnswered || completing" (click)="complete()">{{ completing ? 'Updating the AI…' : 'Complete' }}</button>
+          <span class="why" *ngIf="!allAnswered">Answer every item above to complete this video ({{ answered }}/{{ checks.length }}).</span>
+          <span class="why" *ngIf="allAnswered">The AI learns from your answers when you press Complete.</span>
+        </div>
+
+        <div class="rv-result" *ngIf="completed">
+          <div class="rv-result-head">
+            <b>Complete. The AI has been updated.</b>
+            <button type="button" class="btn" (click)="reopen()">Edit My Answers</button>
+          </div>
+          <div class="rv-acc">
+            <div class="rv-acc-box">
+              <span class="vs-head">This video</span>
+              <b>{{ thisVideo.accuracy === null ? '—' : (thisVideo.accuracy * 100 | number:'1.0-0') + '%' }}</b>
+              <small>The AI matched you on {{ thisVideo.matched }} of {{ thisVideo.answered }} items</small>
+              <small *ngIf="thisVideo.missed.length">It missed: {{ thisVideo.missed.join(', ') }}</small>
+            </div>
+            <div class="rv-acc-box">
+              <span class="vs-head">{{ labels[r.test] }} so far</span>
+              <b>{{ testWide.accuracy === null ? '—' : (testWide.accuracy * 100 | number:'1.0-0') + '%' }}</b>
+              <small>Across {{ testVideos }} completed video{{ testVideos === 1 ? '' : 's' }} ({{ testWide.matched }} of {{ testWide.answered }} items)</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+</ion-content>

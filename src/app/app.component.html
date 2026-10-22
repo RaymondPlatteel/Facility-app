@@ -111,22 +111,9 @@
         <span>App Videos</span>
       </a>
 
-      <div class="sidebar-group-title">AI Trainer</div>
-      <a routerLink="/ai-trainer" routerLinkActive="active" class="sidebar-link">
+      <a routerLink="/ai-trainer" class="sidebar-link" [class.active]="inAiTrainer">
         <ion-icon name="sparkles-outline"></ion-icon>
-        <span>Trainers</span>
-      </a>
-      <a routerLink="/ai-review" routerLinkActive="active" class="sidebar-link">
-        <ion-icon name="scan-outline"></ion-icon>
-        <span>AI Review</span>
-      </a>
-      <a routerLink="/split-training" routerLinkActive="active" class="sidebar-link">
-        <ion-icon name="scan-outline"></ion-icon>
-        <span>Middle Split</span>
-      </a>
-      <a routerLink="/program-trainer" routerLinkActive="active" class="sidebar-link">
-        <ion-icon name="school-outline"></ion-icon>
-        <span>Programs</span>
+        <span>AI Trainer</span>
       </a>
 
       <div class="sidebar-group-title">Business</div>

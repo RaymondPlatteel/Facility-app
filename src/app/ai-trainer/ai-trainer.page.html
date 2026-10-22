@@ -9,8 +9,9 @@
     </div>
 
     <p class="at-intro">
-      One trainer for each test, plus weight and video integrity. In each you judge what the AI found on real videos,
-      tune how strict it is, and add videos of your own. Every judgement is kept and the AI learns from all of them.
+      Every test is a checklist, and a video passes when each item on it passes. Each item is a component, such as the
+      weight on the bar or the lockout. Each component is trained on its own: you judge what the AI found, tune how strict
+      it is and add videos of your own, and each shows how often the AI gets it right.
     </p>
 
     <div class="at-summary" *ngIf="state as s">
@@ -21,13 +22,14 @@
 
     <h2 class="at-section">Video tests</h2>
     <div class="at-grid">
-      <button type="button" class="at-card" *ngFor="let c of tests" (click)="open(c)">
+      <button type="button" class="at-card" *ngFor="let c of tests; trackBy: byArea" (click)="open(c)">
         <div class="at-card-head">
           <span class="at-card-title">{{ c.title }}</span>
           <span class="at-chip" [class]="c.stats!.status">{{ statusText[c.stats!.status] }}</span>
         </div>
         <p>{{ c.blurb }}</p>
         <div class="at-card-stats">
+          <span><b>{{ checklist(c.area).length }}</b> components</span>
           <span><b>{{ c.stats!.examples }}</b> reviewed</span>
           <span><b>{{ c.stats!.taught }}</b> taught</span>
           <span><b>{{ c.stats!.agree === null ? '—' : (c.stats!.agree! * 100 | number:'1.0-0') + '%' }}</b> agrees</span>
@@ -36,26 +38,26 @@
       </button>
     </div>
 
-    <h2 class="at-section">Across every test</h2>
+    <h2 class="at-section">Shared components</h2>
+    <p class="at-note">The same check in every test that has it, trained once on all of their videos.</p>
     <div class="at-grid">
-      <button type="button" class="at-card" *ngFor="let c of special" (click)="open(c)">
+      <button type="button" class="at-card" *ngFor="let c of shared; trackBy: byId" (click)="router.navigateByUrl(c.link)">
         <div class="at-card-head">
           <span class="at-card-title">{{ c.title }}</span>
-          <span class="at-chip" [class]="c.stats!.status">{{ statusText[c.stats!.status] }}</span>
+          <span class="at-chip" [class]="c.stats.status">{{ componentStatus[c.stats.status] }}</span>
         </div>
         <p>{{ c.blurb }}</p>
         <div class="at-card-stats">
-          <span><b>{{ c.stats!.examples }}</b> videos</span>
-          <span><b>{{ c.stats!.taught }}</b> taught</span>
-          <span>{{ c.stats!.extra }}</span>
+          <span><b>{{ c.stats.accuracy === null ? '—' : (c.stats.accuracy * 100 | number:'1.0-0') + '%' }}</b> {{ c.id === 'weight' ? 'accurate' : 'accuracy' }}</span>
+          <span><b>{{ c.stats.seen }}</b> videos</span>
+          <span><b>{{ c.stats.judged }}</b> judged</span>
         </div>
-        <span class="at-card-go" *ngIf="c.stats!.attention">{{ c.stats!.attention }} to look at <ion-icon name="chevron-forward-outline"></ion-icon></span>
       </button>
     </div>
 
     <h2 class="at-section">Other trainers</h2>
     <div class="at-grid">
-      <button type="button" class="at-card" *ngFor="let c of others" (click)="open(c)">
+      <button type="button" class="at-card" *ngFor="let c of others; trackBy: byArea" (click)="open(c)">
         <div class="at-card-head"><span class="at-card-title">{{ c.title }}</span></div>
         <p>{{ c.blurb }}</p>
         <span class="at-card-go">Open <ion-icon name="chevron-forward-outline"></ion-icon></span>

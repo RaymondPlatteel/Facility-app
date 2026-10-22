@@ -31,8 +31,8 @@ import { AiReviewService } from './ai-review.service';
         <div class="ai-weight" *ngIf="isLift && review!.weight as w" [class.bad]="weightBad">
           <div class="ai-weight-head">
             <span class="ai-sub">Weight on the bar</span>
-            <span class="ai-weight-est" *ngIf="w.estimate !== null">About <b>{{ w.estimate }} lb</b> <small>({{ w.low }}\u2013{{ w.high }})</small></span>
-            <span class="ai-weight-est" *ngIf="w.estimate === null">Could not be estimated</span>
+            <span class="ai-weight-est" *ngIf="w.estimate !== null">About <b>{{ w.estimate }} lb</b> <small>({{ w.low }}\u2013{{ w.high }}) \u00b7 {{ w.confidence }} confidence</small></span>
+            <span class="ai-weight-est" *ngIf="w.estimate === null">Plates not read</span>
             <span class="ai-weight-claim" *ngIf="w.claimed">Claimed <b>{{ w.claimed | number:'1.0-0' }} lb</b></span>
           </div>
           <div class="ai-weight-basis">{{ w.basis }}</div>
@@ -40,7 +40,7 @@ import { AiReviewService } from './ai-review.service';
             <label>Actual weight on the bar
               <input type="number" inputmode="decimal" placeholder="lb" [value]="review!.coachLabels?.actualWeight ?? ''" (change)="actual($any($event.target).value)">
             </label>
-            <span class="ai-sub">Enter what you see on the bar. It teaches the estimate.</span>
+            <span class="ai-sub">Enter what you see on the bar. It is used to measure the plate reading.</span>
           </div>
         </div>
 

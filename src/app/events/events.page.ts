@@ -1,5 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { EVENT_STARTERS, EventStarter, eventDoc } from './event-starters';
 import { FormsModule } from '@angular/forms';
 import { IonContent, IonIcon, ToastController, AlertController } from '@ionic/angular/standalone';
 import { FirebaseService, Announcement, AnnouncementAction, CompetitionEvent, EventRegistration, EventStatus, EventMinRank, EventBackdrop, EventFloat, EventAudience, EventTimeSlot, formatSlot, EventCopyKey, EVENT_COPY_DEFAULTS } from '../services/firebase.service';
@@ -30,6 +32,11 @@ interface EventForm {
   slots: Array<{ id: string; date: string; start: string; end: string; label: string }>;
   backdrop: EventBackdrop;
   float: EventFloat;
+  customHtml: string;
+  locationTbd: boolean;
+  somasReward: number | null;
+  merchDiscounts: Record<string, number | null>;
+  locationState: string;
   image: string;                // data URL, already cropped to IMAGE_W × IMAGE_H
   caption: string;
   status: EventStatus;
@@ -177,7 +184,29 @@ export class EventsPage implements OnInit {
     { value: 'S-RANK', label: 'S-Rank only' }
   ];
 
-  constructor(private firebase: FirebaseService, private toasts: ToastController, private alerts: AlertController) {}
+  constructor(private firebase: FirebaseService, private toasts: ToastController, private alerts: AlertController, private sanitizer: DomSanitizer) {}
+
+  // ---- custom animation: any web page, shown behind the event's words on every phone ----
+  readonly starters = EVENT_STARTERS;
+  insertStarter(s: EventStarter) {
+    const f = this.form;
+    if (!f) return;
+    if (f.customHtml.trim() && !confirm('Replace what is in the box with this starter?')) return;
+    f.customHtml = s.html;
+  }
+  // The page as the preview draws it. Kept until the code or the rank changes, so the frame is not reloaded by every
+  // screen update.
+  private docKey = '';
+  private docValue: SafeHtml = '';
+  get previewDoc(): SafeHtml {
+    const html = this.form?.customHtml ?? '';
+    const key = this.previewAccent + '|' + html;
+    if (key !== this.docKey) {
+      this.docKey = key;
+      this.docValue = this.sanitizer.bypassSecurityTrustHtml(eventDoc(html, this.previewAccent));
+    }
+    return this.docValue;
+  }
 
   async ngOnInit() {
     if (new URLSearchParams(location.search).get('tab') === 'announcements') this.tab = 'announcements';
@@ -319,6 +348,11 @@ export class EventsPage implements OnInit {
       slots: (e.timeSlots ?? []).map(t => ({ id: t.id, date: t.date ?? '', start: t.start, end: t.end ?? '', label: t.label ?? '' })),
       backdrop: e.backdrop ?? (e.image ? 'photo' : 'rank'),
       float: e.float ?? (e.ticker ? 'zeros' : 'none'),
+      customHtml: e.customHtml ?? '',
+      locationTbd: !!e.locationTbd,
+      somasReward: e.somasReward ?? null,
+      merchDiscounts: { D: e.merchDiscounts?.['D'] ?? null, C: e.merchDiscounts?.['C'] ?? null, B: e.merchDiscounts?.['B'] ?? null, A: e.merchDiscounts?.['A'] ?? null, S: e.merchDiscounts?.['S'] ?? null },
+      locationState: e.locationState ?? '',
       image: e.image ?? '',
       caption: e.caption ?? '',
       status: e.status ?? 'draft',
@@ -404,9 +438,10 @@ export class EventsPage implements OnInit {
   ];
 
   // What can drift over a backdrop (not over a photo).
+  readonly states = ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut', 'Delaware', 'District of Columbia', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming'];
   readonly floats: Array<{ value: EventFloat; label: string }> = [
     { value: 'none', label: 'Nothing' },
-    { value: 'zeros', label: 'Ghosted 000' },
+    { value: 'zeros', label: 'Animated logo' },
     { value: 'dust', label: 'Dust' },
     { value: 'embers', label: 'Embers' },
     { value: 'rings', label: 'Rings' },
@@ -470,10 +505,20 @@ export class EventsPage implements OnInit {
   get previewWhere(): string {
     const f = this.form;
     if (!f) return '';
+    if (f.locationTbd) return ['To be announced', f.locationState].filter(Boolean).join(', ');
     return f.multiSite ? f.days.map(d => d.venueName).filter(Boolean).join(' / ') : [f.venueName, f.venueAddress].filter(Boolean).join(', ');
   }
   get previewTimes(): string[] { return (this.form?.slots ?? []).filter(s => s.start).map(s => formatSlot({ id: s.id, date: s.date, start: s.start, end: s.end, label: s.label })); }
   previewRank: 'D' | 'C' | 'B' | 'A' | 'S' = 'D';
+  // The logo behind an event with the Animated logo effect: five feathers to a wing, outermost first.
+  readonly emblemFeathers = [
+    '101,191 244,331 284,490 132,360',
+    '74,388 196,463 261,597 150,547',
+    '183,613 345,659 406,734 304,734',
+    '231,483 382,581 398,687 354,635 291,606',
+    '276,358 467,549 455,682 536,821 425,726 403,573 308,478'
+  ];
+  readonly emblemDys = ['-190px', '-90px', '60px', '150px', '-40px'];
   readonly previewRanks: Array<'D' | 'C' | 'B' | 'A' | 'S'> = ['D', 'C', 'B', 'A', 'S'];
   private readonly rankAccent = { D: '#3ecf6e', C: '#38a8e8', B: '#a066e8', A: '#e0453a', S: '#9fd6c8' };
   readonly chromeRamp = 'linear-gradient(115deg, #ac8dcf 0%, #7fa8d8 28%, #8fd0c0 52%, #d9c98a 76%, #d79fa8 100%)';
@@ -509,6 +554,7 @@ export class EventsPage implements OnInit {
   get previewSite(): { value: string; label: string } | null {
     const f = this.form;
     if (!f) return null;
+    if (f.locationTbd) return f.locationState ? { value: f.locationState, label: 'Venue to be announced' } : { value: 'To be announced', label: 'Venue' };
     if (f.multiSite) {
       const sites = new Set(f.days.filter(d => d.venueName.trim() || d.venueAddress.trim()).map(d => `${d.venueName}|${d.venueAddress}`));
       if (sites.size > 1) return { value: String(sites.size), label: 'Locations' };
@@ -575,7 +621,7 @@ export class EventsPage implements OnInit {
       // Multi-site: the dates and the headline venue come from the days list.
       // Each block keeps its id for good, so athletes' choices stay attached to it.
       f.slots.forEach((t, i) => { if (!t.id && t.start) t.id = `t${Date.now().toString(36)}${i}`; });
-      const days = f.multiSite
+      const days = f.multiSite && !f.locationTbd
         ? f.days.filter(d => d.date).sort((a, b) => a.date.localeCompare(b.date))
             .map(d => ({ date: d.date, venueName: d.venueName.trim() || null, venueAddress: d.venueAddress.trim() || null }))
         : [];
@@ -594,6 +640,11 @@ export class EventsPage implements OnInit {
         backdrop: f.backdrop === 'photo' && !f.image ? 'rank' : f.backdrop,
         float: f.backdrop === 'photo' ? 'none' : f.float,
         ticker: f.backdrop !== 'photo' && f.float === 'zeros',   // read by older app builds
+        customHtml: f.customHtml.trim() || null,
+        locationTbd: f.locationTbd || null,
+        somasReward: num(f.somasReward),
+        merchDiscounts: this.cleanDiscounts(f.merchDiscounts),
+        locationState: f.locationTbd ? (f.locationState || null) : null,
         image: f.image || null,
         caption: f.caption.trim() || null,
         status: f.status,
@@ -602,8 +653,8 @@ export class EventsPage implements OnInit {
         endDate: multi ? days[days.length - 1].date : f.endDate || null,
         days: multi ? days : [],
         prizePool: num(f.prizePool),
-        venueName: (multi ? days[0].venueName : f.venueName.trim()) || null,
-        venueAddress: (multi ? days[0].venueAddress : f.venueAddress.trim()) || null,
+        venueName: f.locationTbd ? null : ((multi ? days[0].venueName : f.venueName.trim()) || null),
+        venueAddress: f.locationTbd ? null : ((multi ? days[0].venueAddress : f.venueAddress.trim()) || null),
         registrationOpen: f.registrationOpen,
         minRank: f.minRank === 'UNRANKED' ? null : f.minRank,
         fee: num(f.fee) ?? 0,
@@ -649,6 +700,47 @@ export class EventsPage implements OnInit {
     const paid = r.feeStatus !== 'paid';
     await this.firebase.setRegistrationPaid(r.eventId, r.nameKey, paid);
     r.feeStatus = paid ? 'paid' : 'unpaid';
+  }
+
+  readonly discountRanks = ['D', 'C', 'B', 'A', 'S'];
+  // Only the ranks that were given a discount are kept.
+  private cleanDiscounts(d: Record<string, number | null>): Record<string, number> | null {
+    const out: Record<string, number> = {};
+    for (const r of this.discountRanks) { const n = Number(d[r]); if (n > 0) out[r] = Math.min(100, Math.round(n)); }
+    return Object.keys(out).length ? out : null;
+  }
+
+  get attendedCount(): number { return this.registrations.filter(r => r.attended).length; }
+  get awardable(): EventRegistration[] { return this.registrations.filter(r => r.attended && !r.somasAwarded); }
+  awarding = false;
+
+  async toggleAttended(r: EventRegistration) {
+    const attended = !r.attended;
+    await this.firebase.setRegistrationAttended(r.eventId, r.nameKey, attended);
+    r.attended = attended;
+  }
+
+  // Gives the event's somas to every athlete marked as attended who has not been paid yet.
+  async awardSomas() {
+    const amount = Number(this.form?.somasReward) || 0;
+    const due = this.awardable;
+    if (!amount || !due.length || this.awarding) return;
+    const alert = await this.alerts.create({
+      header: 'Award somas?',
+      message: `${due.length} athlete${due.length === 1 ? '' : 's'} will each receive ${amount.toLocaleString('en-US')} somas. This can't be undone.`,
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        { text: 'Award', handler: async () => {
+          this.awarding = true;
+          try {
+            for (const r of due) {
+              if (await this.firebase.awardEventSomas(r.eventId, r.nameKey, amount)) r.somasAwarded = amount;
+            }
+          } finally { this.awarding = false; }
+        } }
+      ]
+    });
+    await alert.present();
   }
 
   async removeRegistration(r: EventRegistration) {

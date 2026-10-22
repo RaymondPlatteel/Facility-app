@@ -10,15 +10,18 @@ import { AiReviewService } from '../ai/ai-review.service';
 import { AiReview, AiTrainingVideo, TEST_LABELS, VIDEO_TESTS, VideoTest, actualWeightOf, decisionOf } from '../ai/ai-review.types';
 import { GLOBAL_TUNABLES, TUNABLES, Tunable, defaultOf, getOverrides } from '../ai/thresholds';
 import { Area, AreaStats, INTEGRITY_CHECKS, LIFTS, STATUS_TEXT, areaTitle, isArea, statsFor } from './ai-trainer.shared';
+import { AiSubmissionsComponent } from './ai-submissions.component';
+import { Answer, COMPONENT_STATUS, ComponentStats, VIDEO_COMPONENTS, agreement, answerOf, componentStats, componentsOf, feedbackFor, submissionRows } from './ai-trainer.components';
+import type { AiCheck } from '../ai/ai-review.types';
 
 // One trainer page for a test, for the weight, or for video integrity. The coach judges what the AI found on real videos,
 // tunes how strict it is, and adds videos of their own to teach it directly.
 @Component({
   selector: 'app-ai-trainer-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, IonContent, IonIcon],
+  imports: [CommonModule, FormsModule, IonContent, IonIcon, AiSubmissionsComponent],
   templateUrl: './ai-trainer-detail.page.html',
-  styleUrls: ['./ai-trainer.page.scss', './ai-trainer-detail.page.scss']
+  styleUrls: ['./ai-trainer.page.scss', './ai-trainer-detail.page.scss', './ai-component.page.scss']
 })
 export class AiTrainerDetailPage implements OnDestroy {
   area: Area = 'deadlift';
@@ -30,11 +33,12 @@ export class AiTrainerDetailPage implements OnDestroy {
   showAll = false;
   private subs = new Subscription();
   readonly statusText = STATUS_TEXT;
+  readonly componentStatus = COMPONENT_STATUS;
   readonly tests = VIDEO_TESTS;
   readonly labels = TEST_LABELS;
 
   // The add-a-video form.
-  form = { test: 'deadlift' as VideoTest, label: 'valid' as 'valid' | 'invalid', value: null as number | null, weight: null as number | null, reps: null as number | null,
+  form = { test: 'deadlift' as VideoTest, value: null as number | null, weight: null as number | null, reps: null as number | null,
     height: null as number | null, body: null as number | null, file: null as File | null };
 
   constructor(private route: ActivatedRoute, private router: Router, private ai: AiReviewService) {
@@ -43,6 +47,9 @@ export class AiTrainerDetailPage implements OnDestroy {
     this.subs.add(this.route.paramMap.subscribe(p => {
       const a = p.get('area') ?? '';
       if (!isArea(a)) { this.router.navigateByUrl('/ai-trainer'); return; }
+      // The weight and the video checks are components now, each with a page of its own.
+      if (a === 'weight') { this.router.navigateByUrl('/ai-trainer/all/weight', { replaceUrl: true }); return; }
+      if (a === 'integrity') { this.router.navigateByUrl('/ai-trainer', { replaceUrl: true }); return; }
       this.area = a;
       this.form.test = this.isTest ? (a as VideoTest) : 'deadlift';
       this.loadValues();
@@ -53,6 +60,18 @@ export class AiTrainerDetailPage implements OnDestroy {
   ngOnDestroy() { this.subs.unsubscribe(); }
 
   goBack() { this.router.navigateByUrl('/ai-trainer'); }
+
+  // The checklist: what this test is made of, each with how often the AI gets it right.
+  get checklist(): Array<{ id: string; label: string; what: string; link: string; shared: boolean; taught: number; stats: ComponentStats }> {
+    if (!this.isTest) return [];
+    const test = this.area as VideoTest;
+    return componentsOf(test).map(c => {
+      const shared = c.id === 'weight' || VIDEO_COMPONENTS.includes(c.id);
+      return { id: c.id, label: c.label, what: c.what, shared, taught: this.videos.filter(v => v.component === c.id && (shared || v.test === test)).length, link: `/ai-trainer/${shared ? 'all' : test}/${c.id}`, stats: componentStats(c, this.reviews, shared ? undefined : test) };
+    });
+  }
+  byId = (_: number, c: { id: string }) => c.id;
+  openComponent(link: string) { this.router.navigateByUrl(link); }
   get title(): string { return areaTitle(this.area); }
   get isTest(): boolean { return this.area !== 'weight' && this.area !== 'integrity'; }
   get isLiftArea(): boolean { return this.area === 'weight' || (LIFTS as readonly string[]).includes(this.area); }
@@ -89,6 +108,9 @@ export class AiTrainerDetailPage implements OnDestroy {
     this.busy = '';
   }
 
+  // Every video of this test, the athletes' and the ones you added, newest first.
+  get rows() { return submissionRows(this.reviews, this.videos, r => r.test === this.area); }
+
   // The videos to judge, the AI's least sure and the unjudged first: those teach it most.
   get examples(): AiReview[] {
     let list = this.reviews.filter(r => r.status === 'done');
@@ -111,6 +133,10 @@ export class AiTrainerDetailPage implements OnDestroy {
     if (this.area === 'integrity') return all.filter(c => INTEGRITY_CHECKS.includes(c.id));
     return all;
   }
+  // The AI's result beside what you say it should have been, for every item on the checklist.
+  answer(r: AiReview, c: AiCheck): Answer | undefined { return answerOf(r, c); }
+  agrees(r: AiReview, c: AiCheck) { return agreement(r, c); }
+  setAnswer(r: AiReview, c: AiCheck, a: Answer) { this.ai.saveTrainer(r.id!, feedbackFor(c, a)).catch(() => this.message = 'That could not be saved.'); }
   mark(r: AiReview, id: string): 'right' | 'wrong' | undefined { return r.trainer?.checks?.[id]; }
   setCheck(r: AiReview, id: string, v: 'right' | 'wrong') { this.ai.saveTrainer(r.id!, { checks: { [id]: v } }).catch(() => this.message = 'That could not be saved.'); }
   setLabel(r: AiReview, l: 'valid' | 'invalid') { this.ai.saveTrainer(r.id!, { label: r.trainer?.label === l ? null : l }).catch(() => this.message = 'That could not be saved.'); }
@@ -128,19 +154,18 @@ export class AiTrainerDetailPage implements OnDestroy {
   get mine(): AiTrainingVideo[] { return this.videos.filter(v => this.isTest ? v.test === this.area : this.area === 'weight' ? (LIFTS as readonly string[]).includes(v.test) : true); }
   pick(e: Event) { this.form.file = (e.target as HTMLInputElement).files?.[0] ?? null; }
   get formLift(): boolean { return (LIFTS as readonly string[]).includes(this.form.test); }
-  get canAdd(): boolean { return !!this.form.file && !!this.form.value && this.form.value > 0 && !this.busy; }
   async add() {
-    if (!this.canAdd || !this.form.file) return;
+    if (!this.form.file || this.busy) return;
     this.busy = 'add';
     try {
       await this.ai.addTrainingVideo(this.form.file, {
-        test: this.form.test, label: this.form.label,
-        claimed: { value: Number(this.form.value), weight: this.formLift ? (Number(this.form.weight) || null) : null, reps: Number(this.form.reps) || null },
+        test: this.form.test,
+        claimed: { value: Number(this.form.value) || 0, weight: this.formLift ? (Number(this.form.weight) || null) : null, reps: Number(this.form.reps) || null },
         heightIn: this.form.height || null, bodyWeightLb: this.form.body || null
       }, this.form.file.name);
-      this.message = 'The video was added and will be analysed shortly.';
+      this.message = 'The video was added. It is analysed shortly, then it appears in the list below.';
       this.form.file = null; this.form.value = null; this.form.weight = null; this.form.reps = null;
-    } catch { this.message = 'The video could not be uploaded.'; }
+    } catch (err: any) { this.message = `The video could not be uploaded${err?.code ? ' (' + err.code + ')' : ''}. ${err?.message ?? ''}`.trim(); }
     this.busy = '';
   }
   async remove(v: AiTrainingVideo) {

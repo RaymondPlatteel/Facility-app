@@ -24,7 +24,6 @@ export class AiReviewPage implements OnDestroy {
   state: ReviewerState | null = null;
   reviews: AiReview[] = [];
   model: AiModel | null = null;
-  weightModel: AiModel | null = null;
   open: string | null = null;
   training = false;
   private subs = new Subscription();
@@ -35,7 +34,6 @@ export class AiReviewPage implements OnDestroy {
     this.subs.add(this.ai.state$.subscribe(s => this.state = s));
     this.subs.add(this.ai.reviews$.subscribe(r => this.reviews = [...r].sort((a, b) => (b.analyzedAt || b.startedAt || '').localeCompare(a.analyzedAt || a.startedAt || ''))));
     this.subs.add(this.ai.model$.subscribe(m => this.model = m));
-    this.subs.add(this.ai.weightModel$.subscribe(m => this.weightModel = m));
   }
 
   ngOnDestroy() { this.subs.unsubscribe(); }

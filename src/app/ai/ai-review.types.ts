@@ -1,3 +1,5 @@
+import type { PlateReading } from './plates';
+
 // The AI reviewer's records. It watches every video proof the athletes send, scores it, and keeps what it found next
 // to the coach's own decision, so it can be measured against the coach and learn from every review. It never decides
 // anything an athlete sees: the coach still approves or rejects every submission.
@@ -72,6 +74,12 @@ export interface AiReview {
 export interface TrainerFeedback {
   label?: 'valid' | 'invalid' | null;
   checks?: Record<string, 'right' | 'wrong'>;
+  // What the coach says each check should have found, shown beside what the AI found.
+  answers?: Record<string, 'pass' | 'fail'>;
+  // The correct number for a check that measures one (the reps counted, the reps that passed, the hold in seconds).
+  values?: Record<string, number>;
+  // Set when the coach presses Complete: they are done with this video and the AI has learned from it.
+  completedAt?: string | null;
   actualWeight?: number | null;
   note?: string;
   at: string;
@@ -84,7 +92,14 @@ export interface AiTrainingVideo {
   url: string;
   path: string;
   claimed: { value: number; weight?: number | null; reps?: number | null };
-  label: 'valid' | 'invalid';
+  // Whether the whole video should be approved. Absent on a video added to teach one component (see `component`), which
+  // says nothing about the rest of the checklist.
+  label?: 'valid' | 'invalid';
+  // The component this video teaches (the id of a check, or 'weight'), and what the AI should find for it.
+  component?: string;
+  expected?: 'pass' | 'fail';
+  // For the weight component: the weight really on the bar, in lb.
+  actualWeight?: number | null;
   heightIn?: number | null;
   bodyWeightLb?: number | null;
   name: string;
@@ -108,9 +123,26 @@ export interface WeightEstimate {
   low: number | null;
   high: number | null;
   ratio: number | null;        // claimed / estimate
-  method: 'speed' | 'learned' | 'none';
+  // plates: counted from the plates on the bar. speed and learned are the earlier estimates from bar speed (kept on reviews
+  // made before the plates were read). none: the video could not support an estimate.
+  method: 'plates' | 'speed' | 'learned' | 'none';
   basis: string;               // how it was worked out, in words
-  reference: number | null;    // the athlete's best verified result in this test, the estimate's anchor
+  reference: number | null;    // the athlete's best verified result in this test (the speed estimate's anchor)
+  confidence?: 'high' | 'medium' | 'low' | 'none';
+  plates?: PlateReading | null;
+  // The bar-speed estimate for the same video: a secondary check, and the baseline the plate reading is measured against.
+  speed?: { estimate: number | null; low: number | null; high: number | null; basis: string } | null;
+}
+
+// The estimate from the plates, or null when they were not read. Reviews made before the plates were read hold a speed estimate here.
+export function plateEstimateOf(w: WeightEstimate | null | undefined): number | null {
+  return w && w.method === 'plates' ? w.estimate : null;
+}
+// The bar-speed estimate, whether stored beside the plate reading or, on an older review, as the estimate itself.
+export function speedEstimateOf(w: WeightEstimate | null | undefined): number | null {
+  if (!w) return null;
+  if (w.speed !== undefined) return w.speed?.estimate ?? null;
+  return w.method === 'speed' || w.method === 'learned' ? w.estimate : null;
 }
 
 export interface AiModel {
@@ -127,4 +159,4 @@ export interface AiModel {
   trainedAt: string;
 }
 
-export const MODEL_VERSION = 'v9';
+export const MODEL_VERSION = 'v10';

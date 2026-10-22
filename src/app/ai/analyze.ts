@@ -1,5 +1,5 @@
 import type { AiCheck, AiVerdict, VideoTest, WeightEstimate } from './ai-review.types';
-import { predictRidge, Trained } from './learn';
+import { BAR_LB, PlateReading, plateWeight } from './plates';
 import { thr } from './thresholds';
 import type { PoseFrame, Point, VideoReading } from './pose-video';
 
@@ -198,23 +198,18 @@ function share(n: number, of: number, label: string, id: string, passAt = 0.99, 
 
 
 // ---------- the weight check ----------
-// The first check on a lift: what the video suggests the bar held, against what was claimed. Two routes, both built on
-// this app's own data, with nothing sent anywhere:
-//  1. Bar speed. Close to a true max the bar moves slowly, so the speed of the first rep says what share of a max the
-//     load was. Against the athlete's best verified result that gives a weight. It can doubt a claim but not confirm one.
-//  2. A learned correction, once the coach has confirmed enough weights: a small regression on the bar speed and what the
-//     plates looked like (their colours and how much of the frame they fill), trained on the lifts submitted here, from
-//     every gym and every brand of plate. It is only used once it beats the plain speed estimate on held-out lifts.
-// The estimate always carries a range, and the check says plainly when the video cannot support one.
+// The first check on a lift: what the video suggests the bar held, against what was claimed. Two routes, both worked out
+// on this device from the video, with nothing sent anywhere:
+//  1. The plates (plates.ts). The plates at the ends of the bar are found and measured against the lifter's own body: how
+//     many there are on each end and how big they are (and, for bumper plates, what colour). The weight is the bar plus
+//     twice the plates on one end. This is a reading, not a guess, so it can confirm a weight as well as doubt one, and it
+//     says how sure it is, or that the plates could not be seen.
+//  2. Bar speed. Close to a true max the bar moves slowly, so the first rep's speed says what share of the athlete's best
+//     verified result the load was. It cannot tell a heavy bar from a slow, controlled pull, so it is kept as a secondary
+//     check and as the baseline the plate reading is measured against.
 
-export const WEIGHT_FEATURES = ['pct', 'plateSat', 'plateBlobs', 'reps', 'plateRed', 'plateYellow', 'plateBlue', 'plateGreen'] as const;
-
-export function weightVector(f: Record<string, number>): number[] {
-  return [(f['pctOfMax'] ?? 0) / 100, f['plateSat'] ?? 0, f['plateBlobs'] ?? 0, Math.min(10, f['repsClaimed'] ?? 1), f['plateRed'] ?? 0, f['plateYellow'] ?? 0, f['plateBlue'] ?? 0, f['plateGreen'] ?? 0];
-}
-
-export function estimateWeight(
-  test: VideoTest, f: Record<string, number>, claim: Claim, ctx: AthleteContext, model: (Trained & { n: number; ok: boolean }) | null
+function estimateFromSpeed(
+  test: VideoTest, f: Record<string, number>, claim: Claim, ctx: AthleteContext
 ): WeightEstimate {
   const claimed = claim.weight && claim.weight > 0 ? claim.weight : null;
   const none = (basis: string): WeightEstimate => ({ claimed, estimate: null, low: null, high: null, ratio: null, method: 'none', basis, reference: ctx.refMax });
@@ -228,45 +223,57 @@ export function estimateWeight(
   const ref = ctx.refMax && ctx.refMax > 0 ? ctx.refMax : bw > 0 ? bw * typical[test] : null;
   if (!ref) return none('There is no earlier verified result or body weight to anchor an estimate to.');
 
-  let share = pct / 100;
-  let method: WeightEstimate['method'] = 'speed';
+  const share = pct / 100;
   let spread = ctx.refMax ? thr(test, 'weightSpread') / 100 : 0.3;
-  if (model && model.ok) {
-    const x = weightVector(f);
-    const learned = predictRidge(model, x);
-    if (isFinite(learned) && learned > 0.2 && learned < 1.3) { share = learned; method = 'learned'; spread = ctx.refMax ? 0.09 : 0.25; }
-  }
-  if ((f['repsClaimed'] ?? 1) > 1 && method === 'speed') {
-    // A set is lighter than a single at the same first-rep speed, and the extra reps raise the question further.
-    spread += 0.04;
-  }
+  // A set is lighter than a single at the same first-rep speed, and the extra reps raise the question further.
+  if ((f['repsClaimed'] ?? 1) > 1) spread += 0.04;
   if (!f['heightKnown']) spread += 0.05;
   const estimate = Math.round(share * ref);
   const low = Math.round(estimate * (1 - spread)), high = Math.round(estimate * (1 + spread));
-  const basis = method === 'learned'
-    ? `A model trained on weights you confirmed, from the bar speed and the plates, against ${ctx.refMax ? `their best verified ${Math.round(ref)} lb` : `a typical ${Math.round(ref)} lb for their body weight`}.`
-    : `The bar rose at ${(f['vFirst'] ?? 0).toFixed(2)} m/s, about ${Math.round(pct)}% of a max, against ${ctx.refMax ? `their best verified ${Math.round(ref)} lb` : `a typical ${Math.round(ref)} lb for their body weight (no verified result yet)`}.`;
-  return { claimed, estimate, low, high, ratio: claimed ? claimed / estimate : null, method, basis, reference: ctx.refMax };
+  const basis = `The bar rose at ${(f['vFirst'] ?? 0).toFixed(2)} m/s, about ${Math.round(pct)}% of a max, against ${ctx.refMax ? `their best verified ${Math.round(ref)} lb` : `a typical ${Math.round(ref)} lb for their body weight (no verified result yet)`}.`;
+  return { claimed, estimate, low, high, ratio: claimed ? claimed / estimate : null, method: 'speed', basis, reference: ctx.refMax };
+}
+
+export function estimateWeight(
+  test: VideoTest, f: Record<string, number>, claim: Claim, ctx: AthleteContext, reading: PlateReading | null
+): WeightEstimate {
+  const speed = estimateFromSpeed(test, f, claim, ctx);
+  const claimed = speed.claimed;
+  const secondary = { estimate: speed.estimate, low: speed.low, high: speed.high, basis: speed.basis };
+  if (test !== 'deadlift' && test !== 'squat' && test !== 'bench') return { ...speed, speed: null };
+  const pw = reading ? plateWeight(reading) : null;
+  if (!reading || !pw) {
+    const why = reading?.note || 'The plates could not be read from this video.';
+    return { claimed, estimate: null, low: null, high: null, ratio: null, method: 'none', basis: why, reference: ctx.refMax,
+      confidence: reading?.confidence ?? 'none', plates: reading, speed: secondary };
+  }
+  const n = reading.perSide as number;
+  let basis = `${reading.note} That is the ${BAR_LB} lb bar plus ${2 * n} \u00d7 ${reading.plateLabel}, ${pw.estimate} lb.`;
+  if (speed.estimate) {
+    const off = Math.abs(speed.estimate - pw.estimate) / pw.estimate;
+    basis += off > 0.35 ? ` Bar speed suggests about ${speed.estimate} lb, which is well away from this; bar speed is only a rough guide.` : ` Bar speed (about ${speed.estimate} lb) does not contradict it.`;
+  }
+  return { claimed, estimate: pw.estimate, low: pw.low, high: pw.high, ratio: claimed ? claimed / pw.estimate : null, method: 'plates', basis,
+    reference: ctx.refMax, confidence: reading.confidence, plates: reading, speed: secondary };
 }
 
 export function weightCheck(w: WeightEstimate): AiCheck {
+  const claimTxt = w.claimed ? ` ${Math.round(w.claimed)} lb was claimed.` : '';
+  const speedTxt = w.speed?.estimate ? ` Bar speed alone suggests about ${w.speed.estimate} lb, which cannot confirm a weight.` : '';
   if (w.estimate === null) {
-    return check('weight', 'Weight on the bar', 'unclear', `Could not be estimated. ${w.basis}${w.claimed ? ` The claim is ${Math.round(w.claimed)} lb: check the plates yourself.` : ''}`);
+    return check('weight', 'Weight on the bar', 'unclear', `The plates could not be read. ${w.basis}${claimTxt}${speedTxt} Check the plates yourself.`);
   }
   const range = `${w.low}\u2013${w.high} lb`;
-  if (!w.claimed) return check('weight', 'Weight on the bar', 'unclear', `The video suggests about ${w.estimate} lb (${range}). ${w.basis} No weight was claimed to compare.`);
-  const r = w.claimed / w.estimate;
-  const text = `The video suggests about ${w.estimate} lb (${range}); ${Math.round(w.claimed)} lb was claimed. ${w.basis}`;
-  const over = w.claimed > (w.high as number);
-  const pct = Math.round(Math.abs(r - 1) * 100);
-  if (w.method === 'learned') {
-    if (!over && r >= 0.8) return check('weight', 'Weight on the bar', 'pass', text);
-    if (!over) return check('weight', 'Weight on the bar', 'unclear', `${text} The claim is ${pct}% under the estimate.`);
-    return check('weight', 'Weight on the bar', 'fail', `${text} The claim is ${pct}% above the estimate. Check the plates.`);
-  }
-  // From bar speed alone the weight can be doubted but not confirmed: a slow, controlled pull looks like a heavy one.
-  if (over) return check('weight', 'Weight on the bar', 'fail', `${text} The claim is ${pct}% above the estimate. Check the plates.`);
-  return check('weight', 'Weight on the bar', 'unclear', `${text} Bar speed alone cannot confirm a weight (a slow, controlled pull looks like a heavy one), so check the plates.`);
+  const conf = w.confidence === 'high' ? 'High' : w.confidence === 'medium' ? 'Medium' : 'Low';
+  const text = `Read from the plates: about ${w.estimate} lb (${range}). ${conf} confidence. ${w.basis}`;
+  if (!w.claimed) return check('weight', 'Weight on the bar', 'unclear', `${text} No weight was claimed to compare.`);
+  const high = w.high as number, low = w.low as number;
+  const over = w.claimed > high + Math.max(10, 0.05 * high);
+  const under = w.claimed < low - Math.max(10, 0.05 * low);
+  if (w.confidence === 'low') return check('weight', 'Weight on the bar', 'unclear', `${text}${claimTxt} The reading is not certain enough to confirm or doubt the claim.`);
+  if (over) return check('weight', 'Weight on the bar', 'fail', `${text}${claimTxt} The claim is above what the plates show. Check the plates.`);
+  if (under) return check('weight', 'Weight on the bar', 'unclear', `${text}${claimTxt} The claim is below what the plates show.`);
+  return check('weight', 'Weight on the bar', 'pass', `${text}${claimTxt} The claim matches the plates.`);
 }
 
 // The bar's height over time, from the coloured plates (metres above the lowest point seen), or null when the plates
@@ -779,10 +786,8 @@ function universal(test: VideoTest, r: VideoReading, claim: Claim, ctx: AthleteC
   return { checks, features, estimates };
 }
 
-export type WeightModel = (Trained & { n: number; ok: boolean }) | null;
-
 // Runs every check for one video. On a lift the weight check comes first, with its own estimate; the other checks follow.
-export function analyze(test: VideoTest, r: VideoReading, claim: Claim, ctx: AthleteContext, duplicateOf: string | null, ownRepeat = false, weightModel: WeightModel = null): Analysis {
+export function analyze(test: VideoTest, r: VideoReading, claim: Claim, ctx: AthleteContext, duplicateOf: string | null, ownRepeat = false): Analysis {
   const u = universal(test, r, claim, ctx, duplicateOf, ownRepeat);
   const t = test === 'deadlift' || test === 'squat' || test === 'bench' ? liftAnalysis(test, r, claim, ctx)
     : test === 'pushups' || test === 'pullups' ? bodyweightAnalysis(test, r, claim)
@@ -796,10 +801,14 @@ export function analyze(test: VideoTest, r: VideoReading, claim: Claim, ctx: Ath
   let weight: WeightEstimate | null = null;
   const checks = [...t.checks, ...u.checks];
   if (lift) {
-    weight = estimateWeight(test, features, claim, ctx, weightModel);
+    const pr = r.plateRead;
+    features['platesRead'] = pr?.readable ? 1 : 0;
+    if (pr?.readable) { features['platePerSide'] = pr.perSide ?? 0; features['plateLb'] = pr.plateLb ?? 0; features['plateDiaMm'] = pr.diameterMm ?? 0; }
+    weight = estimateWeight(test, features, claim, ctx, pr);
     checks.unshift(weightCheck(weight));
     const ordered: Record<string, number | string> = {};
-    ordered['Estimated weight'] = weight.estimate === null ? 'could not be estimated' : `about ${weight.estimate} lb (${weight.low}\u2013${weight.high})`;
+    ordered['Weight from the plates'] = weight.estimate === null ? 'plates not read' : `about ${weight.estimate} lb (${weight.low}\u2013${weight.high}), ${weight.confidence} confidence`;
+    if (weight.speed?.estimate) ordered['Weight from bar speed'] = `about ${weight.speed.estimate} lb (secondary)`;
     if (weight.claimed) ordered['Claimed weight'] = `${Math.round(weight.claimed)} lb`;
     for (const k of Object.keys(estimates)) if (!k.startsWith('1RM from')) ordered[k] = estimates[k];
     return { checks, features, estimates: ordered, weight };

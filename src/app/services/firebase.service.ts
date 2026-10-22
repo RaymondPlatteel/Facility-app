@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
 import { initializeApp } from 'firebase/app';
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
-import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit, onSnapshot, getCountFromServer, arrayUnion, runTransaction } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit, onSnapshot, getCountFromServer, arrayUnion, runTransaction, increment } from 'firebase/firestore';
 import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationPlan, usesStoredSessions } from './schedule.util';
 import type { ScheduleEntry } from './schedule.util';
 import { SYNC_CLIENT_ID, ensureExerciseKeys, isLiveWorkout, isStaleWorkout, staleCloseFields, newExerciseKey, normalizeState, sheetToSync, syncToSheet, WorkoutSyncState } from './workout-sync';
@@ -569,6 +569,12 @@ export interface CompetitionEvent {
   timeSelection?: boolean;
   backdrop?: EventBackdrop;
   float?: EventFloat;
+  // A web page (HTML, CSS, JavaScript) the athlete app draws behind the event's words, with no update needed.
+  customHtml?: string | null;
+  locationTbd?: boolean | null;      // the venue is not chosen yet; the athlete app shows TBD
+  somasReward?: number | null;       // somas given to every athlete who attends
+  merchDiscounts?: Record<string, number> | null;  // merch discount in percent for each rank (D, C, B, A, S), for athletes who attend
+  locationState?: string | null;     // the state it will be in, when that is known (full name)
   ticker?: boolean;
   image?: string | null;
   caption?: string | null;
@@ -610,6 +616,8 @@ export interface EventRegistration {
   fee: number;
   feeStatus: 'unpaid' | 'paid';
   paidAt?: string;
+  attended?: boolean;       // marked by an official at the event
+  somasAwarded?: number;    // somas already credited for attending, so a second press cannot pay twice
 }
 
 export interface WaiverData {
@@ -3923,6 +3931,24 @@ export class FirebaseService {
     await updateDoc(doc(this.db, 'events', eventId, 'registrations', nameKey), paid
       ? { feeStatus: 'paid', paidAt: new Date().toISOString() }
       : { feeStatus: 'unpaid', paidAt: deleteField() });
+  }
+
+  async setRegistrationAttended(eventId: string, nameKey: string, attended: boolean): Promise<void> {
+    await updateDoc(doc(this.db, 'events', eventId, 'registrations', nameKey), { attended });
+  }
+
+  // Credits the event's somas to an athlete who attended, once. The registration records that it was paid, in the same
+  // step as the credit, so pressing the button again (or two officials at once) cannot pay anyone twice.
+  async awardEventSomas(eventId: string, nameKey: string, amount: number): Promise<boolean> {
+    const regRef = doc(this.db, 'events', eventId, 'registrations', nameKey);
+    const memberRef = doc(this.db, 'members', nameKey);
+    return runTransaction(this.db, async tx => {
+      const reg = await tx.get(regRef);
+      if (!reg.exists() || (reg.data() as EventRegistration).somasAwarded) return false;
+      tx.set(memberRef, { nameKey, somas: increment(amount) }, { merge: true });
+      tx.update(regRef, { somasAwarded: amount });
+      return true;
+    });
   }
 
   async removeEventRegistration(eventId: string, nameKey: string): Promise<void> {

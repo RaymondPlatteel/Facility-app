@@ -98,6 +98,9 @@ export class AppComponent implements OnInit, OnDestroy {
   // coach who opened the app straight to Packages and saved would get no
   // calendar sync at all, because nothing had ever instantiated the
   // service. Don't "clean up" this seemingly-unused dependency.
+  // The AI Trainer is one tab: its hub and every page it opens (the reviewer, the middle split and the program trainer).
+  get inAiTrainer(): boolean { return /^\/(ai-trainer|ai-review|split-training|program-trainer)/.test(this.router.url); }
+
   constructor(
     private authService: AuthService,
     private firebase: FirebaseService,

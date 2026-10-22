@@ -9,8 +9,8 @@ import type { ScoredTestKey } from '../services/omni.util';
 import { AiModel, AiReview, AiTrainingVideo, MODEL_VERSION, TrainerFeedback, VIDEO_TESTS, VideoTest, decisionOf, actualWeightOf } from './ai-review.types';
 import { readVideo, hamming } from './pose-video';
 import { setThresholds, getOverrides, thr } from './thresholds';
-import { analyze, ruleVerdict, learnVector, LEARN_FEATURES, AthleteContext, weightVector, WEIGHT_FEATURES, WeightModel } from './analyze';
-import { train, predict, looAccuracy, trainRidge, looMae } from './learn';
+import { analyze, ruleVerdict, learnVector, LEARN_FEATURES, AthleteContext } from './analyze';
+import { train, predict, looAccuracy } from './learn';
 
 // The AI reviewer. While the coach app is open it works through the video proofs on its own: first every submission
 // waiting for the coach, then (to learn from) the ones the coach has already decided. For each video it records what
@@ -34,6 +34,9 @@ const ENABLED_KEY = 'ai-review.enabled';
 // A review in progress refreshes its heartbeat every 20 s; one silent for 90 s was abandoned (a closed tab) and is taken over.
 const STALE_MS = 90 * 1000;
 
+// 'v10' -> 10. A review marked for a re-run ('rerun') is older than every version.
+function versionOf(v: string | undefined): number { const n = parseInt((v ?? '').replace(/^v/, ''), 10); return isFinite(n) ? n : 0; }
+
 @Injectable({ providedIn: 'root' })
 export class AiReviewService {
   readonly state$ = new BehaviorSubject<ReviewerState>({
@@ -42,7 +45,6 @@ export class AiReviewService {
   // Every review, live, for the pending page and the AI page.
   readonly reviews$ = new BehaviorSubject<AiReview[]>([]);
   readonly model$ = new BehaviorSubject<AiModel | null>(null);
-  readonly weightModel$ = new BehaviorSubject<AiModel | null>(null);
 
   private db!: Firestore;
   private runner = Math.random().toString(36).slice(2, 10);
@@ -89,9 +91,6 @@ export class AiReviewService {
     this.unsub.push(onSnapshot(doc(this.db, 'aiConfig', 'thresholds'), snap => {
       setThresholds((snap.data() as any)?.values ?? {});
     }, () => { /* defaults */ }));
-    this.unsub.push(onSnapshot(doc(this.db, 'aiModels', 'weight'), snap => {
-      this.zone.run(() => this.weightModel$.next(snap.exists() ? (snap.data() as AiModel) : null));
-    }));
     // Submissions waiting for the coach, live.
     this.unsub.push(onSnapshot(query(collection(this.db, 'pendingAssessments'), where('status', '==', 'pending')), snap => {
       this.pending = snap.docs.map(d => ({ id: d.id, ...(d.data() as PendingAssessment) }));
@@ -127,7 +126,7 @@ export class AiReviewService {
     if (v.test === 'deadlift' || v.test === 'squat' || v.test === 'bench') { inputs[v.test + 'Weight'] = v.claimed.weight ?? 0; inputs[v.test + 'Reps'] = v.claimed.reps ?? 1; }
     return {
       id: 'tv_' + v.id, nameKey: 'ai-training', clientName: v.name || 'Training video', timestamp: v.createdAt, dateLabel: v.createdAt.slice(0, 10),
-      inputs, lvl: 0, rank: 'UNRANKED', createdAt: v.createdAt, status: v.label === 'valid' ? 'approved' : 'rejected',
+      inputs, lvl: 0, rank: 'UNRANKED', createdAt: v.createdAt, status: v.label === 'valid' ? 'approved' : v.label === 'invalid' ? 'rejected' : 'pending',
       reviewedAt: v.createdAt, proofs: [{ test: v.test, kind: 'video' }], videoUrls: { v0: v.url }, changed: [v.test]
     } as unknown as PendingAssessment;
   }
@@ -158,7 +157,7 @@ export class AiReviewService {
     const r = this.reviewFor(id);
     if (!r) return true;
     // Reviews made by an older version of the checks are made again.
-    if (r.status === 'done') return r.modelVersion !== MODEL_VERSION;
+    if (r.status === 'done') return versionOf(r.modelVersion) < versionOf(MODEL_VERSION);
     if (r.status === 'running') return !r.startedAt || Date.now() - Date.parse(r.startedAt) > STALE_MS;
     // A video that failed is tried once more each time the app opens.
     return (this.failures.get(id) ?? 0) < 1;
@@ -204,7 +203,9 @@ export class AiReviewService {
     // Another copy of the coach app (the iPad, say) may already be on it.
     const existing = await getDoc(ref).catch(() => null);
     const ex = existing?.exists() ? (existing.data() as AiReview) : null;
-    if (ex?.status === 'done' && ex.modelVersion === MODEL_VERSION) return;
+    // Never redo a review made by a newer version of the checks: two copies of the app on different versions would otherwise
+    // keep analysing each other's results again, each blanking the review while it works.
+    if (ex?.status === 'done' && versionOf(ex.modelVersion) >= versionOf(MODEL_VERSION)) return;
     if (ex?.status === 'running' && ex.runner !== this.runner && ex.startedAt && Date.now() - Date.parse(ex.startedAt) < STALE_MS) return;
 
     const inputs = p.inputs as AssessmentInputs;
@@ -221,14 +222,15 @@ export class AiReviewService {
       },
       coachDecision: p.status === 'approved' || p.status === 'rejected' ? p.status : (ex?.coachDecision ?? null),
       decidedAt: p.status === 'pending' ? (ex?.decidedAt ?? null) : (p.reviewedAt ?? null),
-      coachLabels: ex?.coachLabels ?? null
+      coachLabels: ex?.coachLabels ?? null,
+      trainer: ex?.trainer ?? null
     };
     this.patch({ running: true, current: `${p.clientName} · ${j.test}`, progress: 0, lastError: null });
     const beat = setInterval(() => { updateDoc(ref, { startedAt: new Date().toISOString() }).catch(() => {}); }, 20000);
     try {
       await setDoc(ref, base);
-      const reading = await readVideo(j.url, f => this.patch({ progress: f }));
       const ctx = await this.context(p, j.test);
+      const reading = await readVideo(j.url, f => this.patch({ progress: f }), { test: j.test, heightM: ctx.heightIn ? ctx.heightIn * 0.0254 : null });
 
       // The same footage sent before: by another athlete is a fake; by the same athlete, worth a look.
       let duplicateOf: string | null = null, ownRepeat = false;
@@ -243,10 +245,7 @@ export class AiReviewService {
         }
       }
 
-      const wm = this.weightModel$.value;
-      const weightModel: WeightModel = wm && wm.n >= 8 && wm.accuracy < wm.ruleAccuracy && wm.featureNames.join() === WEIGHT_FEATURES.join()
-        ? { weights: wm.weights, mean: wm.mean, std: wm.std, n: wm.n, ok: true } : null;
-      const a = analyze(j.test, reading, base.claimed, ctx, duplicateOf, ownRepeat, weightModel);
+      const a = analyze(j.test, reading, base.claimed, ctx, duplicateOf, ownRepeat);
       const presence = a.features['presence'] ?? 0;
       const rv = ruleVerdict(a.checks, presence);
       const vector = learnVector(a.features, a.checks, rv.score);
@@ -281,7 +280,16 @@ export class AiReviewService {
         duplicateOf: duplicateOf ? { pendingId: '', clientName: duplicateOf } : null
       };
       (review as any).vector = vector;
-      await setDoc(ref, review);
+      // What the coach has saved while this was being analysed is read again now, so finishing never overwrites it.
+      const fresh = (await getDoc(ref).catch(() => null))?.data() as AiReview | undefined;
+      if (fresh) {
+        review.trainer = fresh.trainer ?? review.trainer ?? null;
+        review.coachLabels = fresh.coachLabels ?? review.coachLabels ?? null;
+        review.coachDecision = fresh.coachDecision ?? review.coachDecision;
+        review.decidedAt = fresh.decidedAt ?? review.decidedAt;
+      }
+      review.trainer = this.judgeTrainingVideo(p.id!, review) ?? review.trainer ?? null;
+      await setDoc(ref, JSON.parse(JSON.stringify(review)));
       if (reading.hashes.length) {
         const h = { pendingId: p.id!, nameKey: p.nameKey, clientName: p.clientName, hashes: reading.hashes };
         await setDoc(doc(this.db, 'aiHashes', id), h).catch(() => {});
@@ -297,6 +305,24 @@ export class AiReviewService {
     } finally {
       clearInterval(beat);
     }
+  }
+
+  // A video added to teach one component carries the answer. Once it is analysed, the AI's result for that component is
+  // marked right or wrong against the answer, exactly as if the coach had judged it, so the component's accuracy and its
+  // learning both come from it. A result of "unclear" is left unjudged: the AI did not claim to know.
+  private judgeTrainingVideo(pendingId: string, review: AiReview): TrainerFeedback | null {
+    if (!pendingId.startsWith('tv_')) return null;
+    const v = this.trainingVideos$.value.find(x => 'tv_' + x.id === pendingId);
+    if (!v?.component) return null;
+    const next: TrainerFeedback = { ...(review.trainer ?? {}), checks: { ...(review.trainer?.checks ?? {}) }, answers: { ...(review.trainer?.answers ?? {}) }, at: new Date().toISOString() };
+    if (v.component === 'weight') {
+      if (v.actualWeight) next.actualWeight = v.actualWeight;
+    } else {
+      const c = (review.checks ?? []).find(k => k.id === v.component);
+      if (v.expected) next.answers![v.component] = v.expected;
+      if (c && c.result !== 'unclear' && v.expected) next.checks![v.component] = c.result === v.expected ? 'right' : 'wrong';
+    }
+    return next;
   }
 
   // What the analysis needs to know about the athlete: height, body weight, sex, their last verified result in this
@@ -342,9 +368,17 @@ export class AiReviewService {
   async saveTrainer(reviewId: string, fb: Partial<TrainerFeedback>) {
     if (!this.db) this.db = getFirestore();
     const cur = this.reviewFor(reviewId)?.trainer ?? ({ at: '' } as TrainerFeedback);
-    const next: TrainerFeedback = { ...cur, ...fb, checks: { ...(cur.checks ?? {}), ...(fb.checks ?? {}) }, at: new Date().toISOString() };
+    const next: TrainerFeedback = { ...cur, ...fb, checks: { ...(cur.checks ?? {}), ...(fb.checks ?? {}) }, answers: { ...(cur.answers ?? {}), ...(fb.answers ?? {}) }, values: { ...(cur.values ?? {}), ...(fb.values ?? {}) }, at: new Date().toISOString() };
     await updateDoc(doc(this.db, 'aiReviews', reviewId), { trainer: JSON.parse(JSON.stringify(next)) });
-    this.scheduleRetrain();
+    // The AI learns when the coach presses Complete (see completeReview), not on every edit.
+    
+  }
+
+  // The coach is done with a video: it is marked complete and the AI is updated from everything judged so far.
+  async completeReview(reviewId: string) {
+    await this.saveTrainer(reviewId, { completedAt: new Date().toISOString() });
+    if (this.retrainTimer) clearTimeout(this.retrainTimer);
+    await this.retrain().catch(() => null);
   }
 
   // The thresholds the coach has tuned for one test ('*' for the settings every video shares).
@@ -371,7 +405,8 @@ export class AiReviewService {
   async addTrainingVideo(file: File, meta: Omit<AiTrainingVideo, 'id' | 'url' | 'path' | 'createdAt' | 'name'>, name: string): Promise<void> {
     if (!this.db) this.db = getFirestore();
     const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
-    const path = `aiTraining/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name.replace(/[^\w.-]+/g, '_')}`;
+    // Under appVideos/, the folder this app is already allowed to write videos to.
+    const path = `appVideos/ai-training-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name.replace(/[^\w.-]+/g, '_')}`;
     const r = ref(getStorage(), path);
     await uploadBytes(r, file, { contentType: file.type || 'video/mp4' });
     const url = await getDownloadURL(r);
@@ -405,35 +440,7 @@ export class AiReviewService {
     this.retrainTimer = setTimeout(() => this.retrain(), 3000);
   }
 
-  // Retrains the weight model from every lift whose real weight is known: the coach typed it, or approved the lift
-  // (approving accepts the claimed weight) unless they marked the weight doubtful.
-  async retrainWeight(): Promise<AiModel | null> {
-    const rows = this.reviews$.value.filter(r => r.status === 'done' && ['deadlift', 'squat', 'bench'].includes(r.test) && r.features && r.weight?.reference);
-    const X: number[][] = [], y: number[] = [], generic: number[] = [];
-    for (const r of rows) {
-      const actual = actualWeightOf(r) ?? (decisionOf(r) === 'approved' && r.coachLabels?.weight !== 'doubtful' ? r.claimed.weight : null);
-      if (!actual || actual <= 0) continue;
-      const f = r.features as Record<string, number>;
-      if (!(f['pctOfMax'] > 0) || f['speedUnreliable']) continue;
-      X.push(weightVector(f));
-      y.push(actual / (r.weight!.reference as number));
-      generic.push(Math.abs(f['pctOfMax'] / 100 - actual / (r.weight!.reference as number)));
-    }
-    if (X.length < 8) return null;
-    const m = trainRidge(X, y);
-    const model: AiModel = {
-      kind: 'weight', featureNames: [...WEIGHT_FEATURES], weights: m.weights, mean: m.mean, std: m.std,
-      n: X.length, positives: 0,
-      accuracy: looMae(X, y),                                              // error of the learned model, as a share of the reference
-      ruleAccuracy: generic.reduce((a, b) => a + b, 0) / generic.length,   // error of the plain speed estimate
-      trainedAt: new Date().toISOString()
-    };
-    await setDoc(doc(this.db, 'aiModels', 'weight'), model).catch(() => {});
-    return model;
-  }
-
   async retrain(): Promise<AiModel | null> {
-    this.retrainWeight().catch(() => {});
     const labelled = this.reviews$.value.filter(r => r.status === 'done' && decisionOf(r) && Array.isArray((r as any).vector));
     if (labelled.length < 8) return null;
     const X = labelled.map(r => (r as any).vector as number[]);
