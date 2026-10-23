@@ -11,6 +11,11 @@ import { demoBatches } from './demo';
 import { getOmniRank } from '../services/omni.util';
 
 const DAY = 86400000;
+// Internal accounts: the App Store reviewer and the developer's test athlete. They are never counted (the same list the
+// athlete app leaves off its standings).
+const INTERNAL = ['apple reviewer', 'casey sandbox'];
+
+export interface Roster { name: string; section: Section; last: number | null; level: number | null; rank: string; }
 
 // How the athlete app is used, from its anonymous event log: where new athletes stop on the way in, who comes back,
 // which pages are used and which are not. Remote athletes and in-person facility members are shown apart.
@@ -33,6 +38,7 @@ export class AppAnalyticsPage implements OnInit {
   private existingRows: Array<{ linkedAt: number; section: Section; name: string }> = [];   // athletes the coach already had who were given a login
   // How many of them in the period on screen: left out of the journey.
   get existing(): number { const from = Date.now() - this.period * DAY; return this.existingRows.filter(e => e.section === this.section && e.linkedAt >= from).length; }
+  roster: Roster[] = [];
   private levels: Array<{ section: Section; rank: string }> = [];
   updatedAt: Date | null = null;
   report: Report | null = null;
@@ -63,13 +69,22 @@ export class AppAnalyticsPage implements OnInit {
       // The accounts come from the athletes' own records, so they count the same whatever version of the app people have.
       const byKey = new Map(members.map(m => [m.nameKey, m]));
       this.accounts = [];
+      this.roster = members
+        .filter(m => !testers.includes(m.nameKey) && !INTERNAL.includes(m.nameKey) && !(m as { mergedInto?: string }).mergedInto)
+        .map(m => ({
+          name: m.clientName || m.nameKey,
+          section: (m.inPerson ? 'facility' : 'remote') as Section,
+          last: m.lastActivityAt ? Date.parse(m.lastActivityAt) : null,
+          level: typeof m.latestLvl === 'number' ? m.latestLvl : null,
+          rank: typeof m.latestLvl === 'number' ? getOmniRank(m.latestLvl, m.sex ?? 'male') : 'UNRANKED'
+        }));
       this.levels = members
-        .filter(m => !testers.includes(m.nameKey) && typeof m.latestLvl === 'number')
+        .filter(m => !testers.includes(m.nameKey) && !INTERNAL.includes(m.nameKey) && typeof m.latestLvl === 'number')
         .map(m => ({ section: (m.inPerson ? 'facility' : 'remote') as Section, rank: getOmniRank(m.latestLvl as number, m.sex ?? 'male') }));
       this.existingRows = [];
       for (const l of links) {
         const m = byKey.get(l.nameKey);
-        if (!m || testers.includes(m.nameKey)) continue;
+        if (!m || testers.includes(m.nameKey) || INTERNAL.includes(m.nameKey)) continue;
         // An athlete the coach already had, given a login (a link request a coach approved, or a link the coach made), did not
         // go through the app's own sign-up, so they are not a new user and are counted apart.
         const onboarded = m.tourStep != null || m.estimateLvl != null || (m.estimatedTests?.length ?? 0) > 0;
@@ -132,6 +147,16 @@ export class AppAnalyticsPage implements OnInit {
     return this.existingRows.filter(e => e.section === this.section && e.linkedAt >= from).map(e => e.name);
   }
   when(t: number): string { return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+
+  // Everyone in the section, from their own records, so it is right whatever version of the app they run.
+  get members(): Roster[] { return this.roster.filter(r => r.section === this.section).sort((a, b) => (b.last ?? 0) - (a.last ?? 0)); }
+  activeWithin(days: number): number { const from = Date.now() - days * DAY; return this.members.filter(r => (r.last ?? 0) >= from).length; }
+  ago(t: number | null): string {
+    if (!t) return 'Never';
+    const d = Math.floor((Date.now() - t) / DAY);
+    return d <= 0 ? 'Today' : d === 1 ? 'Yesterday' : `${d} days ago`;
+  }
+  rankLabel(r: string): string { return r === 'UNRANKED' ? 'Unranked' : r.replace('-RANK', '-Rank'); }
 
   // The step whose accounts are shown under it.
   openStep = '';

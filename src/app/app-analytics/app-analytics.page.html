@@ -90,6 +90,34 @@
           </div>
         </section>
 
+        <!-- Everyone in the section, from their own records -->
+        <section class="an-card">
+          <div class="an-card-head">
+            <h2>Members</h2>
+            <span class="an-muted">{{ members.length }} {{ sectionName }} · from each athlete's record</span>
+          </div>
+          <div class="an-tiles">
+            <div class="an-tile"><span>Members</span><b>{{ members.length }}</b></div>
+            <div class="an-tile"><span>Active in 7 days</span><b>{{ activeWithin(7) }}</b></div>
+            <div class="an-tile"><span>Active in 30 days</span><b>{{ activeWithin(30) }}</b></div>
+          </div>
+          <p class="an-note first">Last activity is the last time a result, workout or check-in was recorded for the athlete, by them or by a coach. Unlike the usage log, it counts people on any version of the app.</p>
+          <div class="an-people-wrap">
+            <table class="an-people" *ngIf="members.length; else noMembers">
+              <thead><tr><th>Name</th><th>Last active</th><th>Level</th><th>Rank</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let m of members">
+                  <td class="nm">{{ m.name }}</td>
+                  <td>{{ ago(m.last) }}</td>
+                  <td>{{ m.level === null ? '—' : m.level }}</td>
+                  <td>{{ rankLabel(m.rank) }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <ng-template #noMembers><p class="an-note first">No {{ sectionName }}.</p></ng-template>
+          </div>
+        </section>
+
         <!-- Who the new accounts are, so every count above can be checked by name -->
         <section class="an-card">
           <div class="an-card-head">
