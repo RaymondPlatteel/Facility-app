@@ -25,61 +25,78 @@
       <span class="an-demo-tag" *ngIf="demo">Sample data <button (click)="showDemo(false)">Show real data</button></span>
     </div>
 
+    <!-- The flow: each athlete is in one stage -->
+    <div class="an-tabs" role="tablist">
+      <button *ngFor="let t of tabs" role="tab" [class.on]="tab === t.id" (click)="setTab(t.id)">
+        <span>{{ t.label }}</span><b>{{ t.id === 'downloads' ? (report?.downloads ?? 0) : count(t.id) }}</b>
+      </button>
+    </div>
+
     <p class="an-error" *ngIf="error">{{ error }}</p>
     <p class="an-muted" *ngIf="loading">Loading…</p>
 
-    <div class="an-empty" *ngIf="!loading && !hasData && !demo">
-      <h2>No usage recorded yet</h2>
-      <p>The athlete app records usage from version 1.4. This page fills in as athletes use it.</p>
-      <button class="an-btn" (click)="showDemo(true)">Show Sample Data</button>
-    </div>
+    <ng-container *ngIf="!loading && report as r">
 
-    <ng-container *ngIf="report as r">
-      <ng-container *ngIf="hasData || demo">
-
-        <!-- The headline: where people are lost -->
-        <section class="an-hero" *ngIf="headline as h; else noDrop">
-          <ion-icon name="trending-down"></ion-icon>
-          <div>
-            <p class="an-hero-lead">{{ h.lead }}</p>
-            <p class="an-hero-step"><b>{{ h.from }}</b> <span class="arrow">→</span> <b>{{ h.to }}</b></p>
-            <p class="an-hero-sub">{{ h.lost }} of {{ h.of }} {{ sectionName }} ({{ pct(h.share) }}) stopped there in the last {{ period }} days.</p>
-          </div>
-        </section>
-        <ng-template #noDrop>
-          <section class="an-hero calm"><div><p class="an-hero-lead">No new {{ sectionName }} in the last {{ period }} days.</p></div></section>
-        </ng-template>
-
-        <!-- Stat tiles -->
+      <!-- ===== Downloads: before signing in ===== -->
+      <ng-container *ngIf="tab === 'downloads'">
         <div class="an-tiles">
-          <div class="an-tile"><span>Opened the app</span><b>{{ r.newUsers }}</b><small>new, last {{ period }} days</small></div>
-          <div class="an-tile"><span>New accounts</span><b>{{ r.accountCount }}</b><small>last {{ period }} days</small></div>
-          <div class="an-tile"><span>Active this week</span><b>{{ r.activeWeek }}</b><small>{{ r.activeToday }} today</small></div>
-          <div class="an-tile"><span>Came back next day</span><b>{{ pct(r.back1) }}</b><small>of new users</small></div>
-          <div class="an-tile"><span>Came back after a week</span><b>{{ pct(r.back7) }}</b><small>of new users</small></div>
-          <div class="an-tile"><span>Typical session</span><b>{{ r.sessionMinutes == null ? '—' : num(r.sessionMinutes) + ' min' }}</b><small>{{ num(r.sessionsPerUser, 1) }} sessions a week per user</small></div>
+          <div class="an-tile"><span>Downloads</span><b>{{ r.downloads }}</b><small>last {{ period }} days, remote and in person</small></div>
+          <div class="an-tile"><span>New accounts</span><b>{{ newAccounts.length }}</b><small>{{ sectionName }}, last {{ period }} days</small></div>
         </div>
-
-        <!-- Every step from opening the app, in order -->
+        <p class="an-note first">A download counts the first time the app is opened on a phone, from version 1.4. No one is known as remote or in person until they sign in, so downloads are not split.</p>
         <section class="an-card">
-          <div class="an-card-head">
-            <h2>New User Journey</h2>
-            <span class="an-muted">{{ r.accountCount }} new {{ sectionName }} · last {{ period }} days</span>
-          </div>
-          <p class="an-note first">Accounts are counted from each athlete's own record, so the numbers are the same whatever version of the app they have. Opening the app comes from the usage log, which older versions do not send.<ng-container *ngIf="existing"> {{ existing }} athlete{{ existing === 1 ? '' : 's' }} the coach already had {{ existing === 1 ? 'was' : 'were' }} given a login in this time and {{ existing === 1 ? 'is' : 'are' }} left out, because they did not sign up through the app.</ng-container></p>
-          <ng-container *ngFor="let g of r.journey">
-            <h3 class="an-group">{{ g.title }}</h3>
-            <ng-container *ngTemplateOutlet="funnel; context: { $implicit: g.steps, unit: 'users' }"></ng-container>
-            <p class="an-note" *ngIf="g.note">{{ g.note }}</p>
+          <div class="an-card-head"><h2>New Accounts</h2><span class="an-muted">{{ sectionName }} · last {{ period }} days</span></div>
+          <table class="an-people" *ngIf="newAccounts.length; else noneNew">
+            <thead><tr><th>Name</th><th>Account made</th><th>Stage</th></tr></thead>
+            <tbody><tr *ngFor="let p of newAccounts"><td class="nm">{{ p.name }}</td><td>{{ when(p.linkedAt) }}</td>
+              <td>{{ stageName(p) }}</td></tr></tbody>
+          </table>
+          <ng-template #noneNew><p class="an-muted">No new accounts in this period.</p></ng-template>
+        </section>
+      </ng-container>
+
+      <!-- ===== Onboarding: account, tour, walkthrough ===== -->
+      <ng-container *ngIf="tab === 'onboarding'">
+        <section class="an-card">
+          <div class="an-card-head"><h2>Onboarding</h2><span class="an-muted">accounts made in the app · last {{ period }} days</span></div>
+          <p class="an-note first">Tap a step to see who reached it. Finishing the walkthrough moves an athlete to Active or Inactive.<ng-container *ngIf="coachHad.length"> {{ coachHad.length }} athlete{{ coachHad.length === 1 ? '' : 's' }} the coach already had {{ coachHad.length === 1 ? 'was' : 'were' }} given a login in this time and skipped onboarding: {{ names(coachHad) }}.</ng-container></p>
+          <ng-container *ngIf="flow[0].count; else noFlow">
+            <ng-container *ngTemplateOutlet="funnel; context: { $implicit: flow }"></ng-container>
           </ng-container>
+          <ng-template #noFlow><p class="an-muted">No accounts were made in the app in this period.</p></ng-template>
+        </section>
+        <section class="an-card">
+          <div class="an-card-head"><h2>Still Onboarding</h2><span class="an-muted">{{ onboarding.length }} {{ sectionName }} · any time</span></div>
+          <table class="an-people" *ngIf="onboarding.length; else noneStuck">
+            <thead><tr><th>Name</th><th>Account made</th><th>Got to</th></tr></thead>
+            <tbody><tr *ngFor="let p of onboarding"><td class="nm">{{ p.name }}</td><td>{{ when(p.linkedAt) }}</td><td>{{ stage(p) }}</td></tr></tbody>
+          </table>
+          <ng-template #noneStuck><p class="an-muted">Everyone has finished onboarding.</p></ng-template>
+        </section>
+      </ng-container>
+
+      <!-- ===== Active: used the app in the last four weeks ===== -->
+      <ng-container *ngIf="tab === 'active'">
+        <div class="an-tiles">
+          <button type="button" class="an-tile tap" *ngFor="let w of [{ d: 1, l: 'Last day' }, { d: 7, l: 'Last week' }, { d: 28, l: 'Last 4 weeks' }]"
+                  [class.on]="openActive === w.d" (click)="openActive = openActive === w.d ? null : w.d">
+            <span>{{ w.l }}</span><b>{{ activeIn(w.d).length }}</b><small>tap for names</small>
+          </button>
+        </div>
+        <div class="an-who" *ngIf="openActive !== null"><p>{{ activeIn(openActive).length ? names(activeIn(openActive)) : 'No one' }}</p></div>
+        <p class="an-note first">Active means the athlete did something in the app themselves in the last 4 weeks: a check-in, a workout, a result sent, or (from 1.6) opening it. Anything a coach enters does not count.</p>
+
+        <section class="an-card">
+          <div class="an-card-head"><h2>Active Athletes</h2><span class="an-muted">{{ active.length }} {{ sectionName }}</span></div>
+          <table class="an-people" *ngIf="active.length; else noneActive">
+            <thead><tr><th>Name</th><th>Last active</th><th>Level</th><th>Rank</th></tr></thead>
+            <tbody><tr *ngFor="let p of active"><td class="nm">{{ p.name }}</td><td>{{ ago(p.last) }}</td><td>{{ p.level }}</td><td>{{ rankLabel(p.rank) }}</td></tr></tbody>
+          </table>
+          <ng-template #noneActive><p class="an-muted">No one has been active in the last 4 weeks.</p></ng-template>
         </section>
 
-        <!-- Where everyone stands -->
         <section class="an-card">
-          <div class="an-card-head">
-            <h2>Rank Distribution</h2>
-            <span class="an-muted">{{ rankTotal }} {{ sectionName }} · latest Level, private accounts included</span>
-          </div>
+          <div class="an-card-head"><h2>Rank Distribution</h2><span class="an-muted">{{ rankTotal }} {{ sectionName }} through onboarding · latest Level</span></div>
           <div class="an-ranks">
             <div class="an-rank" *ngFor="let b of rankBars">
               <b>{{ b.count }}</b>
@@ -90,207 +107,164 @@
           </div>
         </section>
 
-        <!-- Everyone in the section, from their own records -->
-        <section class="an-card">
-          <div class="an-card-head">
-            <h2>Members</h2>
-            <span class="an-muted">{{ members.length }} {{ sectionName }} · from each athlete's record</span>
-          </div>
-          <div class="an-tiles">
-            <div class="an-tile"><span>Members</span><b>{{ members.length }}</b></div>
-            <div class="an-tile"><span>Active in 7 days</span><b>{{ activeWithin(7) }}</b></div>
-            <div class="an-tile"><span>Active in 30 days</span><b>{{ activeWithin(30) }}</b></div>
-          </div>
-          <p class="an-note first">Last activity is the last time a result, workout or check-in was recorded for the athlete, by them or by a coach. Unlike the usage log, it counts people on any version of the app.</p>
-          <div class="an-people-wrap">
-            <table class="an-people" *ngIf="members.length; else noMembers">
-              <thead><tr><th>Name</th><th>Last active</th><th>Level</th><th>Rank</th></tr></thead>
-              <tbody>
-                <tr *ngFor="let m of members">
-                  <td class="nm">{{ m.name }}</td>
-                  <td>{{ ago(m.last) }}</td>
-                  <td>{{ m.level === null ? '—' : m.level }}</td>
-                  <td>{{ rankLabel(m.rank) }}</td>
-                </tr>
-              </tbody>
-            </table>
-            <ng-template #noMembers><p class="an-note first">No {{ sectionName }}.</p></ng-template>
-          </div>
-        </section>
-
-        <!-- Who the new accounts are, so every count above can be checked by name -->
-        <section class="an-card">
-          <div class="an-card-head">
-            <h2>New Accounts</h2>
-            <span class="an-muted">{{ people.length }} {{ sectionName }} · last {{ period }} days</span>
-          </div>
-          <p class="an-note first">One row for each account counted in the journey. A tick means the athlete's own record shows it. The tour column is the step written on the record.</p>
-          <div class="an-people-wrap">
-            <table class="an-people" *ngIf="people.length; else noPeople">
-              <thead><tr><th>Name</th><th>Created</th><th>Intake</th><th>Walkthrough</th><th>Tour</th><th>Verified score</th><th>Score, no review</th><th>Program</th><th>Check-in</th><th>Workout</th><th>Goal</th><th>Photo</th><th>Active</th></tr></thead>
-              <tbody>
-                <tr *ngFor="let p of people">
-                  <td class="nm">{{ p.name }}</td>
-                  <td>{{ when(p.linkedAt) }}</td>
-                  <td>{{ p.intake ? '✓' : '' }}</td>
-                  <td>{{ p.estimate ? '✓' : '' }}</td>
-                  <td>{{ p.tourStep || '—' }}</td>
-                  <td>{{ p.submittedVerified ? '✓' : '' }}</td>
-                  <td>{{ p.savedUnreviewed ? '✓' : '' }}</td>
-                  <td>{{ p.program ? '✓' : '' }}</td>
-                  <td>{{ p.checkedIn ? '✓' : '' }}</td>
-                  <td>{{ p.workout ? '✓' : '' }}</td>
-                  <td>{{ p.goal ? '✓' : '' }}</td>
-                  <td>{{ p.photo ? '✓' : '' }}</td>
-                  <td>{{ p.active ? '✓' : '' }}</td>
-                </tr>
-              </tbody>
-            </table>
-            <ng-template #noPeople><p class="an-note first">No new accounts in this period.</p></ng-template>
-          </div>
-          <p class="an-note" *ngIf="leftOut.length"><b>Left out of the journey</b> (athletes the coach already had, given a login): {{ leftOut.join(', ') }}.</p>
-        </section>
-
+        <p class="an-note first" *ngIf="!hasData && !demo">The usage below comes from the app's usage log, sent from version 1.4. Nothing has been recorded yet. <button class="an-link" (click)="showDemo(true)">Show sample data</button></p>
+        <ng-container *ngIf="hasData || demo">
+          <p class="an-note first">From here on the numbers come from the app's anonymous usage log, which only versions 1.4 and later send.</p>
         <!-- Coming back -->
-        <section class="an-card">
-          <div class="an-card-head">
-            <h2>Retention</h2>
-            <span class="an-muted">new users who opened the app again, from the usage log</span>
-          </div>
-          <div class="an-ret">
-            <div class="an-ret-cell" *ngFor="let t of r.retention">
-              <span>{{ t.label }}</span>
-              <b [style.background]="cellBg(t.share)">{{ pct(t.share) }}</b>
-              <small>{{ t.of ? t.back + ' of ' + t.of : 'too soon to tell' }}</small>
-            </div>
-          </div>
-        </section>
-
-        <div class="an-grid">
-          <!-- Active users -->
-          <section class="an-card wide">
+          <section class="an-card">
             <div class="an-card-head">
-              <h2>Active Users</h2>
-              <span class="an-muted">people who opened the app each day</span>
+              <h2>Retention</h2>
+              <span class="an-muted">new users who opened the app again, from the usage log</span>
             </div>
-            <div class="an-chart">
-              <svg [attr.viewBox]="'0 0 ' + W + ' ' + H" preserveAspectRatio="none" (mousemove)="onChartMove($event)" (mouseleave)="hover = null">
-                <line *ngFor="let t of yTicks" [attr.x1]="L" [attr.x2]="W - 8" [attr.y1]="y(t)" [attr.y2]="y(t)" class="grid" />
-                <path class="area" [attr.d]="areaPath" />
-                <path class="line" [attr.d]="linePath" />
-                <ng-container *ngIf="hover && hoverDay as d">
-                  <line class="cross" [attr.x1]="hover.x" [attr.x2]="hover.x" [attr.y1]="T" [attr.y2]="H - B" />
-                  <circle class="dot" [attr.cx]="hover.x" [attr.cy]="y(d.users)" r="4.5" />
-                </ng-container>
-              </svg>
-              <div class="an-yl" *ngFor="let t of yTicks" [style.top.%]="y(t) / H * 100">{{ t }}</div>
-              <div class="an-xl" *ngFor="let l of xLabels; let i = index" [style.left.%]="l.x / W * 100" [class.first]="i === 0" [class.last]="i === xLabels.length - 1">{{ l.text }}</div>
-              <div class="an-tip" *ngIf="hoverDay as d" [style.left.%]="hoverLeft" [class.flip]="hoverLeft > 70">
-                <span>{{ shortDate(d.day) }}</span><b>{{ d.users }} {{ d.users === 1 ? 'user' : 'users' }}</b>
+            <div class="an-ret">
+              <div class="an-ret-cell" *ngFor="let t of r.retention">
+                <span>{{ t.label }}</span>
+                <b [style.background]="cellBg(t.share)">{{ pct(t.share) }}</b>
+                <small>{{ t.of ? t.back + ' of ' + t.of : 'too soon to tell' }}</small>
               </div>
             </div>
           </section>
 
-          <!-- Return rate by week -->
-          <section class="an-card">
-            <div class="an-card-head">
-              <h2>Return Rate</h2>
-              <span class="an-muted">new users who came back</span>
-            </div>
-            <table class="an-table" *ngIf="r.cohorts.length; else noCohorts">
-              <thead><tr><th>Joined</th><th>Users</th><th>1 day</th><th>1 week</th><th>4 weeks</th></tr></thead>
-              <tbody>
-                <tr *ngFor="let c of r.cohorts.slice(0, 8)">
-                  <td>{{ weekLabel(c.week) }}</td>
-                  <td>{{ c.users }}</td>
-                  <td [style.background]="cellBg(c.d1)">{{ pct(c.d1) }}</td>
-                  <td [style.background]="cellBg(c.w1)">{{ pct(c.w1) }}</td>
-                  <td [style.background]="cellBg(c.w4)">{{ pct(c.w4) }}</td>
-                </tr>
-              </tbody>
-            </table>
-            <ng-template #noCohorts><p class="an-muted">No new users in this period.</p></ng-template>
-          </section>
-        </div>
-
-        <div class="an-grid">
-          <!-- Pages -->
-          <section class="an-card">
-            <div class="an-card-head">
-              <h2>Most Used Pages</h2>
-              <span class="an-muted">share of active users who opened it</span>
-            </div>
-            <div class="an-rows">
-              <div class="an-row" *ngFor="let p of r.pages.slice(0, 12)" [title]="p.views + ' views by ' + p.users + ' users'">
-                <span class="an-row-label">{{ p.label }}</span>
-                <div class="an-track"><div class="an-fill" [style.width.%]="p.share * 100"></div></div>
-                <span class="an-row-val">{{ pct(p.share) }}</span>
+          <div class="an-grid">
+            <!-- Active users -->
+            <section class="an-card wide">
+              <div class="an-card-head">
+                <h2>Active Users</h2>
+                <span class="an-muted">people who opened the app each day</span>
               </div>
-              <p class="an-muted" *ngIf="!r.pages.length">No pages opened in this period.</p>
-            </div>
-          </section>
-
-          <section class="an-card">
-            <div class="an-card-head">
-              <h2>Errors</h2>
-              <span class="an-muted">failures athletes saw</span>
-            </div>
-            <table class="an-table" *ngIf="r.errors.length; else noErrors">
-              <thead><tr><th>What failed</th><th>Times</th><th>Users</th></tr></thead>
-              <tbody><tr *ngFor="let e of r.errors"><td><ion-icon name="alert-circle"></ion-icon> {{ e.what }}</td><td>{{ e.count }}</td><td>{{ e.users }}</td></tr></tbody>
-            </table>
-            <ng-template #noErrors><p class="an-muted">No errors in this period.</p></ng-template>
-          </section>
-        </div>
-
-        <!-- Every page, as one pie of page views -->
-        <section class="an-card">
-          <div class="an-card-head">
-            <h2>All Pages</h2>
-            <span class="an-muted">share of page views · select a page to take it out
-              <button class="an-link" *ngIf="hidden.size" (click)="showAllPages()">Show all ({{ hidden.size }} hidden)</button>
-            </span>
-          </div>
-          <div class="an-pie-wrap">
-            <div class="an-pie">
-              <svg viewBox="0 0 320 320" role="img" aria-label="Page views by page">
-                <path *ngFor="let s of slices" [attr.d]="s.d" [style.fill]="s.color" class="slice" [class.dim]="pieHover && pieHover !== s.path"
-                      (mouseenter)="pieHover = s.path" (mouseleave)="pieHover = null" (click)="togglePage(s.path)" />
-                <circle *ngIf="!slices.length" cx="160" cy="160" [attr.r]="R" class="empty" />
-              </svg>
-              <div class="an-pie-tip" *ngIf="hovered as h">
-                <b>{{ h.label }}</b>
-                <span>{{ pct(h.share) }} of views</span>
-                <small>{{ h.views }} views · {{ h.users }} {{ h.users === 1 ? 'user' : 'users' }}</small>
+              <div class="an-chart">
+                <svg [attr.viewBox]="'0 0 ' + W + ' ' + H" preserveAspectRatio="none" (mousemove)="onChartMove($event)" (mouseleave)="hover = null">
+                  <line *ngFor="let t of yTicks" [attr.x1]="L" [attr.x2]="W - 8" [attr.y1]="y(t)" [attr.y2]="y(t)" class="grid" />
+                  <path class="area" [attr.d]="areaPath" />
+                  <path class="line" [attr.d]="linePath" />
+                  <ng-container *ngIf="hover && hoverDay as d">
+                    <line class="cross" [attr.x1]="hover.x" [attr.x2]="hover.x" [attr.y1]="T" [attr.y2]="H - B" />
+                    <circle class="dot" [attr.cx]="hover.x" [attr.cy]="y(d.users)" r="4.5" />
+                  </ng-container>
+                </svg>
+                <div class="an-yl" *ngFor="let t of yTicks" [style.top.%]="y(t) / H * 100">{{ t }}</div>
+                <div class="an-xl" *ngFor="let l of xLabels; let i = index" [style.left.%]="l.x / W * 100" [class.first]="i === 0" [class.last]="i === xLabels.length - 1">{{ l.text }}</div>
+                <div class="an-tip" *ngIf="hoverDay as d" [style.left.%]="hoverLeft" [class.flip]="hoverLeft > 70">
+                  <span>{{ shortDate(d.day) }}</span><b>{{ d.users }} {{ d.users === 1 ? 'user' : 'users' }}</b>
+                </div>
               </div>
-              <p class="an-pie-empty" *ngIf="!slices.length">No page views{{ hidden.size ? ' left to show' : '' }}.</p>
-            </div>
-            <div class="an-legend">
-              <button *ngFor="let p of r.allPages" class="an-legend-row" [class.off]="hidden.has(p.path)" [class.zero]="p.views === 0"
-                      [class.hot]="pieHover === p.path" [disabled]="p.views === 0"
-                      (mouseenter)="pieHover = p.views ? p.path : null" (mouseleave)="pieHover = null" (click)="togglePage(p.path)">
-                <i [style.background]="p.views ? pageColor(p.path) : 'transparent'"></i>
-                <span class="an-legend-label">{{ p.label }}</span>
-                <span class="an-legend-val">{{ p.views ? (hidden.has(p.path) ? 'hidden' : pct(pageShare(p))) : '0 views' }}</span>
-              </button>
-            </div>
-          </div>
-        </section>
+            </section>
 
-        <div class="an-grid">
+            <!-- Return rate by week -->
+            <section class="an-card">
+              <div class="an-card-head">
+                <h2>Return Rate</h2>
+                <span class="an-muted">new users who came back</span>
+              </div>
+              <table class="an-table" *ngIf="r.cohorts.length; else noCohorts">
+                <thead><tr><th>Joined</th><th>Users</th><th>1 day</th><th>1 week</th><th>4 weeks</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let c of r.cohorts.slice(0, 8)">
+                    <td>{{ weekLabel(c.week) }}</td>
+                    <td>{{ c.users }}</td>
+                    <td [style.background]="cellBg(c.d1)">{{ pct(c.d1) }}</td>
+                    <td [style.background]="cellBg(c.w1)">{{ pct(c.w1) }}</td>
+                    <td [style.background]="cellBg(c.w4)">{{ pct(c.w4) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <ng-template #noCohorts><p class="an-muted">No new users in this period.</p></ng-template>
+            </section>
+          </div>
+
+          <div class="an-grid">
+            <!-- Pages -->
+            <section class="an-card">
+              <div class="an-card-head">
+                <h2>Most Used Pages</h2>
+                <span class="an-muted">share of active users who opened it</span>
+              </div>
+              <div class="an-rows">
+                <div class="an-row" *ngFor="let p of r.pages.slice(0, 12)" [title]="p.views + ' views by ' + p.users + ' users'">
+                  <span class="an-row-label">{{ p.label }}</span>
+                  <div class="an-track"><div class="an-fill" [style.width.%]="p.share * 100"></div></div>
+                  <span class="an-row-val">{{ pct(p.share) }}</span>
+                </div>
+                <p class="an-muted" *ngIf="!r.pages.length">No pages opened in this period.</p>
+              </div>
+            </section>
+
+            <section class="an-card">
+              <div class="an-card-head">
+                <h2>Errors</h2>
+                <span class="an-muted">failures athletes saw</span>
+              </div>
+              <table class="an-table" *ngIf="r.errors.length; else noErrors">
+                <thead><tr><th>What failed</th><th>Times</th><th>Users</th></tr></thead>
+                <tbody><tr *ngFor="let e of r.errors"><td><ion-icon name="alert-circle"></ion-icon> {{ e.what }}</td><td>{{ e.count }}</td><td>{{ e.users }}</td></tr></tbody>
+              </table>
+              <ng-template #noErrors><p class="an-muted">No errors in this period.</p></ng-template>
+            </section>
+          </div>
+
+          <!-- Every page, as one pie of page views -->
           <section class="an-card">
             <div class="an-card-head">
-              <h2>30-Minute Run Import</h2>
-              <span class="an-muted">users who opened it</span>
+              <h2>All Pages</h2>
+              <span class="an-muted">share of page views · select a page to take it out
+                <button class="an-link" *ngIf="hidden.size" (click)="showAllPages()">Show all ({{ hidden.size }} hidden)</button>
+              </span>
             </div>
-            <ng-container *ngIf="r.run.length && r.run[0].count; else noRun">
-              <ng-container *ngTemplateOutlet="funnel; context: { $implicit: r.run, unit: 'users' }"></ng-container>
-            </ng-container>
-            <ng-template #noRun><p class="an-muted">No one imported a run in this period.</p></ng-template>
+            <div class="an-pie-wrap">
+              <div class="an-pie">
+                <svg viewBox="0 0 320 320" role="img" aria-label="Page views by page">
+                  <path *ngFor="let s of slices" [attr.d]="s.d" [style.fill]="s.color" class="slice" [class.dim]="pieHover && pieHover !== s.path"
+                        (mouseenter)="pieHover = s.path" (mouseleave)="pieHover = null" (click)="togglePage(s.path)" />
+                  <circle *ngIf="!slices.length" cx="160" cy="160" [attr.r]="R" class="empty" />
+                </svg>
+                <div class="an-pie-tip" *ngIf="hovered as h">
+                  <b>{{ h.label }}</b>
+                  <span>{{ pct(h.share) }} of views</span>
+                  <small>{{ h.views }} views · {{ h.users }} {{ h.users === 1 ? 'user' : 'users' }}</small>
+                </div>
+                <p class="an-pie-empty" *ngIf="!slices.length">No page views{{ hidden.size ? ' left to show' : '' }}.</p>
+              </div>
+              <div class="an-legend">
+                <button *ngFor="let p of r.allPages" class="an-legend-row" [class.off]="hidden.has(p.path)" [class.zero]="p.views === 0"
+                        [class.hot]="pieHover === p.path" [disabled]="p.views === 0"
+                        (mouseenter)="pieHover = p.views ? p.path : null" (mouseleave)="pieHover = null" (click)="togglePage(p.path)">
+                  <i [style.background]="p.views ? pageColor(p.path) : 'transparent'"></i>
+                  <span class="an-legend-label">{{ p.label }}</span>
+                  <span class="an-legend-val">{{ p.views ? (hidden.has(p.path) ? 'hidden' : pct(pageShare(p))) : '0 views' }}</span>
+                </button>
+              </div>
+            </div>
           </section>
-        </div>
 
+          <div class="an-grid">
+            <section class="an-card">
+              <div class="an-card-head">
+                <h2>30-Minute Run Import</h2>
+                <span class="an-muted">users who opened it</span>
+              </div>
+              <ng-container *ngIf="r.run.length && r.run[0].count; else noRun">
+                <ng-container *ngTemplateOutlet="funnel; context: { $implicit: r.run, unit: 'users' }"></ng-container>
+              </ng-container>
+              <ng-template #noRun><p class="an-muted">No one imported a run in this period.</p></ng-template>
+            </section>
+          </div>
+
+        </ng-container>
       </ng-container>
+
+      <!-- ===== Inactive: nothing in the app for four weeks ===== -->
+      <ng-container *ngIf="tab === 'inactive'">
+        <section class="an-card">
+          <div class="an-card-head"><h2>Inactive Athletes</h2><span class="an-muted">{{ inactive.length }} {{ sectionName }} · nothing in the app for 4 weeks</span></div>
+          <p class="an-note first">Through onboarding, but no check-in, workout, result sent or app opening of their own in the last 4 weeks. Doing any of them moves an athlete back to Active.</p>
+          <table class="an-people" *ngIf="inactive.length; else noneInactive">
+            <thead><tr><th>Name</th><th>Last active</th><th>Level</th><th>Rank</th></tr></thead>
+            <tbody><tr *ngFor="let p of inactive"><td class="nm">{{ p.name }}</td><td>{{ ago(p.last) }}</td><td>{{ p.level }}</td><td>{{ rankLabel(p.rank) }}</td></tr></tbody>
+          </table>
+          <ng-template #noneInactive><p class="an-muted">No inactive athletes.</p></ng-template>
+        </section>
+      </ng-container>
+
     </ng-container>
   </div>
 </ion-content>

@@ -6,7 +6,7 @@ import { addIcons } from 'ionicons';
 import { arrowBack, alertCircle, trendingDown, refreshOutline } from 'ionicons/icons';
 import { FirebaseService } from '../services/firebase.service';
 import type { EventBatch } from '../program-engine/analytics';
-import { AccountRow, Bar, PageRow, Report, Section, TOUR_ORDER, buildReport } from './analytics.util';
+import { Bar, PageRow, Report, Section, TOUR_ORDER, buildReport } from './analytics.util';
 import { demoBatches } from './demo';
 import { getOmniRank } from '../services/omni.util';
 
@@ -14,11 +14,27 @@ const DAY = 86400000;
 // Internal accounts: the App Store reviewer and the developer's test athlete. They are never counted (the same list the
 // athlete app leaves off its standings).
 const INTERNAL = ['apple reviewer', 'casey sandbox'];
+// Without anything done in the app for this long, an athlete is inactive.
+const ACTIVE_DAYS = 28;
 
-export interface Roster { name: string; section: Section; last: number | null; level: number | null; rank: string; }
+export type Tab = 'downloads' | 'onboarding' | 'active' | 'inactive';
 
-// How the athlete app is used, from its anonymous event log: where new athletes stop on the way in, who comes back,
-// which pages are used and which are not. Remote athletes and in-person facility members are shown apart.
+// One athlete with a login to the athlete app, from their own record.
+export interface Person {
+  name: string;
+  section: Section;
+  linkedAt: number;          // when the login was made
+  intake: boolean;           // accepted the terms on the intake form
+  tour: number;              // the furthest tour step on the record (TOUR_ORDER), -1 for none
+  estimate: boolean;         // saved a starting estimate in the walkthrough
+  level: number | null;
+  rank: string;
+  viaApp: boolean;           // signed up in the app, rather than being an athlete the coach already had
+  last: number | null;       // the last thing the athlete did in the app themselves
+}
+
+// How the athlete app is used, as a flow: downloads, getting through the account, tour and walkthrough, then active or
+// inactive. Each athlete is in one stage. Remote athletes and in-person members are shown apart.
 @Component({
   selector: 'app-app-analytics',
   standalone: true,
@@ -28,18 +44,18 @@ export interface Roster { name: string; section: Section; last: number | null; l
 })
 export class AppAnalyticsPage implements OnInit {
   readonly periods = [7, 30, 90];
+  readonly tabs: Array<{ id: Tab; label: string }> = [
+    { id: 'downloads', label: 'Downloads' }, { id: 'onboarding', label: 'Onboarding' },
+    { id: 'active', label: 'Active' }, { id: 'inactive', label: 'Inactive' }
+  ];
+  tab: Tab = 'onboarding';
   section: Section = 'remote';
   period = 30;
   loading = true;
   error = '';
   demo = false;
   private batches: EventBatch[] = [];
-  private accounts: AccountRow[] = [];
-  private existingRows: Array<{ linkedAt: number; section: Section; name: string }> = [];   // athletes the coach already had who were given a login
-  // How many of them in the period on screen: left out of the journey.
-  get existing(): number { const from = Date.now() - this.period * DAY; return this.existingRows.filter(e => e.section === this.section && e.linkedAt >= from).length; }
-  roster: Roster[] = [];
-  private levels: Array<{ section: Section; rank: string }> = [];
+  people: Person[] = [];
   updatedAt: Date | null = null;
   report: Report | null = null;
   hover: { i: number; x: number } | null = null;   // the day under the pointer on the activity chart
@@ -50,65 +66,46 @@ export class AppAnalyticsPage implements OnInit {
 
   ngOnInit() { return this.load(); }
 
-  // Reads the usage log and the new accounts again.
   async load() {
     this.loading = true;
     this.error = '';
     try {
       const since = new Date(Date.now() - 120 * DAY).toLocaleDateString('en-CA');
-      const sinceIso = new Date(Date.now() - 120 * DAY).toISOString();
-      const [batches, links, members, testers, did, requested] = await Promise.all([
+      const [batches, links, members, testers, activity] = await Promise.all([
         this.firebase.listEventBatches(since),
-        this.firebase.listLinksSince(sinceIso).catch(() => []),
+        this.firebase.listAllLinks().catch(() => []),
         this.firebase.listMembers().catch(() => []),
         this.firebase.getTesters().catch(() => [] as string[]),
-        this.firebase.listMemberActivity(sinceIso).catch(() => null),
-        this.firebase.listLinkedRequestUids().catch(() => new Set<string>())
+        this.firebase.listAthleteActivity().catch(() => new Map<string, number>())
       ]);
       this.batches = batches;
-      // The accounts come from the athletes' own records, so they count the same whatever version of the app people have.
       const byKey = new Map(members.map(m => [m.nameKey, m]));
-      this.accounts = [];
-      this.roster = members
-        .filter(m => !testers.includes(m.nameKey) && !INTERNAL.includes(m.nameKey) && !(m as { mergedInto?: string }).mergedInto)
-        .map(m => ({
-          name: m.clientName || m.nameKey,
-          section: (m.inPerson ? 'facility' : 'remote') as Section,
-          last: m.lastActivityAt ? Date.parse(m.lastActivityAt) : null,
-          level: typeof m.latestLvl === 'number' ? m.latestLvl : null,
-          rank: typeof m.latestLvl === 'number' ? getOmniRank(m.latestLvl, m.sex ?? 'male') : 'UNRANKED'
-        }));
-      this.levels = members
-        .filter(m => !testers.includes(m.nameKey) && !INTERNAL.includes(m.nameKey) && typeof m.latestLvl === 'number')
-        .map(m => ({ section: (m.inPerson ? 'facility' : 'remote') as Section, rank: getOmniRank(m.latestLvl as number, m.sex ?? 'male') }));
-      this.existingRows = [];
+      // The first login made for each athlete.
+      const firstLink = new Map<string, number>();
       for (const l of links) {
-        const m = byKey.get(l.nameKey);
-        if (!m || testers.includes(m.nameKey) || INTERNAL.includes(m.nameKey)) continue;
-        // An athlete the coach already had, given a login (a link request a coach approved, or a link the coach made), did not
-        // go through the app's own sign-up, so they are not a new user and are counted apart.
-        const onboarded = m.tourStep != null || m.estimateLvl != null || (m.estimatedTests?.length ?? 0) > 0;
-        if (requested.has(l.uid) || !onboarded) { this.existingRows.push({ linkedAt: Date.parse(l.linkedAt), section: m.inPerson ? 'facility' : 'remote', name: m.clientName || m.nameKey }); continue; }
-        const week = Date.now() - 7 * DAY;
-        this.accounts.push({
-          name: m.clientName || m.nameKey,
-          intake: !!m.termsAcceptedAt,
-          tourStep: m.tourStep ?? '',
-          linkedAt: Date.parse(l.linkedAt),
+        const t = Date.parse(l.linkedAt);
+        if (isFinite(t) && t < (firstLink.get(l.nameKey) ?? Infinity)) firstLink.set(l.nameKey, t);
+      }
+      this.people = [];
+      for (const [key, linkedAt] of firstLink) {
+        const m = byKey.get(key);
+        if (!m || testers.includes(key) || INTERNAL.includes(key) || (m as { mergedInto?: string }).mergedInto) continue;
+        const estimate = m.estimateLvl != null || (m.estimatedTests?.length ?? 0) > 0;
+        const tour = m.tourStep ? TOUR_ORDER.indexOf(m.tourStep) : -1;
+        const level = typeof m.latestLvl === 'number' ? m.latestLvl : null;
+        this.people.push({
+          name: m.clientName || key,
           section: m.inPerson ? 'facility' : 'remote',
-          tour: m.tourStep ? TOUR_ORDER.indexOf(m.tourStep) : -1,
-          estimate: m.estimateLvl != null || (m.estimatedTests?.length ?? 0) > 0,
-          submittedVerified: !!did?.approved.has(m.nameKey),
-          savedUnreviewed: !!did?.unreviewed.has(m.nameKey),
-          program: !!m.programIntake,
-          checkedIn: (m.checkInDays?.length ?? 0) > 0 || !!did?.checkIns.has(m.nameKey),
-          workout: !!did?.workouts.has(m.nameKey),
-          goal: !!did?.goals.has(m.nameKey),
-          resilience: !!did?.resilience.has(m.nameKey),
-          photo: !!m.photoUrl,
-          results: Object.keys(m.testScores ?? {}).length >= 3,
-          board: !m.private && !m.hideWorld && m.latestLvl != null,
-          active: !!m.lastActivityAt && Date.parse(m.lastActivityAt) >= week
+          linkedAt,
+          intake: !!m.termsAcceptedAt,
+          tour,
+          estimate,
+          level,
+          rank: level !== null ? getOmniRank(level, m.sex ?? 'male') : 'UNRANKED',
+          // An athlete the coach already had already holds a Level from the coach, so the app skips the tour and
+          // walkthrough for them.
+          viaApp: tour >= 0 || estimate || level === null,
+          last: activity.get(key) ?? null
         });
       }
       this.updatedAt = new Date();
@@ -120,7 +117,67 @@ export class AppAnalyticsPage implements OnInit {
     this.rebuild();
   }
 
-  // Everyone's current rank, from their latest Level, private accounts included: this page is the coach's own view.
+  // ---------- The stages ----------
+  private get mine(): Person[] { return this.people.filter(p => p.section === this.section); }
+  private get from(): number { return Date.now() - this.period * DAY; }
+  // Through the account, tour and walkthrough: the athlete has a Level.
+  private done(p: Person): boolean { return p.level !== null; }
+  private isActive(p: Person): boolean { return this.done(p) && (p.last ?? 0) >= Date.now() - ACTIVE_DAYS * DAY; }
+
+  get newAccounts(): Person[] { return this.mine.filter(p => p.linkedAt >= this.from).sort((a, b) => b.linkedAt - a.linkedAt); }
+  get onboarding(): Person[] { return this.mine.filter(p => !this.done(p)).sort((a, b) => b.linkedAt - a.linkedAt); }
+  get active(): Person[] { return this.mine.filter(p => this.isActive(p)).sort((a, b) => (b.last ?? 0) - (a.last ?? 0)); }
+  get inactive(): Person[] { return this.mine.filter(p => this.done(p) && !this.isActive(p)).sort((a, b) => (b.last ?? 0) - (a.last ?? 0)); }
+  count(t: Tab): number {
+    return t === 'downloads' ? this.newAccounts.length : t === 'onboarding' ? this.onboarding.length : t === 'active' ? this.active.length : this.inactive.length;
+  }
+
+  // The onboarding flow for the accounts made in the period that signed up in the app, each step with who reached it.
+  flow: Bar[] = [];
+  private buildFlow(): Bar[] {
+    const list = this.newAccounts.filter(p => p.viaApp);
+    const N = list.length;
+    const start = TOUR_ORDER.indexOf('start');
+    const steps: Array<{ key: string; label: string; test: (p: Person) => boolean }> = [
+      { key: 'account', label: 'Created an account', test: () => true },
+      { key: 'intake', label: 'Completed the intake form', test: p => p.intake || p.tour >= 0 || this.done(p) },
+      { key: 'tour', label: 'Started the tour', test: p => p.tour >= 0 || this.done(p) },
+      { key: 'tour-end', label: 'Reached Start the tests', test: p => p.tour >= start || this.done(p) },
+      { key: 'walk', label: 'Walkthrough', test: p => p.estimate || this.done(p) }
+    ];
+    const out = steps.map(s => {
+      const who = list.filter(s.test);
+      return { key: s.key, label: s.label, count: who.length, pctOfStart: N ? who.length / N : 0, dropFromPrev: null as number | null,
+        who: who.map(p => p.name), missed: list.filter(p => !s.test(p)).map(p => p.name) };
+    });
+    let worst: Bar | null = null, most = 0;
+    out.forEach((b, i) => {
+      if (i && out[i - 1].count > b.count) {
+        b.dropFromPrev = 1 - b.count / out[i - 1].count;
+        if (out[i - 1].count - b.count > most) { most = out[i - 1].count - b.count; worst = b; }
+      }
+    });
+    if (worst) (worst as Bar).worst = true;
+    return out;
+  }
+  get coachHad(): Person[] { return this.newAccounts.filter(p => !p.viaApp); }
+
+  stageName(p: Person): string { return !this.done(p) ? 'Onboarding' : this.isActive(p) ? 'Active' : 'Inactive'; }
+
+  // Where an athlete still in onboarding has got to.
+  stage(p: Person): string {
+    if (p.estimate) return 'Walkthrough done';
+    if (p.tour >= TOUR_ORDER.indexOf('start')) return 'At Start the tests';
+    if (p.tour >= 0) return 'In the tour';
+    if (p.intake) return 'Intake done';
+    return 'Account created';
+  }
+
+  // Active athletes, by how recently: the last day, week and four weeks. Tapping one shows the names.
+  openActive: number | null = null;
+  activeIn(days: number): Person[] { const t = Date.now() - days * DAY; return this.active.filter(p => (p.last ?? 0) >= t); }
+
+  // Ranks of everyone through onboarding.
   readonly rankOrder: Array<{ rank: string; label: string; color: string }> = [
     { rank: 'UNRANKED', label: 'Unranked', color: '#7d8895' },
     { rank: 'D-RANK', label: 'D-Rank', color: '#2dd36f' },
@@ -130,29 +187,17 @@ export class AppAnalyticsPage implements OnInit {
     { rank: 'S-RANK', label: 'S-Rank', color: '#f2f4f7' }
   ];
   get rankBars(): Array<{ label: string; color: string; count: number; share: number; height: number }> {
-    const mine = this.levels.filter(l => l.section === this.section);
-    const counts = this.rankOrder.map(r => mine.filter(l => l.rank === r.rank).length);
+    const list = this.mine.filter(p => this.done(p));
+    const counts = this.rankOrder.map(r => list.filter(p => p.rank === r.rank).length);
     const top = Math.max(1, ...counts);
-    return this.rankOrder.map((r, i) => ({ label: r.label, color: r.color, count: counts[i], share: mine.length ? counts[i] / mine.length : 0, height: counts[i] / top * 100 }));
+    return this.rankOrder.map((r, i) => ({ label: r.label, color: r.color, count: counts[i], share: list.length ? counts[i] / list.length : 0, height: counts[i] / top * 100 }));
   }
-  get rankTotal(): number { return this.levels.filter(l => l.section === this.section).length; }
+  get rankTotal(): number { return this.mine.filter(p => this.done(p)).length; }
 
-  // Who the new accounts are, newest first, with what each has done, so the counts above can be checked by name.
-  get people(): AccountRow[] {
-    const from = Date.now() - this.period * DAY;
-    return this.accounts.filter(a => a.section === this.section && a.linkedAt >= from).sort((a, b) => b.linkedAt - a.linkedAt);
-  }
-  get leftOut(): string[] {
-    const from = Date.now() - this.period * DAY;
-    return this.existingRows.filter(e => e.section === this.section && e.linkedAt >= from).map(e => e.name);
-  }
+  names(list: Person[]): string { return list.map(p => p.name).join(', '); }
   when(t: number): string { return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
-
-  // Everyone in the section, from their own records, so it is right whatever version of the app they run.
-  get members(): Roster[] { return this.roster.filter(r => r.section === this.section).sort((a, b) => (b.last ?? 0) - (a.last ?? 0)); }
-  activeWithin(days: number): number { const from = Date.now() - days * DAY; return this.members.filter(r => (r.last ?? 0) >= from).length; }
   ago(t: number | null): string {
-    if (!t) return 'Never';
+    if (!t) return 'Nothing yet';
     const d = Math.floor((Date.now() - t) / DAY);
     return d <= 0 ? 'Today' : d === 1 ? 'Yesterday' : `${d} days ago`;
   }
@@ -166,12 +211,14 @@ export class AppAnalyticsPage implements OnInit {
   // Usage from the phone apps; the web build is only used for development (see analytics.util.ts).
   get hasData(): boolean { return this.batches.some(b => b.pl !== 'web'); }
 
+  setTab(t: Tab) { this.tab = t; this.openStep = ''; this.openActive = null; }
   setSection(s: Section) { this.section = s; this.rebuild(); }
   setPeriod(p: number) { this.period = p; this.rebuild(); }
   showDemo(on: boolean) { this.demo = on; this.rebuild(); }
 
   private rebuild() {
-    this.report = buildReport(this.demo ? demoBatches() : this.batches, this.section, this.period, this.demo ? [] : this.accounts);
+    this.report = buildReport(this.demo ? demoBatches() : this.batches, this.section, this.period);
+    this.flow = this.buildFlow();
     this.hover = null;
   }
 
@@ -179,18 +226,6 @@ export class AppAnalyticsPage implements OnInit {
   pct(v: number | null | undefined): string { return v == null ? '—' : `${Math.round(v * 100)}%`; }
   num(v: number | null | undefined, digits = 0): string { return v == null ? '—' : v.toFixed(digits); }
   get sectionName(): string { return this.section === 'remote' ? 'remote athletes' : 'in-person members'; }
-
-  // The one sentence the page leads with.
-  // Led by the new accounts, counted from their records; the usage log's earlier steps when there are none.
-  get headline(): { lead: string; from: string; to: string; lost: number; of: number; share: number } | null {
-    const r = this.report;
-    if (!r) return null;
-    const worst = r.journeyWorst;
-    if (!worst) return null;
-    const steps = r.journey.map(g => g.steps).find(s => s.includes(worst))!;
-    const prev = steps[steps.indexOf(worst) - 1];
-    return { lead: 'Most new users are lost between', from: prev.label, to: worst.label, lost: prev.count - worst.count, of: prev.count, share: worst.dropFromPrev ?? 0 };
-  }
 
   barWidth(b: Bar): number { return Math.max(b.count ? 1.5 : 0, b.pctOfStart * 100); }
 

@@ -4276,6 +4276,41 @@ export class FirebaseService {
     };
   }
 
+  // When each athlete last did something in the athlete app themselves, by name key. Only what the athlete writes counts:
+  // check-ins, workouts they logged, results they sent, and (from 1.6) opening the app. Anything a coach enters is left out.
+  async listAthleteActivity(): Promise<Map<string, number>> {
+    const last = new Map<string, number>();
+    const note = (key: string | undefined, at: string | number | undefined | null) => {
+      const t = typeof at === 'number' ? at : at ? Date.parse(at) : NaN;
+      if (!key || !isFinite(t)) return;
+      if (t > (last.get(key) ?? 0)) last.set(key, t);
+    };
+    type Row = { nameKey?: string; createdAt?: string; timestamp?: string; coachEdited?: boolean; publicProof?: boolean; selfReported?: boolean };
+    const rows = async (q: Parameters<typeof getDocs>[0]) => (await getDocs(q).catch(() => null))?.docs.map(d => d.data() as Row) ?? [];
+    const [checkIns, workouts, pending, pendingRes, selfSaved, members] = await Promise.all([
+      rows(collection(this.db, 'dailyCheckIns')),
+      rows(collection(this.db, 'memberWorkoutLogs')),
+      rows(collection(this.db, 'pendingAssessments')),
+      rows(collection(this.db, 'pendingResilience')),
+      rows(query(collection(this.db, 'assessments'), where('selfReported', '==', true))),
+      getDocs(collection(this.db, 'members')).then(s => s.docs.map(d => d.data() as { nameKey?: string; lastOpenedAt?: string; lastCheckInAt?: string })).catch(() => [])
+    ]);
+    for (const r of checkIns) note(r.nameKey, r.createdAt ?? r.timestamp);
+    for (const r of workouts) if (!r.coachEdited) note(r.nameKey, r.createdAt ?? r.timestamp);
+    // A coach sending a private athlete's proof for review writes a pending entry too; those carry publicProof.
+    for (const r of pending) if (!r.publicProof) note(r.nameKey, r.createdAt ?? r.timestamp);
+    for (const r of pendingRes) note(r.nameKey, r.createdAt ?? r.timestamp);
+    for (const r of selfSaved) note(r.nameKey, r.timestamp);
+    for (const m of members) { note(m.nameKey, m.lastOpenedAt); note(m.nameKey, m.lastCheckInAt); }
+    return last;
+  }
+
+  // Every login and the athlete it opens, with when it was made.
+  async listAllLinks(): Promise<Array<{ uid: string; nameKey: string; linkedAt: string }>> {
+    const snap = await getDocs(collection(this.db, 'clientLinks'));
+    return snap.docs.map(d => ({ uid: d.id, ...(d.data() as { nameKey: string; linkedAt: string }) }));
+  }
+
   async listEventBatches(sinceDay: string): Promise<EventBatch[]> {
     const snap = await getDocs(query(collection(this.db, 'appEvents'), where('day', '>=', sinceDay)));
     return snap.docs.map(d => d.data() as EventBatch);

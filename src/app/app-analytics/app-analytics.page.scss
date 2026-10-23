@@ -162,3 +162,11 @@ h1 { margin: 2px 0 0; font-family: 'Bebas Neue', 'Barlow', sans-serif; font-size
 .an-step.open { background: rgba(255,255,255,0.05); }
 .an-who { margin: 2px 0 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 12.5px; line-height: 1.5; color: var(--dim);
   p { margin: 0 0 4px; } b { color: var(--text); margin-right: 6px; } }
+
+.an-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 4px 0 16px; }
+.an-tabs button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; border-radius: 12px;
+  border: 1px solid var(--border); background: transparent; color: var(--dim); font: inherit; font-size: 13px; cursor: pointer;
+  b { font-size: 20px; color: var(--text); font-variant-numeric: tabular-nums; }
+  &.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); } }
+.an-tile.tap { font: inherit; text-align: left; cursor: pointer; color: inherit; &.on { border-color: var(--accent); } }
+@media (max-width: 600px) { .an-tabs { grid-template-columns: repeat(2, 1fr); } }

@@ -31,33 +31,9 @@ export interface Bar {
 export interface DayPoint { day: string; users: number; }
 export interface Cohort { week: string; users: number; d1: number | null; w1: number | null; w4: number | null; }
 export interface PageRow { path: string; label: string; views: number; users: number; share: number; }
-// One new athlete account, from the athlete's own record rather than from the usage log, so it counts the same whatever
-// version of the app they have.
-export interface AccountRow {
-  name: string;
-  intake: boolean;             // completed the intake form
-  tourStep: string;            // the tour step the record holds, as written
-  linkedAt: number;
-  section: Section;
-  tour: number;                // the furthest tour step reached: 0 for the first, -1 for none (see TOUR_ORDER)
-  estimate: boolean;           // saved a starting estimate
-  submittedVerified: boolean;  // sent a score that was approved
-  savedUnreviewed: boolean;    // saved a score no coach will review: a private account, or a result sent without a video
-  program: boolean;
-  checkedIn: boolean;
-  workout: boolean;
-  goal: boolean;
-  resilience: boolean;
-  photo: boolean;
-  results: boolean;            // has results in three or more tests
-  board: boolean;              // is on the leaderboards: a public account with a level
-  active: boolean;             // active in the last 7 days
-}
-
 // The tour as an athlete's record keeps it (tour.service.ts).
 export const TOUR_ORDER = ['welcome', 'current', 'goals-tab', 'goals', 'resilience-tab', 'resilience', 'start', 'training', 'done'];
 
-export interface JourneyGroup { title: string; note?: string; steps: Bar[]; }
 export interface RetentionRow { label: string; share: number | null; back: number; of: number; }
 
 export interface ErrorRow { what: string; count: number; users: number; }
@@ -72,9 +48,7 @@ export interface Report {
   sessionsPerUser: number | null;
   funnel: Bar[];
   worst: Bar | null;
-  journey: JourneyGroup[];     // every step from opening the app to the first weeks, in order
-  accountCount: number;
-  journeyWorst: Bar | null;    // the step after which the most people are lost
+  downloads: number;           // installs in the period, remote and in-person together (no one is known before signing in)
   retention: RetentionRow[];   // 1 day, 1 week and 4 weeks           // the step that loses the most people
   daily: DayPoint[];
   cohorts: Cohort[];
@@ -156,7 +130,7 @@ function bars(group: Device[], steps: Array<{ key: string; label: string; test: 
   return out;
 }
 
-export function buildReport(batches: EventBatch[], section: Section, periodDays: number, accounts: AccountRow[] = [], now = Date.now()): Report {
+export function buildReport(batches: EventBatch[], section: Section, periodDays: number, now = Date.now()): Report {
   const all = devices(batches).filter(d => !d.tester && d.section === section);
   const since = now - periodDays * DAY;
   const today = dayKey(now);
@@ -173,71 +147,8 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
   });
   if (worst) (worst as Bar).worst = true;
 
-  // ---- The journey, step by step ----
-  // The accounts come from the athletes' own records, so they are counted the same whatever version of the app people
-  // have. The usage log only fills in the opening of the app, and who opened the walkthrough without finishing it.
-  const mine = accounts.filter(a => a.section === section && a.linkedAt >= since);
-  const N = mine.length;
-  const opened = Math.max(fresh.length, N);
-  const signedUp = Math.max(fresh.filter(d => d.events.some(e => e.e === EVENTS.signup)).length, N);
-  const mk = (key: string, label: string, count: number, base: number): Bar => ({ key, label, count, pctOfStart: base ? Math.min(1, count / base) : 0, dropFromPrev: null });
-  // A step counted from the athletes' own records, which can say who reached it.
-  const mkA = (key: string, label: string, test: (a: AccountRow) => boolean, base: number): Bar => {
-    const b = mk(key, label, mine.filter(test).length, base);
-    b.who = mine.filter(test).map(a => a.name);
-    b.missed = mine.filter(a => !test(a)).map(a => a.name);
-    return b;
-  };
-  const link = (steps: Bar[]) => { steps.forEach((b, i) => { if (i > 0 && steps[i - 1].count > b.count) b.dropFromPrev = 1 - b.count / steps[i - 1].count; }); return steps; };
-
-  const start = link([
-    mk('opened', 'Opened the app', opened, opened),
-    Object.assign(mk('signup', 'Created an account', signedUp, opened), { who: mine.map(a => a.name), missed: [] as string[] }),
-    mkA('intake', 'Completed the intake form', () => true, opened)
-  ]);
-
-  // The walkthrough is the same for everyone, so it is one step: those who saved a starting estimate.
-  const walk = [mkA('walk-saved', 'Walkthrough', a => a.estimate, N)];
-
-  const tourSteps: Array<{ key: string; label: string }> = [...TOUR_STEPS, { key: 'done', label: 'Finished the tour' }];
-  // The tour starts before the tests (Welcome to Start the tests) and finishes after the starting estimate is saved
-  // (Training, then done), so it is shown on either side of the walkthrough.
-  const tourAll = tourSteps.map((t, i) => mk('tour-' + t.key, t.label, mine.filter(a => a.tour >= i).length, N));
-  tourAll.forEach((b, i) => { b.who = mine.filter(a => a.tour >= i).map(a => a.name); b.missed = mine.filter(a => !(a.tour >= i)).map(a => a.name); });
-  const split = tourSteps.findIndex(t => t.key === 'training');
-  const tourBefore = link(tourAll.slice(0, split));
-  const tourAfter = link(tourAll.slice(split));
-
-  const later = link([
-    mkA('sub-verified', 'Sent a score that was verified', a => a.submittedVerified, N),
-    mkA('sub-unreviewed', 'Saved a score without review (private account or no video)', a => a.savedUnreviewed, N),
-    mkA('program', 'Set up a program', a => a.program, N),
-    mkA('checkin', 'Checked in', a => a.checkedIn, N),
-    mkA('workout', 'Logged a workout', a => a.workout, N),
-    mkA('goal', 'Set a goal', a => a.goal, N),
-    mkA('resilience', 'Entered a Resilience score', a => a.resilience, N),
-    mkA('photo', 'Added a profile photo', a => a.photo, N),
-    mkA('results', 'Has results in 3 or more tests', a => a.results, N),
-    mkA('board', 'On the leaderboards', a => a.board, N),
-    mkA('active', 'Active in the last 7 days', a => a.active, N)
-  ]);
-  // Later lines are counted on their own, so a drop between two of them means nothing.
-  later.forEach(b => (b.dropFromPrev = null));
-
-  const journey: JourneyGroup[] = [
-    { title: 'Getting in', steps: start },
-    { title: 'Tour, before the tests', note: 'The tour runs first and ends at "Start the tests", which opens the walkthrough below.', steps: tourBefore },
-    { title: 'Starting level walkthrough', note: 'Counted from the athlete\'s record: a starting estimate was saved.', steps: walk },
-    { title: 'Tour, after the tests', note: 'These come after the starting estimate is saved, so fewer people reach them than reached the start of the tour.', steps: tourAfter },
-    { title: 'After joining', note: 'Each line is counted on its own, for the new accounts of this period.', steps: later }
-  ];
-  // The step after which the most people are lost, in the steps that follow one another.
-  let journeyWorst: Bar | null = null, journeyMost = 0;
-  [start, tourBefore, walk, tourAfter].forEach(group => group.forEach((b, i) => {
-    const lost = i ? group[i - 1].count - b.count : 0;
-    if (lost > journeyMost) { journeyMost = lost; journeyWorst = b; }
-  }));
-  if (journeyWorst) (journeyWorst as Bar).worst = true;
+  // ---- Downloads: every new install, before anyone is known to be remote or in person ----
+  const downloads = devices(batches).filter(d => !d.tester && d.install !== null && d.install >= since && d.events.some(e => e.e === EVENTS.install)).length;
 
   const tour = bars(fresh.filter(d => d.events.some(e => e.e === EVENTS.tour)),
     TOUR_STEPS.map(s => ({ key: s.key, label: s.label, test: (d: Device) => d.events.some(e => e.e === EVENTS.tour && e.x === s.key) })));
@@ -325,9 +236,7 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
     sessionsPerUser: activeInPeriod ? sessions.size / activeInPeriod / Math.max(1, periodDays / 7) : null,
     funnel,
     worst,
-    journey,
-    accountCount: N,
-    journeyWorst,
+    downloads,
     retention,
     daily,
     cohorts,
