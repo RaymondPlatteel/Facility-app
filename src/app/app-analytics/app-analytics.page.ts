@@ -8,6 +8,7 @@ import { FirebaseService } from '../services/firebase.service';
 import type { EventBatch } from '../program-engine/analytics';
 import { AccountRow, Bar, PageRow, Report, Section, TOUR_ORDER, buildReport } from './analytics.util';
 import { demoBatches } from './demo';
+import { getOmniRank } from '../services/omni.util';
 
 const DAY = 86400000;
 
@@ -32,6 +33,7 @@ export class AppAnalyticsPage implements OnInit {
   private existingRows: Array<{ linkedAt: number; section: Section }> = [];   // athletes the coach already had who were given a login
   // How many of them in the period on screen: left out of the journey.
   get existing(): number { const from = Date.now() - this.period * DAY; return this.existingRows.filter(e => e.section === this.section && e.linkedAt >= from).length; }
+  private levels: Array<{ section: Section; rank: string }> = [];
   updatedAt: Date | null = null;
   report: Report | null = null;
   hover: { i: number; x: number } | null = null;   // the day under the pointer on the activity chart
@@ -61,6 +63,9 @@ export class AppAnalyticsPage implements OnInit {
       // The accounts come from the athletes' own records, so they count the same whatever version of the app people have.
       const byKey = new Map(members.map(m => [m.nameKey, m]));
       this.accounts = [];
+      this.levels = members
+        .filter(m => !testers.includes(m.nameKey) && typeof m.latestLvl === 'number')
+        .map(m => ({ section: (m.inPerson ? 'facility' : 'remote') as Section, rank: getOmniRank(m.latestLvl as number, m.sex ?? 'male') }));
       this.existingRows = [];
       for (const l of links) {
         const m = byKey.get(l.nameKey);
@@ -96,6 +101,23 @@ export class AppAnalyticsPage implements OnInit {
     this.loading = false;
     this.rebuild();
   }
+
+  // Everyone's current rank, from their latest Level, private accounts included: this page is the coach's own view.
+  readonly rankOrder: Array<{ rank: string; label: string; color: string }> = [
+    { rank: 'UNRANKED', label: 'Unranked', color: '#7d8895' },
+    { rank: 'D-RANK', label: 'D-Rank', color: '#2dd36f' },
+    { rank: 'C-RANK', label: 'C-Rank', color: '#3b9cff' },
+    { rank: 'B-RANK', label: 'B-Rank', color: '#a35cff' },
+    { rank: 'A-RANK', label: 'A-Rank', color: '#ff4d5e' },
+    { rank: 'S-RANK', label: 'S-Rank', color: '#f2f4f7' }
+  ];
+  get rankBars(): Array<{ label: string; color: string; count: number; share: number; height: number }> {
+    const mine = this.levels.filter(l => l.section === this.section);
+    const counts = this.rankOrder.map(r => mine.filter(l => l.rank === r.rank).length);
+    const top = Math.max(1, ...counts);
+    return this.rankOrder.map((r, i) => ({ label: r.label, color: r.color, count: counts[i], share: mine.length ? counts[i] / mine.length : 0, height: counts[i] / top * 100 }));
+  }
+  get rankTotal(): number { return this.levels.filter(l => l.section === this.section).length; }
 
   goBack() { this.router.navigate(['/home']); }
   // Usage from the phone apps; the web build is only used for development (see analytics.util.ts).

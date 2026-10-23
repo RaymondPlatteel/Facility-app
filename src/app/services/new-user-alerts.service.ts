@@ -4,7 +4,8 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { FirebaseService } from './firebase.service';
 
-// Tells the coach when someone downloads the athlete app or creates an account, on the coach's iPhone.
+// Tells the coach when someone downloads the athlete app, creates an account, or saves a score that no coach will review
+// (a private account, or a result sent without a video; results waiting for review are in Pending already), on the coach's iPhone.
 // - While this app is open, the usage log the athlete app writes (appEvents) is watched, and an 'install' (first open
 //   on a new device) or a 'signup' shows a banner at once.
 // - With this app closed, the Worker sends a push to the device tokens saved here (coachDevices); see
@@ -37,13 +38,15 @@ export class NewUserAlertsService {
       const notes: Array<{ id: number; title: string; body: string; schedule: { at: Date } }> = [];
       for (const b of events) {
         for (const e of b.ev) {
-          if (e.e !== 'install' && e.e !== 'signup') continue;
+          if (e.e !== 'install' && e.e !== 'signup' && e.e !== 'saved') continue;
           notes.push({
             id: ++this.nextId,
-            title: e.e === 'install' ? 'New download' : 'New account',
+            title: e.e === 'install' ? 'New download' : e.e === 'signup' ? 'New account' : 'Score saved without review',
             body: e.e === 'install'
               ? `Someone opened the app for the first time${b.pl ? ' on ' + (b.pl === 'ios' ? 'iPhone' : b.pl) : ''}${b.v ? ', version ' + b.v : ''}.`
-              : 'Someone created an account.',
+              : e.e === 'signup' ? 'Someone created an account.'
+              : e.x === 'private' ? 'A private account saved a score. It is not in the pending list.'
+              : 'An athlete saved a score without a video. It is not in the pending list.',
             schedule: { at: new Date(Date.now() + 500) }
           });
         }

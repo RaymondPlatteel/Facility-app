@@ -74,6 +74,22 @@
           </ng-container>
         </section>
 
+        <!-- Where everyone stands -->
+        <section class="an-card">
+          <div class="an-card-head">
+            <h2>Rank Distribution</h2>
+            <span class="an-muted">{{ rankTotal }} {{ sectionName }} · latest Level, private accounts included</span>
+          </div>
+          <div class="an-ranks">
+            <div class="an-rank" *ngFor="let b of rankBars">
+              <b>{{ b.count }}</b>
+              <div class="an-rank-col"><div class="an-rank-fill" [style.height.%]="b.height" [style.background]="b.color"></div></div>
+              <span>{{ b.label }}</span>
+              <small>{{ pct(b.share) }}</small>
+            </div>
+          </div>
+        </section>
+
         <!-- Coming back -->
         <section class="an-card">
           <div class="an-card-head">

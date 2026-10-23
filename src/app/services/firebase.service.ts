@@ -3944,11 +3944,11 @@ export class FirebaseService {
   }
 
   // The usage batches the athlete app uploads, as they arrive, newer than `since` (ms).
-  watchAppEvents(since: number, cb: (batches: Array<{ pl?: string; v?: string; ev: Array<{ e: string }> }>) => void): () => void {
+  watchAppEvents(since: number, cb: (batches: Array<{ pl?: string; v?: string; ev: Array<{ e: string; x?: string }> }>) => void): () => void {
     return onSnapshot(
       query(collection(this.db, 'appEvents'), where('at', '>', since), orderBy('at')),
       snap => {
-        const fresh = snap.docChanges().filter(c => c.type === 'added').map(c => c.doc.data() as { pl?: string; v?: string; ev: Array<{ e: string }> });
+        const fresh = snap.docChanges().filter(c => c.type === 'added').map(c => c.doc.data() as { pl?: string; v?: string; ev: Array<{ e: string; x?: string }> });
         if (fresh.length) cb(fresh);
       },
       () => undefined
