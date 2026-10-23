@@ -42,7 +42,6 @@ export const EVENTS = {
   checkin: 'checkin',
   workout: 'workout',
   assessment: 'assessment', // a result submitted for review
-  saved: 'saved',           // a result kept with no coach review. x: 'private' | 'no video'
   run: 'run',               // x: 'open' | 'source:<name>' | 'scored' | 'used'
   error: 'error'            // x: what failed
 } as const;

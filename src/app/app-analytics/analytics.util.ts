@@ -35,7 +35,7 @@ export interface AccountRow {
   tour: number;                // the furthest tour step reached: 0 for the first, -1 for none (see TOUR_ORDER)
   estimate: boolean;           // saved a starting estimate
   submittedVerified: boolean;  // sent a score that was approved
-  submittedPending: boolean;   // sent a score still waiting for a coach
+  savedUnreviewed: boolean;    // saved a score no coach will review: a private account, or a result sent without a video
   program: boolean;
   checkedIn: boolean;
   workout: boolean;
@@ -199,7 +199,7 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
 
   const later = link([
     mk('sub-verified', 'Sent a score that was verified', mine.filter(a => a.submittedVerified).length, N),
-    mk('sub-pending', 'Sent a score still waiting for review', mine.filter(a => a.submittedPending).length, N),
+    mk('sub-unreviewed', 'Saved a score without review (private account or no video)', mine.filter(a => a.savedUnreviewed).length, N),
     mk('program', 'Set up a program', mine.filter(a => a.program).length, N),
     mk('checkin', 'Checked in', mine.filter(a => a.checkedIn).length, N),
     mk('workout', 'Logged a workout', mine.filter(a => a.workout).length, N),

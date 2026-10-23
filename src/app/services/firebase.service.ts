@@ -3944,11 +3944,11 @@ export class FirebaseService {
   }
 
   // The usage batches the athlete app uploads, as they arrive, newer than `since` (ms).
-  watchAppEvents(since: number, cb: (batches: Array<{ pl?: string; v?: string; ev: Array<{ e: string; x?: string }> }>) => void): () => void {
+  watchAppEvents(since: number, cb: (batches: Array<{ pl?: string; v?: string; ev: Array<{ e: string }> }>) => void): () => void {
     return onSnapshot(
       query(collection(this.db, 'appEvents'), where('at', '>', since), orderBy('at')),
       snap => {
-        const fresh = snap.docChanges().filter(c => c.type === 'added').map(c => c.doc.data() as { pl?: string; v?: string; ev: Array<{ e: string; x?: string }> });
+        const fresh = snap.docChanges().filter(c => c.type === 'added').map(c => c.doc.data() as { pl?: string; v?: string; ev: Array<{ e: string }> });
         if (fresh.length) cb(fresh);
       },
       () => undefined
@@ -4256,10 +4256,12 @@ export class FirebaseService {
   // What athletes have done, from their own records: who submitted scores (and how those stand), logged workouts, checked
   // in, set goals or entered a Resilience score. Read for the analytics page, so it counts the same whatever app version
   // an athlete has.
-  async listMemberActivity(sinceIso: string): Promise<{ approved: Set<string>; pending: Set<string>; workouts: Set<string>; checkIns: Set<string>; goals: Set<string>; resilience: Set<string> }> {
+  async listMemberActivity(sinceIso: string): Promise<{ approved: Set<string>; unreviewed: Set<string>; workouts: Set<string>; checkIns: Set<string>; goals: Set<string>; resilience: Set<string> }> {
     const keys = (snap: { docs: Array<{ data(): unknown }> }) => snap.docs.map(d => (d.data() as { nameKey?: string; status?: string }));
-    const [subs, workouts, checkIns, goals, resilience] = await Promise.all([
+    const [subs, selfSaved, workouts, checkIns, goals, resilience] = await Promise.all([
       getDocs(query(collection(this.db, 'pendingAssessments'), where('createdAt', '>=', sinceIso))),
+      // Scores kept with no coach review (a private account, or no video) are saved straight to the record as an 'Update'.
+      getDocs(query(collection(this.db, 'assessments'), where('dateLabel', '==', 'Update'))).catch(() => null),
       getDocs(query(collection(this.db, 'memberWorkoutLogs'), where('createdAt', '>=', sinceIso))),
       getDocs(query(collection(this.db, 'dailyCheckIns'), where('createdAt', '>=', sinceIso))),
       getDocs(collection(this.db, 'assessmentGoals')),
@@ -4269,7 +4271,7 @@ export class FirebaseService {
     const s = keys(subs);
     return {
       approved: set(s.filter(r => r.status === 'approved')),
-      pending: set(s.filter(r => r.status === 'pending')),
+      unreviewed: set((selfSaved?.docs ?? []).map(d => d.data() as { nameKey?: string; selfReported?: boolean; timestamp?: string }).filter(r => r.selfReported && (r.timestamp ?? '') >= sinceIso)),
       workouts: set(keys(workouts)), checkIns: set(keys(checkIns)), goals: set(keys(goals)), resilience: set(keys(resilience))
     };
   }

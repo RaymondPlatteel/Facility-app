@@ -81,7 +81,7 @@ export class AppAnalyticsPage implements OnInit {
           tour: m.tourStep ? TOUR_ORDER.indexOf(m.tourStep) : -1,
           estimate: m.estimateLvl != null || (m.estimatedTests?.length ?? 0) > 0,
           submittedVerified: !!did?.approved.has(m.nameKey),
-          submittedPending: !!did?.pending.has(m.nameKey),
+          savedUnreviewed: !!did?.unreviewed.has(m.nameKey),
           program: !!m.programIntake,
           checkedIn: (m.checkInDays?.length ?? 0) > 0 || !!did?.checkIns.has(m.nameKey),
           workout: !!did?.workouts.has(m.nameKey),
