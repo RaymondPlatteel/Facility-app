@@ -37,21 +37,59 @@
 
     <ng-container *ngIf="!loading && report as r">
 
-      <!-- ===== Downloads: before signing in ===== -->
+      <!-- ===== Downloads: before signing in, so no names ===== -->
       <ng-container *ngIf="tab === 'downloads'">
         <div class="an-tiles">
-          <div class="an-tile"><span>Downloads</span><b>{{ r.downloads }}</b><small>last {{ period }} days, remote and in person</small></div>
-          <div class="an-tile"><span>New accounts</span><b>{{ newAccounts.length }}</b><small>{{ sectionName }}, last {{ period }} days</small></div>
+          <div class="an-tile"><span>Downloads</span><b>{{ r.downloads }}</b><small>last {{ period }} days</small></div>
+          <div class="an-tile"><span>Most common phone</span><b class="sm">{{ byPhone[0]?.label ?? '—' }}</b><small>{{ byPhone[0] ? byPhone[0].count + ' of ' + r.downloads : '' }}</small></div>
+          <div class="an-tile"><span>Most common version</span><b class="sm">{{ byVersion[0]?.label ?? '—' }}</b><small>{{ byVersion[0] ? byVersion[0].count + ' of ' + r.downloads : '' }}</small></div>
         </div>
-        <p class="an-note first">A download counts the first time the app is opened on a phone, from version 1.4. No one is known as remote or in person until they sign in, so downloads are not split.</p>
+        <p class="an-note first">A download is the first time the app is opened on a phone, recorded from version 1.4. Nobody is known until they sign in, so this page has no names and is the same for remote and in-person. The phone model is recorded from 1.6.</p>
+
         <section class="an-card">
-          <div class="an-card-head"><h2>New Accounts</h2><span class="an-muted">{{ sectionName }} · last {{ period }} days</span></div>
-          <table class="an-people" *ngIf="newAccounts.length; else noneNew">
-            <thead><tr><th>Name</th><th>Account made</th><th>Stage</th></tr></thead>
-            <tbody><tr *ngFor="let p of newAccounts"><td class="nm">{{ p.name }}</td><td>{{ when(p.linkedAt) }}</td>
-              <td>{{ stageName(p) }}</td></tr></tbody>
+          <div class="an-card-head"><h2>Downloads by Day</h2><span class="an-muted">last {{ period }} days</span></div>
+          <div class="an-days">
+            <div class="an-day" *ngFor="let d of r.downloadsPerDay" [title]="shortDate(d.day) + ': ' + d.count">
+              <div class="an-day-fill" [style.height.%]="d.count / downloadsMax * 100"></div>
+            </div>
+          </div>
+          <div class="an-days-axis"><span>{{ shortDate(r.downloadsPerDay[0].day) }}</span><span>{{ shortDate(r.downloadsPerDay[r.downloadsPerDay.length - 1].day) }}</span></div>
+        </section>
+
+        <div class="an-grid">
+          <section class="an-card">
+            <div class="an-card-head"><h2>Phone</h2><span class="an-muted">share of downloads</span></div>
+            <div class="an-rows">
+              <div class="an-row" *ngFor="let b of byPhone">
+                <span class="an-row-label">{{ b.label }}</span>
+                <div class="an-track"><div class="an-fill" [style.width.%]="b.share * 100"></div></div>
+                <span class="an-row-val">{{ b.count }}</span>
+              </div>
+              <p class="an-muted" *ngIf="!byPhone.length">No downloads in this period.</p>
+            </div>
+          </section>
+          <section class="an-card">
+            <div class="an-card-head"><h2>App Version</h2><span class="an-muted">version downloaded</span></div>
+            <div class="an-rows">
+              <div class="an-row" *ngFor="let b of byVersion">
+                <span class="an-row-label">{{ b.label }}</span>
+                <div class="an-track"><div class="an-fill" [style.width.%]="b.share * 100"></div></div>
+                <span class="an-row-val">{{ b.count }}</span>
+              </div>
+              <p class="an-muted" *ngIf="!byVersion.length">No downloads in this period.</p>
+            </div>
+          </section>
+        </div>
+
+        <section class="an-card">
+          <div class="an-card-head"><h2>Every Download</h2><span class="an-muted">newest first</span></div>
+          <table class="an-people" *ngIf="r.downloadList.length; else noneDl">
+            <thead><tr><th>Downloaded</th><th>Phone</th><th>iOS</th><th>App version</th></tr></thead>
+            <tbody><tr *ngFor="let d of r.downloadList">
+              <td class="nm">{{ when(d.at) }}, {{ d.at | date:'h:mm a' }}</td><td>{{ phone(d.dm) }}</td><td>{{ d.os || '—' }}</td><td>{{ version(d.v) }}</td>
+            </tr></tbody>
           </table>
-          <ng-template #noneNew><p class="an-muted">No new accounts in this period.</p></ng-template>
+          <ng-template #noneDl><p class="an-muted">No downloads in this period.</p></ng-template>
         </section>
       </ng-container>
 

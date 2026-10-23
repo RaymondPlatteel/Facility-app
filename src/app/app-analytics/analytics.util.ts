@@ -19,6 +19,7 @@ interface Device {
   tester: boolean;
   events: AppEvent[];          // oldest first
   install: number | null;      // when they became a new user: first open, or creating an account
+  download: Download | null;   // the first open on this phone, when it was a new download
   first: number;               // first event of any kind
   days: Set<string>;           // days with any activity
 }
@@ -28,6 +29,9 @@ export interface Bar {
   who?: string[];      // the accounts that reached this step, when it is counted from their records
   missed?: string[];   // the accounts that did not
 }
+// One download: when, the app version, and the phone (its model and system from 1.6). Never a name.
+export interface Download { at: number; v: string; dm: string; os: string; }
+export interface DayCount { day: string; count: number; }
 export interface DayPoint { day: string; users: number; }
 export interface Cohort { week: string; users: number; d1: number | null; w1: number | null; w4: number | null; }
 export interface PageRow { path: string; label: string; views: number; users: number; share: number; }
@@ -48,6 +52,8 @@ export interface Report {
   sessionsPerUser: number | null;
   funnel: Bar[];
   worst: Bar | null;
+  downloadList: Download[];    // newest first
+  downloadsPerDay: DayCount[];
   downloads: number;           // installs in the period, remote and in-person together (no one is known before signing in)
   retention: RetentionRow[];   // 1 day, 1 week and 4 weeks           // the step that loses the most people
   daily: DayPoint[];
@@ -69,12 +75,12 @@ const ENTRY_PAGES = new Set(['/auth', '/application', '/waiver']);
 // One person per device, except that creating an account starts a new person: a phone that was someone else's (a
 // tester's, or a family member's) counts the new account on its own from that moment.
 function devices(batches: EventBatch[]): Device[] {
-  type Tagged = AppEvent & { seg: EventBatch['seg'] };
+  type Tagged = AppEvent & { seg: EventBatch['seg']; v?: string; dm?: string; os?: string };
   const byDevice = new Map<string, Tagged[]>();
   for (const b of batches) {
     if (b.pl === 'web') continue;
     const list = byDevice.get(b.d) ?? [];
-    for (const e of b.ev ?? []) list.push({ ...e, seg: b.seg });
+    for (const e of b.ev ?? []) list.push({ ...e, seg: b.seg, v: b.v, dm: b.dm, os: b.os });
     byDevice.set(b.d, list);
   }
   const people: Device[] = [];
@@ -85,7 +91,8 @@ function devices(batches: EventBatch[]): Device[] {
       if (!part.length) return;
       const known = part.filter(e => e.seg !== 'anon');
       const seg = known.length ? known[known.length - 1].seg : 'anon';
-      const events: AppEvent[] = part.map(({ seg: _s, ...e }) => e);
+      const events: AppEvent[] = part.map(({ seg: _s, v: _v, dm: _m, os: _o, ...e }) => e);
+      const inst = part.find(e => e.e === EVENTS.install);
       const start = events.find(e => e.e === EVENTS.install || e.e === EVENTS.signup)?.t ?? null;
       people.push({
         id: n ? `${id}#${n}` : id,
@@ -93,6 +100,7 @@ function devices(batches: EventBatch[]): Device[] {
         tester: part.some(e => e.seg === 'tester'),
         events,
         install: start,
+        download: inst ? { at: inst.t, v: inst.v || '', dm: inst.dm || '', os: inst.os || '' } : null,
         first: events[0]?.t ?? 0,
         days: new Set(events.map(e => dayKey(e.t)))
       });
@@ -148,7 +156,13 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
   if (worst) (worst as Bar).worst = true;
 
   // ---- Downloads: every new install, before anyone is known to be remote or in person ----
-  const downloads = devices(batches).filter(d => !d.tester && d.install !== null && d.install >= since && d.events.some(e => e.e === EVENTS.install)).length;
+  const downloadList = devices(batches).filter(d => !d.tester && d.download && d.download.at >= since).map(d => d.download!).sort((a, b) => b.at - a.at);
+  const downloads = downloadList.length;
+  const perDay: DayCount[] = [];
+  for (let i = periodDays - 1; i >= 0; i--) {
+    const day = dayKey(now - i * DAY);
+    perDay.push({ day, count: downloadList.filter(x => dayKey(x.at) === day).length });
+  }
 
   const tour = bars(fresh.filter(d => d.events.some(e => e.e === EVENTS.tour)),
     TOUR_STEPS.map(s => ({ key: s.key, label: s.label, test: (d: Device) => d.events.some(e => e.e === EVENTS.tour && e.x === s.key) })));
@@ -240,6 +254,8 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
     funnel,
     worst,
     downloads,
+    downloadList,
+    downloadsPerDay: perDay,
     retention,
     daily,
     cohorts,

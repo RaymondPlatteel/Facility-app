@@ -8,6 +8,7 @@ import { FirebaseService } from '../services/firebase.service';
 import type { EventBatch } from '../program-engine/analytics';
 import { Bar, PageRow, Report, Section, TOUR_ORDER, buildReport } from './analytics.util';
 import { demoBatches } from './demo';
+import { phoneName } from './phones';
 import { getOmniRank } from '../services/omni.util';
 
 const DAY = 86400000;
@@ -138,6 +139,20 @@ export class AppAnalyticsPage implements OnInit {
   count(t: Tab): number {
     return t === 'downloads' ? this.newAccounts.length : t === 'onboarding' ? this.onboarding.length + this.waiting.length : t === 'active' ? this.active.length : this.inactive.length;
   }
+
+  // ---------- Downloads: no names, only the phone and the app version ----------
+  phone(model: string): string { return phoneName(model); }
+  version(v: string): string { return v ? v.replace(/ \((\d+)\)$/, ' build $1') : 'Not recorded'; }
+  private breakdown(key: (d: { v: string; dm: string }) => string): Array<{ label: string; count: number; share: number }> {
+    const list = this.report?.downloadList ?? [];
+    const counts = new Map<string, number>();
+    for (const d of list) counts.set(key(d), (counts.get(key(d)) ?? 0) + 1);
+    return [...counts.entries()].map(([label, count]) => ({ label, count, share: list.length ? count / list.length : 0 }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  }
+  get byPhone() { return this.breakdown(d => phoneName(d.dm)); }
+  get byVersion() { return this.breakdown(d => this.version(d.v)); }
+  get downloadsMax(): number { return Math.max(1, ...(this.report?.downloadsPerDay ?? []).map(d => d.count)); }
 
   // The onboarding flow for the accounts made in the period that signed up in the app, each step with who reached it.
   flow: Bar[] = [];

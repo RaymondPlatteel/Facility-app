@@ -20,6 +20,8 @@ export interface EventBatch {
   seg: Segment;   // the athlete's kind when uploaded; 'anon' before an athlete is linked
   v: string;      // app version
   pl: string;     // 'ios' | 'android' | 'web'
+  dm?: string;    // the phone's model identifier, e.g. 'iPhone16,2' (from 1.6)
+  os?: string;    // the phone's system version, e.g. '26.1' (from 1.6)
   day: string;    // YYYY-MM-DD of the upload, for reading a period
   at: number;     // upload time, ms
   ev: AppEvent[];

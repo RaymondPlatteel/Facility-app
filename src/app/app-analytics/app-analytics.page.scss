@@ -170,3 +170,9 @@ h1 { margin: 2px 0 0; font-family: 'Bebas Neue', 'Barlow', sans-serif; font-size
   &.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); } }
 .an-tile.tap { font: inherit; text-align: left; cursor: pointer; color: inherit; &.on { border-color: var(--accent); } }
 @media (max-width: 600px) { .an-tabs { grid-template-columns: repeat(2, 1fr); } }
+
+.an-tile b.sm { font-size: 17px; line-height: 1.25; }
+.an-days { display: flex; align-items: flex-end; gap: 2px; height: 120px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.an-day { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.an-day-fill { width: 100%; border-radius: 3px 3px 0 0; background: var(--accent); min-height: 0; }
+.an-days-axis { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11.5px; color: var(--dim); }
