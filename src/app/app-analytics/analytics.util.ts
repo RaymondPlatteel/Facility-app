@@ -30,6 +30,9 @@ export interface PageRow { path: string; label: string; views: number; users: nu
 // One new athlete account, from the athlete's own record rather than from the usage log, so it counts the same whatever
 // version of the app they have.
 export interface AccountRow {
+  name: string;
+  intake: boolean;             // completed the intake form
+  tourStep: string;            // the tour step the record holds, as written
   linkedAt: number;
   section: Section;
   tour: number;                // the furthest tour step reached: 0 for the first, -1 for none (see TOUR_ORDER)
@@ -195,7 +198,12 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
   ]);
 
   const tourSteps: Array<{ key: string; label: string }> = [...TOUR_STEPS, { key: 'done', label: 'Finished the tour' }];
-  const tourBars = link(tourSteps.map((t, i) => mk('tour-' + t.key, t.label, mine.filter(a => a.tour >= i).length, N)));
+  // The tour starts before the tests (Welcome to Start the tests) and finishes after the starting estimate is saved
+  // (Training, then done), so it is shown on either side of the walkthrough.
+  const tourAll = tourSteps.map((t, i) => mk('tour-' + t.key, t.label, mine.filter(a => a.tour >= i).length, N));
+  const split = tourSteps.findIndex(t => t.key === 'training');
+  const tourBefore = link(tourAll.slice(0, split));
+  const tourAfter = link(tourAll.slice(split));
 
   const later = link([
     mk('sub-verified', 'Sent a score that was verified', mine.filter(a => a.submittedVerified).length, N),
@@ -215,13 +223,14 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
 
   const journey: JourneyGroup[] = [
     { title: 'Getting in', steps: start },
+    { title: 'Tour, before the tests', note: 'The tour runs first and ends at "Start the tests", which opens the walkthrough below.', steps: tourBefore },
     { title: 'Starting level walkthrough', note: 'Those who finished are counted from their records. The app does not record which test someone stopped at, so anyone who has not finished is not counted past the first step.', steps: walk },
-    { title: 'Tour', steps: tourBars },
+    { title: 'Tour, after the tests', note: 'These come after the starting estimate is saved, so fewer people reach them than reached the start of the tour.', steps: tourAfter },
     { title: 'After joining', note: 'Each line is counted on its own, for the new accounts of this period.', steps: later }
   ];
   // The step after which the most people are lost, in the steps that follow one another.
   let journeyWorst: Bar | null = null, journeyMost = 0;
-  [start, walk, tourBars].forEach(group => group.forEach((b, i) => {
+  [start, tourBefore, walk, tourAfter].forEach(group => group.forEach((b, i) => {
     const lost = i ? group[i - 1].count - b.count : 0;
     if (lost > journeyMost) { journeyMost = lost; journeyWorst = b; }
   }));

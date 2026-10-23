@@ -30,7 +30,7 @@ export class AppAnalyticsPage implements OnInit {
   demo = false;
   private batches: EventBatch[] = [];
   private accounts: AccountRow[] = [];
-  private existingRows: Array<{ linkedAt: number; section: Section }> = [];   // athletes the coach already had who were given a login
+  private existingRows: Array<{ linkedAt: number; section: Section; name: string }> = [];   // athletes the coach already had who were given a login
   // How many of them in the period on screen: left out of the journey.
   get existing(): number { const from = Date.now() - this.period * DAY; return this.existingRows.filter(e => e.section === this.section && e.linkedAt >= from).length; }
   private levels: Array<{ section: Section; rank: string }> = [];
@@ -73,9 +73,12 @@ export class AppAnalyticsPage implements OnInit {
         // An athlete the coach already had, given a login (a link request a coach approved, or a link the coach made), did not
         // go through the app's own sign-up, so they are not a new user and are counted apart.
         const onboarded = m.tourStep != null || m.estimateLvl != null || (m.estimatedTests?.length ?? 0) > 0;
-        if (requested.has(l.uid) || !onboarded) { this.existingRows.push({ linkedAt: Date.parse(l.linkedAt), section: m.inPerson ? 'facility' : 'remote' }); continue; }
+        if (requested.has(l.uid) || !onboarded) { this.existingRows.push({ linkedAt: Date.parse(l.linkedAt), section: m.inPerson ? 'facility' : 'remote', name: m.clientName || m.nameKey }); continue; }
         const week = Date.now() - 7 * DAY;
         this.accounts.push({
+          name: m.clientName || m.nameKey,
+          intake: !!m.termsAcceptedAt,
+          tourStep: m.tourStep ?? '',
           linkedAt: Date.parse(l.linkedAt),
           section: m.inPerson ? 'facility' : 'remote',
           tour: m.tourStep ? TOUR_ORDER.indexOf(m.tourStep) : -1,
@@ -118,6 +121,17 @@ export class AppAnalyticsPage implements OnInit {
     return this.rankOrder.map((r, i) => ({ label: r.label, color: r.color, count: counts[i], share: mine.length ? counts[i] / mine.length : 0, height: counts[i] / top * 100 }));
   }
   get rankTotal(): number { return this.levels.filter(l => l.section === this.section).length; }
+
+  // Who the new accounts are, newest first, with what each has done, so the counts above can be checked by name.
+  get people(): AccountRow[] {
+    const from = Date.now() - this.period * DAY;
+    return this.accounts.filter(a => a.section === this.section && a.linkedAt >= from).sort((a, b) => b.linkedAt - a.linkedAt);
+  }
+  get leftOut(): string[] {
+    const from = Date.now() - this.period * DAY;
+    return this.existingRows.filter(e => e.section === this.section && e.linkedAt >= from).map(e => e.name);
+  }
+  when(t: number): string { return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
 
   goBack() { this.router.navigate(['/home']); }
   // Usage from the phone apps; the web build is only used for development (see analytics.util.ts).

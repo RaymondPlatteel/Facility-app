@@ -90,6 +90,39 @@
           </div>
         </section>
 
+        <!-- Who the new accounts are, so every count above can be checked by name -->
+        <section class="an-card">
+          <div class="an-card-head">
+            <h2>New Accounts</h2>
+            <span class="an-muted">{{ people.length }} {{ sectionName }} · last {{ period }} days</span>
+          </div>
+          <p class="an-note first">One row for each account counted in the journey. A tick means the athlete's own record shows it. The tour column is the step written on the record.</p>
+          <div class="an-people-wrap">
+            <table class="an-people" *ngIf="people.length; else noPeople">
+              <thead><tr><th>Name</th><th>Created</th><th>Intake</th><th>Walkthrough</th><th>Tour</th><th>Verified score</th><th>Score, no review</th><th>Program</th><th>Check-in</th><th>Workout</th><th>Goal</th><th>Photo</th><th>Active</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let p of people">
+                  <td class="nm">{{ p.name }}</td>
+                  <td>{{ when(p.linkedAt) }}</td>
+                  <td>{{ p.intake ? '✓' : '' }}</td>
+                  <td>{{ p.estimate ? '✓' : '' }}</td>
+                  <td>{{ p.tourStep || '—' }}</td>
+                  <td>{{ p.submittedVerified ? '✓' : '' }}</td>
+                  <td>{{ p.savedUnreviewed ? '✓' : '' }}</td>
+                  <td>{{ p.program ? '✓' : '' }}</td>
+                  <td>{{ p.checkedIn ? '✓' : '' }}</td>
+                  <td>{{ p.workout ? '✓' : '' }}</td>
+                  <td>{{ p.goal ? '✓' : '' }}</td>
+                  <td>{{ p.photo ? '✓' : '' }}</td>
+                  <td>{{ p.active ? '✓' : '' }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <ng-template #noPeople><p class="an-note first">No new accounts in this period.</p></ng-template>
+          </div>
+          <p class="an-note" *ngIf="leftOut.length"><b>Left out of the journey</b> (athletes the coach already had, given a login): {{ leftOut.join(', ') }}.</p>
+        </section>
+
         <!-- Coming back -->
         <section class="an-card">
           <div class="an-card-head">
