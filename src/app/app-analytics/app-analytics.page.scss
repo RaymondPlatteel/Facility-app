@@ -160,3 +160,8 @@ h1 { margin: 2px 0 0; font-family: 'Bebas Neue', 'Barlow', sans-serif; font-size
   th { text-align: center; font-weight: 600; font-size: 11.5px; padding: 6px 8px; white-space: nowrap; border-bottom: 1px solid var(--border); }
   td { text-align: center; padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.05); white-space: nowrap; }
   th:first-child, td.nm { text-align: left; color: var(--text); } }
+
+.an-step { cursor: pointer; }
+.an-step.open { background: rgba(255,255,255,0.05); }
+.an-who { margin: 2px 0 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 12.5px; line-height: 1.5; color: var(--dim);
+  p { margin: 0 0 4px; } b { color: var(--text); margin-right: 6px; } }

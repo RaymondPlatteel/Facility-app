@@ -23,7 +23,11 @@ interface Device {
   days: Set<string>;           // days with any activity
 }
 
-export interface Bar { key: string; label: string; count: number; pctOfStart: number; dropFromPrev: number | null; worst?: boolean; }
+export interface Bar {
+  key: string; label: string; count: number; pctOfStart: number; dropFromPrev: number | null; worst?: boolean;
+  who?: string[];      // the accounts that reached this step, when it is counted from their records
+  missed?: string[];   // the accounts that did not
+}
 export interface DayPoint { day: string; users: number; }
 export interface Cohort { week: string; users: number; d1: number | null; w1: number | null; w4: number | null; }
 export interface PageRow { path: string; label: string; views: number; users: number; share: number; }
@@ -177,46 +181,45 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
   const opened = Math.max(fresh.length, N);
   const signedUp = Math.max(fresh.filter(d => d.events.some(e => e.e === EVENTS.signup)).length, N);
   const mk = (key: string, label: string, count: number, base: number): Bar => ({ key, label, count, pctOfStart: base ? Math.min(1, count / base) : 0, dropFromPrev: null });
+  // A step counted from the athletes' own records, which can say who reached it.
+  const mkA = (key: string, label: string, test: (a: AccountRow) => boolean, base: number): Bar => {
+    const b = mk(key, label, mine.filter(test).length, base);
+    b.who = mine.filter(test).map(a => a.name);
+    b.missed = mine.filter(a => !test(a)).map(a => a.name);
+    return b;
+  };
   const link = (steps: Bar[]) => { steps.forEach((b, i) => { if (i > 0 && steps[i - 1].count > b.count) b.dropFromPrev = 1 - b.count / steps[i - 1].count; }); return steps; };
 
   const start = link([
     mk('opened', 'Opened the app', opened, opened),
-    mk('signup', 'Created an account', signedUp, opened),
-    mk('intake', 'Completed the intake form', N, opened)
+    Object.assign(mk('signup', 'Created an account', signedUp, opened), { who: mine.map(a => a.name), missed: [] as string[] }),
+    mkA('intake', 'Completed the intake form', () => true, opened)
   ]);
 
-  // The walkthrough: those who finished it have a starting estimate; the others are counted from the usage log by the
-  // test they reached.
-  const finished = mine.filter(a => a.estimate).length;
-  const walkers = all.filter(d => !d.events.some(e => e.e === EVENTS.baseline && e.t >= since)
-    && d.events.some(e => e.t >= since && (e.e === EVENTS.estimate || (e.e === EVENTS.page && e.x === '/get-started'))));
-  const reachedTest = (d: Device, key: string) => d.events.some(e => e.t >= since && e.e === EVENTS.estimate && (e.x ?? '').startsWith(key));
-  const walk = link([
-    mk('walk-open', 'Opened the walkthrough', finished + walkers.length, N),
-    ...ESTIMATE_STEPS.map(s => mk('walk-' + s.key, s.label, finished + walkers.filter(d => ESTIMATE_STEPS.some(t => Number(t.key.slice(0, -1)) >= Number(s.key.slice(0, -1)) && reachedTest(d, t.key))).length, N)),
-    mk('walk-saved', 'Saved a starting estimate', finished, N)
-  ]);
+  // The walkthrough is the same for everyone, so it is one step: those who saved a starting estimate.
+  const walk = [mkA('walk-saved', 'Walkthrough', a => a.estimate, N)];
 
   const tourSteps: Array<{ key: string; label: string }> = [...TOUR_STEPS, { key: 'done', label: 'Finished the tour' }];
   // The tour starts before the tests (Welcome to Start the tests) and finishes after the starting estimate is saved
   // (Training, then done), so it is shown on either side of the walkthrough.
   const tourAll = tourSteps.map((t, i) => mk('tour-' + t.key, t.label, mine.filter(a => a.tour >= i).length, N));
+  tourAll.forEach((b, i) => { b.who = mine.filter(a => a.tour >= i).map(a => a.name); b.missed = mine.filter(a => !(a.tour >= i)).map(a => a.name); });
   const split = tourSteps.findIndex(t => t.key === 'training');
   const tourBefore = link(tourAll.slice(0, split));
   const tourAfter = link(tourAll.slice(split));
 
   const later = link([
-    mk('sub-verified', 'Sent a score that was verified', mine.filter(a => a.submittedVerified).length, N),
-    mk('sub-unreviewed', 'Saved a score without review (private account or no video)', mine.filter(a => a.savedUnreviewed).length, N),
-    mk('program', 'Set up a program', mine.filter(a => a.program).length, N),
-    mk('checkin', 'Checked in', mine.filter(a => a.checkedIn).length, N),
-    mk('workout', 'Logged a workout', mine.filter(a => a.workout).length, N),
-    mk('goal', 'Set a goal', mine.filter(a => a.goal).length, N),
-    mk('resilience', 'Entered a Resilience score', mine.filter(a => a.resilience).length, N),
-    mk('photo', 'Added a profile photo', mine.filter(a => a.photo).length, N),
-    mk('results', 'Has results in 3 or more tests', mine.filter(a => a.results).length, N),
-    mk('board', 'On the leaderboards', mine.filter(a => a.board).length, N),
-    mk('active', 'Active in the last 7 days', mine.filter(a => a.active).length, N)
+    mkA('sub-verified', 'Sent a score that was verified', a => a.submittedVerified, N),
+    mkA('sub-unreviewed', 'Saved a score without review (private account or no video)', a => a.savedUnreviewed, N),
+    mkA('program', 'Set up a program', a => a.program, N),
+    mkA('checkin', 'Checked in', a => a.checkedIn, N),
+    mkA('workout', 'Logged a workout', a => a.workout, N),
+    mkA('goal', 'Set a goal', a => a.goal, N),
+    mkA('resilience', 'Entered a Resilience score', a => a.resilience, N),
+    mkA('photo', 'Added a profile photo', a => a.photo, N),
+    mkA('results', 'Has results in 3 or more tests', a => a.results, N),
+    mkA('board', 'On the leaderboards', a => a.board, N),
+    mkA('active', 'Active in the last 7 days', a => a.active, N)
   ]);
   // Later lines are counted on their own, so a drop between two of them means nothing.
   later.forEach(b => (b.dropFromPrev = null));
@@ -224,7 +227,7 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
   const journey: JourneyGroup[] = [
     { title: 'Getting in', steps: start },
     { title: 'Tour, before the tests', note: 'The tour runs first and ends at "Start the tests", which opens the walkthrough below.', steps: tourBefore },
-    { title: 'Starting level walkthrough', note: 'Those who finished are counted from their records. The app does not record which test someone stopped at, so anyone who has not finished is not counted past the first step.', steps: walk },
+    { title: 'Starting level walkthrough', note: 'Counted from the athlete\'s record: a starting estimate was saved.', steps: walk },
     { title: 'Tour, after the tests', note: 'These come after the starting estimate is saved, so fewer people reach them than reached the start of the tour.', steps: tourAfter },
     { title: 'After joining', note: 'Each line is counted on its own, for the new accounts of this period.', steps: later }
   ];

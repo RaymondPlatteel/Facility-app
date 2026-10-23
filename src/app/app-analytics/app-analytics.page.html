@@ -275,11 +275,18 @@
         <span>−{{ pct(b.dropFromPrev) }}</span>
         <em *ngIf="b.worst">Biggest drop</em>
       </div>
-      <div class="an-step" [class.worst]="b.worst">
+      <div class="an-step" [class.worst]="b.worst" [class.open]="openStep === b.key" (click)="toggleStep(b)">
         <span class="an-step-label">{{ b.label }}</span>
         <div class="an-track"><div class="an-fill" [style.width.%]="barWidth(b)"></div></div>
         <span class="an-step-val"><b>{{ b.count }}</b> {{ pct(b.pctOfStart) }}</span>
         <div class="an-step-tip">{{ b.count }} of {{ steps[0].count }} {{ unit }} reached this step<ng-container *ngIf="i > 0 && steps[i - 1].count"> · {{ steps[i - 1].count - b.count }} left after the step before</ng-container></div>
+      </div>
+      <div class="an-who" *ngIf="openStep === b.key">
+        <ng-container *ngIf="b.who; else noNames">
+          <p><b>Reached ({{ b.who.length }})</b> {{ b.who.length ? b.who.join(', ') : 'No one' }}</p>
+          <p *ngIf="b.missed?.length"><b>Not yet ({{ b.missed!.length }})</b> {{ b.missed!.join(', ') }}</p>
+        </ng-container>
+        <ng-template #noNames><p>This step is counted from the anonymous usage log, which has no names.</p></ng-template>
       </div>
     </ng-container>
   </div>

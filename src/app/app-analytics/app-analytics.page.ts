@@ -133,6 +133,10 @@ export class AppAnalyticsPage implements OnInit {
   }
   when(t: number): string { return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
 
+  // The step whose accounts are shown under it.
+  openStep = '';
+  toggleStep(b: Bar) { this.openStep = this.openStep === b.key ? '' : b.key; }
+
   goBack() { this.router.navigate(['/home']); }
   // Usage from the phone apps; the web build is only used for development (see analytics.util.ts).
   get hasData(): boolean { return this.batches.some(b => b.pl !== 'web'); }
