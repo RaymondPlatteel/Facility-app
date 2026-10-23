@@ -66,6 +66,15 @@
           <ng-template #noFlow><p class="an-muted">No accounts were made in the app in this period.</p></ng-template>
         </section>
         <section class="an-card">
+          <div class="an-card-head"><h2>Finished, Not Yet Active</h2><span class="an-muted">{{ waiting.length }} {{ sectionName }}</span></div>
+          <p class="an-note first">Finished the walkthrough in the last 4 weeks but has not done anything in the app since. A check-in, a workout or a result moves them to Active; after 4 weeks they move to Inactive.</p>
+          <table class="an-people" *ngIf="waiting.length; else noneWaiting">
+            <thead><tr><th>Name</th><th>Finished</th></tr></thead>
+            <tbody><tr *ngFor="let p of waiting"><td class="nm">{{ p.name }}</td><td>{{ when(p.finishedAt!) }}</td></tr></tbody>
+          </table>
+          <ng-template #noneWaiting><p class="an-muted">No one.</p></ng-template>
+        </section>
+        <section class="an-card">
           <div class="an-card-head"><h2>Still Onboarding</h2><span class="an-muted">{{ onboarding.length }} {{ sectionName }} · any time</span></div>
           <table class="an-people" *ngIf="onboarding.length; else noneStuck">
             <thead><tr><th>Name</th><th>Account made</th><th>Got to</th></tr></thead>
@@ -78,13 +87,17 @@
       <!-- ===== Active: used the app in the last four weeks ===== -->
       <ng-container *ngIf="tab === 'active'">
         <div class="an-tiles">
-          <button type="button" class="an-tile tap" *ngFor="let w of [{ d: 1, l: 'Last day' }, { d: 7, l: 'Last week' }, { d: 28, l: 'Last 4 weeks' }]"
-                  [class.on]="openActive === w.d" (click)="openActive = openActive === w.d ? null : w.d">
-            <span>{{ w.l }}</span><b>{{ activeIn(w.d).length }}</b><small>tap for names</small>
+          <button type="button" class="an-tile tap" *ngFor="let w of windows" [class.on]="openReturn === w.id" (click)="openReturn = openReturn === w.id ? null : w.id">
+            <span>Came back: {{ w.label.toLowerCase() }}</span>
+            <b>{{ returned(w.id).back.length + returned(w.id).not.length ? pct(returned(w.id).back.length / (returned(w.id).back.length + returned(w.id).not.length)) : '—' }}</b>
+            <small>{{ returned(w.id).back.length }} of {{ returned(w.id).back.length + returned(w.id).not.length }} · tap for names</small>
           </button>
         </div>
-        <div class="an-who" *ngIf="openActive !== null"><p>{{ activeIn(openActive).length ? names(activeIn(openActive)) : 'No one' }}</p></div>
-        <p class="an-note first">Active means the athlete did something in the app themselves in the last 4 weeks: a check-in, a workout, a result sent, or (from 1.6) opening it. Anything a coach enters does not count.</p>
+        <div class="an-who" *ngIf="openReturn as id">
+          <p><b>Came back ({{ returned(id).back.length }})</b> {{ returned(id).back.length ? names(returned(id).back) : 'No one' }}</p>
+          <p *ngIf="returned(id).not.length"><b>Did not ({{ returned(id).not.length }})</b> {{ names(returned(id).not) }}</p>
+        </div>
+        <p class="an-note first">Coming back is counted from the day the walkthrough was finished: the next day, days 8 to 14, and days 29 to 35. Only things the athlete did in the app count: a check-in, a workout, a result sent, a Resilience entry, or (from 1.6) opening the app. Onboarding and anything a coach enters do not count. Athletes are active while they have done something in the last 4 weeks.</p>
 
         <section class="an-card">
           <div class="an-card-head"><h2>Active Athletes</h2><span class="an-muted">{{ active.length }} {{ sectionName }}</span></div>
@@ -157,7 +170,7 @@
                 <span class="an-muted">new users who came back</span>
               </div>
               <table class="an-table" *ngIf="r.cohorts.length; else noCohorts">
-                <thead><tr><th>Joined</th><th>Users</th><th>1 day</th><th>1 week</th><th>4 weeks</th></tr></thead>
+                <thead><tr><th>Joined</th><th>Users</th><th>Second day</th><th>Second week</th><th>After 4 weeks</th></tr></thead>
                 <tbody>
                   <tr *ngFor="let c of r.cohorts.slice(0, 8)">
                     <td>{{ weekLabel(c.week) }}</td>
@@ -256,7 +269,7 @@
       <ng-container *ngIf="tab === 'inactive'">
         <section class="an-card">
           <div class="an-card-head"><h2>Inactive Athletes</h2><span class="an-muted">{{ inactive.length }} {{ sectionName }} · nothing in the app for 4 weeks</span></div>
-          <p class="an-note first">Through onboarding, but no check-in, workout, result sent or app opening of their own in the last 4 weeks. Doing any of them moves an athlete back to Active.</p>
+          <p class="an-note first">Through onboarding, but nothing done in the app themselves in the last 4 weeks (a check-in, a workout, a result sent, a Resilience entry, or from 1.6 opening the app). Doing any of them moves an athlete back to Active.</p>
           <table class="an-people" *ngIf="inactive.length; else noneInactive">
             <thead><tr><th>Name</th><th>Last active</th><th>Level</th><th>Rank</th></tr></thead>
             <tbody><tr *ngFor="let p of inactive"><td class="nm">{{ p.name }}</td><td>{{ ago(p.last) }}</td><td>{{ p.level }}</td><td>{{ rankLabel(p.rank) }}</td></tr></tbody>

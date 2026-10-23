@@ -27,10 +27,12 @@ export interface Person {
   intake: boolean;           // accepted the terms on the intake form
   tour: number;              // the furthest tour step on the record (TOUR_ORDER), -1 for none
   estimate: boolean;         // saved a starting estimate in the walkthrough
+  coachHad: boolean;         // an athlete the coach already had: the app skips the tour and walkthrough for them
+  finishedAt: number | null; // when onboarding was finished: the walkthrough saved, or the login made for the coach's athletes
   level: number | null;
   rank: string;
-  viaApp: boolean;           // signed up in the app, rather than being an athlete the coach already had
-  last: number | null;       // the last thing the athlete did in the app themselves
+  times: number[];           // everything the athlete did in the app themselves, oldest first
+  last: number | null;
 }
 
 // How the athlete app is used, as a flow: downloads, getting through the account, tour and walkthrough, then active or
@@ -76,7 +78,7 @@ export class AppAnalyticsPage implements OnInit {
         this.firebase.listAllLinks().catch(() => []),
         this.firebase.listMembers().catch(() => []),
         this.firebase.getTesters().catch(() => [] as string[]),
-        this.firebase.listAthleteActivity().catch(() => new Map<string, number>())
+        this.firebase.listAthleteActivity().catch(() => ({ times: new Map<string, number[]>(), onboardedAt: new Map<string, number>(), coachHad: new Set<string>() }))
       ]);
       this.batches = batches;
       const byKey = new Map(members.map(m => [m.nameKey, m]));
@@ -91,21 +93,22 @@ export class AppAnalyticsPage implements OnInit {
         const m = byKey.get(key);
         if (!m || testers.includes(key) || INTERNAL.includes(key) || (m as { mergedInto?: string }).mergedInto) continue;
         const estimate = m.estimateLvl != null || (m.estimatedTests?.length ?? 0) > 0;
-        const tour = m.tourStep ? TOUR_ORDER.indexOf(m.tourStep) : -1;
+        const coachHad = activity.coachHad.has(key);
         const level = typeof m.latestLvl === 'number' ? m.latestLvl : null;
+        const times = [...(activity.times.get(key) ?? [])].sort((a, b) => a - b);
         this.people.push({
           name: m.clientName || key,
           section: m.inPerson ? 'facility' : 'remote',
           linkedAt,
           intake: !!m.termsAcceptedAt,
-          tour,
+          tour: m.tourStep ? TOUR_ORDER.indexOf(m.tourStep) : -1,
           estimate,
+          coachHad,
+          finishedAt: coachHad ? linkedAt : estimate ? (activity.onboardedAt.get(key) ?? linkedAt) : null,
           level,
           rank: level !== null ? getOmniRank(level, m.sex ?? 'male') : 'UNRANKED',
-          // An athlete the coach already had already holds a Level from the coach, so the app skips the tour and
-          // walkthrough for them.
-          viaApp: tour >= 0 || estimate || level === null,
-          last: activity.get(key) ?? null
+          times,
+          last: times.length ? times[times.length - 1] : null
         });
       }
       this.updatedAt = new Date();
@@ -120,22 +123,26 @@ export class AppAnalyticsPage implements OnInit {
   // ---------- The stages ----------
   private get mine(): Person[] { return this.people.filter(p => p.section === this.section); }
   private get from(): number { return Date.now() - this.period * DAY; }
-  // Through the account, tour and walkthrough: the athlete has a Level.
-  private done(p: Person): boolean { return p.level !== null; }
+  // Through the account, tour and walkthrough (the walkthrough saved), or an athlete the coach already had.
+  private done(p: Person): boolean { return p.coachHad || p.estimate; }
+  // Did something in the app themselves in the last four weeks. Onboarding itself does not count.
   private isActive(p: Person): boolean { return this.done(p) && (p.last ?? 0) >= Date.now() - ACTIVE_DAYS * DAY; }
+  // Finished onboarding in the last four weeks and has not done anything since: not active, and not yet inactive.
+  private isWaiting(p: Person): boolean { return this.done(p) && !p.last && (p.finishedAt ?? 0) >= Date.now() - ACTIVE_DAYS * DAY; }
 
   get newAccounts(): Person[] { return this.mine.filter(p => p.linkedAt >= this.from).sort((a, b) => b.linkedAt - a.linkedAt); }
   get onboarding(): Person[] { return this.mine.filter(p => !this.done(p)).sort((a, b) => b.linkedAt - a.linkedAt); }
+  get waiting(): Person[] { return this.mine.filter(p => this.isWaiting(p)).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)); }
   get active(): Person[] { return this.mine.filter(p => this.isActive(p)).sort((a, b) => (b.last ?? 0) - (a.last ?? 0)); }
-  get inactive(): Person[] { return this.mine.filter(p => this.done(p) && !this.isActive(p)).sort((a, b) => (b.last ?? 0) - (a.last ?? 0)); }
+  get inactive(): Person[] { return this.mine.filter(p => this.done(p) && !this.isActive(p) && !this.isWaiting(p)).sort((a, b) => (b.last ?? 0) - (a.last ?? 0)); }
   count(t: Tab): number {
-    return t === 'downloads' ? this.newAccounts.length : t === 'onboarding' ? this.onboarding.length : t === 'active' ? this.active.length : this.inactive.length;
+    return t === 'downloads' ? this.newAccounts.length : t === 'onboarding' ? this.onboarding.length + this.waiting.length : t === 'active' ? this.active.length : this.inactive.length;
   }
 
   // The onboarding flow for the accounts made in the period that signed up in the app, each step with who reached it.
   flow: Bar[] = [];
   private buildFlow(): Bar[] {
-    const list = this.newAccounts.filter(p => p.viaApp);
+    const list = this.newAccounts.filter(p => !p.coachHad);
     const N = list.length;
     const start = TOUR_ORDER.indexOf('start');
     const steps: Array<{ key: string; label: string; test: (p: Person) => boolean }> = [
@@ -160,9 +167,9 @@ export class AppAnalyticsPage implements OnInit {
     if (worst) (worst as Bar).worst = true;
     return out;
   }
-  get coachHad(): Person[] { return this.newAccounts.filter(p => !p.viaApp); }
+  get coachHad(): Person[] { return this.newAccounts.filter(p => p.coachHad); }
 
-  stageName(p: Person): string { return !this.done(p) ? 'Onboarding' : this.isActive(p) ? 'Active' : 'Inactive'; }
+  stageName(p: Person): string { return !this.done(p) ? 'Onboarding' : this.isActive(p) ? 'Active' : this.isWaiting(p) ? 'Finished onboarding' : 'Inactive'; }
 
   // Where an athlete still in onboarding has got to.
   stage(p: Person): string {
@@ -173,9 +180,22 @@ export class AppAnalyticsPage implements OnInit {
     return 'Account created';
   }
 
-  // Active athletes, by how recently: the last day, week and four weeks. Tapping one shows the names.
-  openActive: number | null = null;
-  activeIn(days: number): Person[] { const t = Date.now() - days * DAY; return this.active.filter(p => (p.last ?? 0) >= t); }
+  // Coming back after onboarding, by name: on the second day, in the second week (days 8 to 14) and after four weeks
+  // (days 29 to 35), counting the athletes who finished the walkthrough long enough ago for that day to have come.
+  readonly windows = [{ id: 'd2', label: 'Second day', from: 1, to: 1 }, { id: 'w2', label: 'Second week', from: 7, to: 13 }, { id: 'w5', label: 'After 4 weeks', from: 28, to: 34 }];
+  openReturn: string | null = null;
+  returned(id: string): { back: Person[]; not: Person[] } {
+    const w = this.windows.find(x => x.id === id)!;
+    const back: Person[] = [], not: Person[] = [];
+    for (const p of this.mine) {
+      if (p.coachHad || !p.estimate || p.finishedAt === null) continue;
+      const day0 = new Date(p.finishedAt); day0.setHours(0, 0, 0, 0);
+      const a = day0.getTime() + w.from * DAY, b = day0.getTime() + (w.to + 1) * DAY;
+      if (Date.now() < a + DAY) continue;   // too soon to tell
+      (p.times.some(t => t >= a && t < b) ? back : not).push(p);
+    }
+    return { back, not };
+  }
 
   // Ranks of everyone through onboarding.
   readonly rankOrder: Array<{ rank: string; label: string; color: string }> = [
@@ -211,7 +231,7 @@ export class AppAnalyticsPage implements OnInit {
   // Usage from the phone apps; the web build is only used for development (see analytics.util.ts).
   get hasData(): boolean { return this.batches.some(b => b.pl !== 'web'); }
 
-  setTab(t: Tab) { this.tab = t; this.openStep = ''; this.openActive = null; }
+  setTab(t: Tab) { this.tab = t; this.openStep = ''; this.openReturn = null; }
   setSection(s: Section) { this.section = s; this.rebuild(); }
   setPeriod(p: number) { this.period = p; this.rebuild(); }
   showDemo(on: boolean) { this.demo = on; this.rebuild(); }

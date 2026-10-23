@@ -4276,33 +4276,44 @@ export class FirebaseService {
     };
   }
 
-  // When each athlete last did something in the athlete app themselves, by name key. Only what the athlete writes counts:
-  // check-ins, workouts they logged, results they sent, and (from 1.6) opening the app. Anything a coach enters is left out.
-  async listAthleteActivity(): Promise<Map<string, number>> {
-    const last = new Map<string, number>();
+  // What each athlete did in the athlete app themselves, by name key: the time of every check-in, workout they logged,
+  // result they sent (with or without a video), Resilience entry and app opening (recorded from 1.6). Anything a coach
+  // enters is left out, and so is onboarding (the intake form and the walkthrough save 'Baseline' records).
+  // `onboardedAt` is when the walkthrough was saved; `coachHad` holds the athletes with any record a coach entered.
+  async listAthleteActivity(): Promise<{ times: Map<string, number[]>; onboardedAt: Map<string, number>; coachHad: Set<string> }> {
+    const times = new Map<string, number[]>();
+    const onboardedAt = new Map<string, number>();
+    const coachHad = new Set<string>();
     const note = (key: string | undefined, at: string | number | undefined | null) => {
       const t = typeof at === 'number' ? at : at ? Date.parse(at) : NaN;
       if (!key || !isFinite(t)) return;
-      if (t > (last.get(key) ?? 0)) last.set(key, t);
+      times.set(key, [...(times.get(key) ?? []), t]);
     };
-    type Row = { nameKey?: string; createdAt?: string; timestamp?: string; coachEdited?: boolean; publicProof?: boolean; selfReported?: boolean };
-    const rows = async (q: Parameters<typeof getDocs>[0]) => (await getDocs(q).catch(() => null))?.docs.map(d => d.data() as Row) ?? [];
-    const [checkIns, workouts, pending, pendingRes, selfSaved, members] = await Promise.all([
-      rows(collection(this.db, 'dailyCheckIns')),
-      rows(collection(this.db, 'memberWorkoutLogs')),
-      rows(collection(this.db, 'pendingAssessments')),
-      rows(collection(this.db, 'pendingResilience')),
-      rows(query(collection(this.db, 'assessments'), where('selfReported', '==', true))),
-      getDocs(collection(this.db, 'members')).then(s => s.docs.map(d => d.data() as { nameKey?: string; lastOpenedAt?: string; lastCheckInAt?: string })).catch(() => [])
+    type Row = { nameKey?: string; createdAt?: string; timestamp?: string; coachEdited?: boolean; publicProof?: boolean; selfReported?: boolean; dateLabel?: string; estimatedTests?: string[] };
+    const rows = async (c: string) => (await getDocs(collection(this.db, c)).catch(() => null))?.docs.map(d => d.data() as Row) ?? [];
+    const [checkIns, workouts, pending, pendingRes, assessments, members] = await Promise.all([
+      rows('dailyCheckIns'), rows('memberWorkoutLogs'), rows('pendingAssessments'), rows('pendingResilience'), rows('assessments'),
+      getDocs(collection(this.db, 'members')).then(s => s.docs.map(d => d.data() as { nameKey?: string; lastOpenedAt?: string; openedDays?: string[]; estimateLvl?: number | null; estimatedTests?: string[] })).catch(() => [])
     ]);
     for (const r of checkIns) note(r.nameKey, r.createdAt ?? r.timestamp);
     for (const r of workouts) if (!r.coachEdited) note(r.nameKey, r.createdAt ?? r.timestamp);
     // A coach sending a private athlete's proof for review writes a pending entry too; those carry publicProof.
     for (const r of pending) if (!r.publicProof) note(r.nameKey, r.createdAt ?? r.timestamp);
     for (const r of pendingRes) note(r.nameKey, r.createdAt ?? r.timestamp);
-    for (const r of selfSaved) note(r.nameKey, r.timestamp);
-    for (const m of members) { note(m.nameKey, m.lastOpenedAt); note(m.nameKey, m.lastCheckInAt); }
-    return last;
+    const estimated = new Set(members.filter(m => m.estimateLvl != null || (m.estimatedTests?.length ?? 0) > 0).map(m => m.nameKey));
+    for (const r of assessments) {
+      if (!r.nameKey) continue;
+      if (!r.selfReported) { coachHad.add(r.nameKey); continue; }
+      if (r.dateLabel === 'Update') { note(r.nameKey, r.timestamp); continue; }
+      // The walkthrough's save is the last 'Baseline' an athlete with an estimate has.
+      const t = Date.parse(r.timestamp ?? '');
+      if (r.dateLabel === 'Baseline' && estimated.has(r.nameKey) && isFinite(t) && t > (onboardedAt.get(r.nameKey) ?? 0)) onboardedAt.set(r.nameKey, t);
+    }
+    for (const m of members) {
+      note(m.nameKey, m.lastOpenedAt);
+      for (const day of m.openedDays ?? []) note(m.nameKey, day + 'T12:00:00');
+    }
+    return { times, onboardedAt, coachHad };
   }
 
   // Every login and the athlete it opens, with when it was made.

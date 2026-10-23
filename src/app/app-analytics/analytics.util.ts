@@ -167,11 +167,14 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
   const activeToday = all.filter(d => d.days.has(today)).length;
 
   // ---- Coming back: new users only ----
+  // Coming back on a given window of days after the first: the second day (day 1), the second week (days 7 to 13), or
+  // after four weeks (days 28 to 34). Not just any later day.
+  const WIN: Record<number, [number, number]> = { 1: [1, 1], 7: [7, 13], 28: [28, 34] };
   const cameBack = (d: Device, n: number): boolean | null => {
-    const start = d.install!;
-    if (now - start < n * DAY) return null;   // too soon to know
-    const firstDay = new Date(dayKey(start)).getTime();
-    return d.events.some(e => e.t >= firstDay + n * DAY);
+    const [from, to] = WIN[n];
+    const firstDay = new Date(dayKey(d.install!) + 'T00:00').getTime();
+    if (now < firstDay + (from + 1) * DAY) return null;   // too soon to know
+    return d.events.some(e => e.t >= firstDay + from * DAY && e.t < firstDay + (to + 1) * DAY);
   };
   const rate = (list: Device[], n: number): { share: number | null; back: number; of: number } => {
     const known = list.map(d => cameBack(d, n)).filter((v): v is boolean => v !== null);
@@ -189,7 +192,7 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
   }
   const cohorts: Cohort[] = [...weeks.entries()].sort((a, b) => b[0].localeCompare(a[0]))
     .map(([week, list]) => ({ week, users: list.length, d1: share(list, 1), w1: share(list, 7), w4: share(list, 28) }));
-  const retention: RetentionRow[] = [{ label: '1 day', n: 1 }, { label: '1 week', n: 7 }, { label: '4 weeks', n: 28 }].map(r => ({ label: r.label, ...(({ share, back, of }) => ({ share, back, of }))(rate(fresh, r.n)) }));
+  const retention: RetentionRow[] = [{ label: 'Second day', n: 1 }, { label: 'Second week', n: 7 }, { label: 'After 4 weeks', n: 28 }].map(r => ({ label: r.label, ...(({ share, back, of }) => ({ share, back, of }))(rate(fresh, r.n)) }));
 
   // ---- Sessions ----
   const sessions = new Map<string, { a: number; b: number; n: number }>();
