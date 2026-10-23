@@ -366,6 +366,16 @@ export interface Member {
   // The latest result in each test, for the athlete app's per-test and per-category leaderboards.
   testScores?: Record<string, number>;
   verifiedLvl?: number | null;
+  // Written by the athlete app, read for analytics: the tour step they are on, the terms they accepted, the level they
+  // estimated, and the days they checked in.
+  tourStep?: string | null;
+  programIntake?: unknown;      // set once they have filled in the program questions
+  photoUrl?: string | null;     // their profile photo, when they added one
+  hideWorld?: boolean;          // they turned the community off in Settings
+  estimatedTests?: string[];    // the tests whose results are still their own estimates
+  termsAcceptedAt?: string | null;
+  estimateLvl?: number | null;
+  checkInDays?: string[];
   verifiedRank?: OmniRank | null;
   verifiedAt?: string | null;
   coachSavedAt?: string | null;
@@ -3933,6 +3943,23 @@ export class FirebaseService {
       : { feeStatus: 'unpaid', paidAt: deleteField() });
   }
 
+  // The usage batches the athlete app uploads, as they arrive, newer than `since` (ms).
+  watchAppEvents(since: number, cb: (batches: Array<{ pl?: string; v?: string; ev: Array<{ e: string }> }>) => void): () => void {
+    return onSnapshot(
+      query(collection(this.db, 'appEvents'), where('at', '>', since), orderBy('at')),
+      snap => {
+        const fresh = snap.docChanges().filter(c => c.type === 'added').map(c => c.doc.data() as { pl?: string; v?: string; ev: Array<{ e: string }> });
+        if (fresh.length) cb(fresh);
+      },
+      () => undefined
+    );
+  }
+
+  // This phone's push address, kept where the Worker reads it to send a notification when the app is closed.
+  async saveCoachDevice(token: string): Promise<void> {
+    await setDoc(doc(this.db, 'coachDevices', token), { token, platform: 'ios', updatedAt: new Date().toISOString() }, { merge: true });
+  }
+
   async setRegistrationAttended(eventId: string, nameKey: string, attended: boolean): Promise<void> {
     await updateDoc(doc(this.db, 'events', eventId, 'registrations', nameKey), { attended });
   }
@@ -4213,6 +4240,40 @@ export class FirebaseService {
   }
   // ---------- App analytics ----------
   // The athlete app's anonymous event log, uploaded since the given day (YYYY-MM-DD).
+  // Athlete accounts linked to a record since the given time (ISO): the accounts that got through intake.
+  async listLinksSince(sinceIso: string): Promise<Array<{ uid: string; nameKey: string; linkedAt: string }>> {
+    const snap = await getDocs(query(collection(this.db, 'clientLinks'), where('linkedAt', '>=', sinceIso)));
+    return snap.docs.map(d => ({ uid: d.id, ...(d.data() as { nameKey: string; linkedAt: string }) }));
+  }
+
+  // The accounts that asked to be linked to an athlete who already existed (a coach approved the request). Those are
+  // existing athletes getting a login, not new people.
+  async listLinkedRequestUids(): Promise<Set<string>> {
+    const snap = await getDocs(collection(this.db, 'linkRequests'));
+    return new Set(snap.docs.map(d => d.id));
+  }
+
+  // What athletes have done, from their own records: who submitted scores (and how those stand), logged workouts, checked
+  // in, set goals or entered a Resilience score. Read for the analytics page, so it counts the same whatever app version
+  // an athlete has.
+  async listMemberActivity(sinceIso: string): Promise<{ approved: Set<string>; pending: Set<string>; workouts: Set<string>; checkIns: Set<string>; goals: Set<string>; resilience: Set<string> }> {
+    const keys = (snap: { docs: Array<{ data(): unknown }> }) => snap.docs.map(d => (d.data() as { nameKey?: string; status?: string }));
+    const [subs, workouts, checkIns, goals, resilience] = await Promise.all([
+      getDocs(query(collection(this.db, 'pendingAssessments'), where('createdAt', '>=', sinceIso))),
+      getDocs(query(collection(this.db, 'memberWorkoutLogs'), where('createdAt', '>=', sinceIso))),
+      getDocs(query(collection(this.db, 'dailyCheckIns'), where('createdAt', '>=', sinceIso))),
+      getDocs(collection(this.db, 'assessmentGoals')),
+      getDocs(collection(this.db, 'resilienceEntries'))
+    ]);
+    const set = (rows: Array<{ nameKey?: string }>) => new Set(rows.map(r => r.nameKey ?? '').filter(Boolean));
+    const s = keys(subs);
+    return {
+      approved: set(s.filter(r => r.status === 'approved')),
+      pending: set(s.filter(r => r.status === 'pending')),
+      workouts: set(keys(workouts)), checkIns: set(keys(checkIns)), goals: set(keys(goals)), resilience: set(keys(resilience))
+    };
+  }
+
   async listEventBatches(sinceDay: string): Promise<EventBatch[]> {
     const snap = await getDocs(query(collection(this.db, 'appEvents'), where('day', '>=', sinceDay)));
     return snap.docs.map(d => d.data() as EventBatch);

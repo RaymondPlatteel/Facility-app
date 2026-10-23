@@ -1,5 +1,5 @@
 import {
-  AppEvent, EVENTS, EventBatch, FunnelStep, NEW_USER_FUNNEL, PAGES, RUN_FUNNEL, TOUR_STEPS
+  AppEvent, ESTIMATE_STEPS, EVENTS, EventBatch, FunnelStep, NEW_USER_FUNNEL, PAGES, RUN_FUNNEL, TOUR_STEPS
 } from '../program-engine/analytics';
 
 // ---------- App analytics, worked out ----------
@@ -25,8 +25,34 @@ interface Device {
 
 export interface Bar { key: string; label: string; count: number; pctOfStart: number; dropFromPrev: number | null; worst?: boolean; }
 export interface DayPoint { day: string; users: number; }
-export interface Cohort { week: string; users: number; d1: number | null; d7: number | null; d30: number | null; }
+export interface Cohort { week: string; users: number; d1: number | null; w1: number | null; w4: number | null; }
 export interface PageRow { path: string; label: string; views: number; users: number; share: number; }
+// One new athlete account, from the athlete's own record rather than from the usage log, so it counts the same whatever
+// version of the app they have.
+export interface AccountRow {
+  linkedAt: number;
+  section: Section;
+  tour: number;                // the furthest tour step reached: 0 for the first, -1 for none (see TOUR_ORDER)
+  estimate: boolean;           // saved a starting estimate
+  submittedVerified: boolean;  // sent a score that was approved
+  submittedPending: boolean;   // sent a score still waiting for a coach
+  program: boolean;
+  checkedIn: boolean;
+  workout: boolean;
+  goal: boolean;
+  resilience: boolean;
+  photo: boolean;
+  results: boolean;            // has results in three or more tests
+  board: boolean;              // is on the leaderboards: a public account with a level
+  active: boolean;             // active in the last 7 days
+}
+
+// The tour as an athlete's record keeps it (tour.service.ts).
+export const TOUR_ORDER = ['welcome', 'current', 'goals-tab', 'goals', 'resilience-tab', 'resilience', 'start', 'training', 'done'];
+
+export interface JourneyGroup { title: string; note?: string; steps: Bar[]; }
+export interface RetentionRow { label: string; share: number | null; back: number; of: number; }
+
 export interface ErrorRow { what: string; count: number; users: number; }
 
 export interface Report {
@@ -38,7 +64,11 @@ export interface Report {
   sessionMinutes: number | null;
   sessionsPerUser: number | null;
   funnel: Bar[];
-  worst: Bar | null;           // the step that loses the most people
+  worst: Bar | null;
+  journey: JourneyGroup[];     // every step from opening the app to the first weeks, in order
+  accountCount: number;
+  journeyWorst: Bar | null;    // the step after which the most people are lost
+  retention: RetentionRow[];   // 1 day, 1 week and 4 weeks           // the step that loses the most people
   daily: DayPoint[];
   cohorts: Cohort[];
   pages: PageRow[];            // opened, most first
@@ -51,6 +81,9 @@ export interface Report {
 }
 
 const dayKey = (t: number) => new Date(t).toLocaleDateString('en-CA');
+
+// Pages everyone passes through on the way in; they say nothing about which parts of the app are used.
+const ENTRY_PAGES = new Set(['/auth', '/application', '/waiver']);
 
 // One person per device, except that creating an account starts a new person: a phone that was someone else's (a
 // tester's, or a family member's) counts the new account on its own from that moment.
@@ -116,7 +149,7 @@ function bars(group: Device[], steps: Array<{ key: string; label: string; test: 
   return out;
 }
 
-export function buildReport(batches: EventBatch[], section: Section, periodDays: number, now = Date.now()): Report {
+export function buildReport(batches: EventBatch[], section: Section, periodDays: number, accounts: AccountRow[] = [], now = Date.now()): Report {
   const all = devices(batches).filter(d => !d.tester && d.section === section);
   const since = now - periodDays * DAY;
   const today = dayKey(now);
@@ -132,6 +165,67 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
     if (lost > most) { most = lost; worst = b; }
   });
   if (worst) (worst as Bar).worst = true;
+
+  // ---- The journey, step by step ----
+  // The accounts come from the athletes' own records, so they are counted the same whatever version of the app people
+  // have. The usage log only fills in the opening of the app, and who opened the walkthrough without finishing it.
+  const mine = accounts.filter(a => a.section === section && a.linkedAt >= since);
+  const N = mine.length;
+  const opened = Math.max(fresh.length, N);
+  const signedUp = Math.max(fresh.filter(d => d.events.some(e => e.e === EVENTS.signup)).length, N);
+  const mk = (key: string, label: string, count: number, base: number): Bar => ({ key, label, count, pctOfStart: base ? Math.min(1, count / base) : 0, dropFromPrev: null });
+  const link = (steps: Bar[]) => { steps.forEach((b, i) => { if (i > 0 && steps[i - 1].count > b.count) b.dropFromPrev = 1 - b.count / steps[i - 1].count; }); return steps; };
+
+  const start = link([
+    mk('opened', 'Opened the app', opened, opened),
+    mk('signup', 'Created an account', signedUp, opened),
+    mk('intake', 'Completed the intake form', N, opened)
+  ]);
+
+  // The walkthrough: those who finished it have a starting estimate; the others are counted from the usage log by the
+  // test they reached.
+  const finished = mine.filter(a => a.estimate).length;
+  const walkers = all.filter(d => !d.events.some(e => e.e === EVENTS.baseline && e.t >= since)
+    && d.events.some(e => e.t >= since && (e.e === EVENTS.estimate || (e.e === EVENTS.page && e.x === '/get-started'))));
+  const reachedTest = (d: Device, key: string) => d.events.some(e => e.t >= since && e.e === EVENTS.estimate && (e.x ?? '').startsWith(key));
+  const walk = link([
+    mk('walk-open', 'Opened the walkthrough', finished + walkers.length, N),
+    ...ESTIMATE_STEPS.map(s => mk('walk-' + s.key, s.label, finished + walkers.filter(d => ESTIMATE_STEPS.some(t => Number(t.key.slice(0, -1)) >= Number(s.key.slice(0, -1)) && reachedTest(d, t.key))).length, N)),
+    mk('walk-saved', 'Saved a starting estimate', finished, N)
+  ]);
+
+  const tourSteps: Array<{ key: string; label: string }> = [...TOUR_STEPS, { key: 'done', label: 'Finished the tour' }];
+  const tourBars = link(tourSteps.map((t, i) => mk('tour-' + t.key, t.label, mine.filter(a => a.tour >= i).length, N)));
+
+  const later = link([
+    mk('sub-verified', 'Sent a score that was verified', mine.filter(a => a.submittedVerified).length, N),
+    mk('sub-pending', 'Sent a score still waiting for review', mine.filter(a => a.submittedPending).length, N),
+    mk('program', 'Set up a program', mine.filter(a => a.program).length, N),
+    mk('checkin', 'Checked in', mine.filter(a => a.checkedIn).length, N),
+    mk('workout', 'Logged a workout', mine.filter(a => a.workout).length, N),
+    mk('goal', 'Set a goal', mine.filter(a => a.goal).length, N),
+    mk('resilience', 'Entered a Resilience score', mine.filter(a => a.resilience).length, N),
+    mk('photo', 'Added a profile photo', mine.filter(a => a.photo).length, N),
+    mk('results', 'Has results in 3 or more tests', mine.filter(a => a.results).length, N),
+    mk('board', 'On the leaderboards', mine.filter(a => a.board).length, N),
+    mk('active', 'Active in the last 7 days', mine.filter(a => a.active).length, N)
+  ]);
+  // Later lines are counted on their own, so a drop between two of them means nothing.
+  later.forEach(b => (b.dropFromPrev = null));
+
+  const journey: JourneyGroup[] = [
+    { title: 'Getting in', steps: start },
+    { title: 'Starting level walkthrough', note: 'Those who finished are counted from their records. The app does not record which test someone stopped at, so anyone who has not finished is not counted past the first step.', steps: walk },
+    { title: 'Tour', steps: tourBars },
+    { title: 'After joining', note: 'Each line is counted on its own, for the new accounts of this period.', steps: later }
+  ];
+  // The step after which the most people are lost, in the steps that follow one another.
+  let journeyWorst: Bar | null = null, journeyMost = 0;
+  [start, walk, tourBars].forEach(group => group.forEach((b, i) => {
+    const lost = i ? group[i - 1].count - b.count : 0;
+    if (lost > journeyMost) { journeyMost = lost; journeyWorst = b; }
+  }));
+  if (journeyWorst) (journeyWorst as Bar).worst = true;
 
   const tour = bars(fresh.filter(d => d.events.some(e => e.e === EVENTS.tour)),
     TOUR_STEPS.map(s => ({ key: s.key, label: s.label, test: (d: Device) => d.events.some(e => e.e === EVENTS.tour && e.x === s.key) })));
@@ -156,6 +250,10 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
     const firstDay = new Date(dayKey(start)).getTime();
     return d.events.some(e => e.t >= firstDay + n * DAY);
   };
+  const rate = (list: Device[], n: number): { share: number | null; back: number; of: number } => {
+    const known = list.map(d => cameBack(d, n)).filter((v): v is boolean => v !== null);
+    return { share: known.length ? known.filter(Boolean).length / known.length : null, back: known.filter(Boolean).length, of: known.length };
+  };
   const share = (list: Device[], n: number): number | null => {
     const known = list.map(d => cameBack(d, n)).filter((v): v is boolean => v !== null);
     return known.length ? known.filter(Boolean).length / known.length : null;
@@ -167,7 +265,8 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
     weeks.set(k, [...(weeks.get(k) ?? []), d]);
   }
   const cohorts: Cohort[] = [...weeks.entries()].sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([week, list]) => ({ week, users: list.length, d1: share(list, 1), d7: share(list, 7), d30: share(list, 30) }));
+    .map(([week, list]) => ({ week, users: list.length, d1: share(list, 1), w1: share(list, 7), w4: share(list, 28) }));
+  const retention: RetentionRow[] = [{ label: '1 day', n: 1 }, { label: '1 week', n: 7 }, { label: '4 weeks', n: 28 }].map(r => ({ label: r.label, ...(({ share, back, of }) => ({ share, back, of }))(rate(fresh, r.n)) }));
 
   // ---- Sessions ----
   const sessions = new Map<string, { a: number; b: number; n: number }>();
@@ -183,12 +282,12 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
   // ---- Pages ----
   const views = new Map<string, { views: number; users: Set<string> }>();
   for (const d of all) for (const e of d.events) {
-    if (e.e !== EVENTS.page || e.t < since || !e.x) continue;
+    if (e.e !== EVENTS.page || e.t < since || !e.x || ENTRY_PAGES.has(e.x)) continue;
     const v = views.get(e.x) ?? { views: 0, users: new Set<string>() };
     v.views++; v.users.add(d.id); views.set(e.x, v);
   }
   const label = (p: string) => PAGES.find(x => x.path === p)?.label ?? p;
-  const rows: PageRow[] = [...new Set([...PAGES.map(p => p.path), ...views.keys()])].map(path => {
+  const rows: PageRow[] = [...new Set([...PAGES.map(p => p.path), ...views.keys()])].filter(path => !ENTRY_PAGES.has(path)).map(path => {
     const v = views.get(path);
     return { path, label: label(path), views: v?.views ?? 0, users: v?.users.size ?? 0, share: activeInPeriod ? (v?.users.size ?? 0) / activeInPeriod : 0 };
   });
@@ -214,6 +313,10 @@ export function buildReport(batches: EventBatch[], section: Section, periodDays:
     sessionsPerUser: activeInPeriod ? sessions.size / activeInPeriod / Math.max(1, periodDays / 7) : null,
     funnel,
     worst,
+    journey,
+    accountCount: N,
+    journeyWorst,
+    retention,
     daily,
     cohorts,
     pages,

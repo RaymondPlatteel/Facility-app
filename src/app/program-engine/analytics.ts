@@ -34,6 +34,7 @@ export const EVENTS = {
   signin: 'signin',
   intake: 'intake',         // intake form submitted
   waiver: 'waiver',
+  estimate: 'estimate',     // x: '<number>:<test>', each step of the starting-level walkthrough as it is shown
   tour: 'tour',             // x: the tour step reached
   baseline: 'baseline',     // starting estimate saved, which ends the tour
   programSetup: 'program_setup',
@@ -55,7 +56,6 @@ export const NEW_USER_FUNNEL: FunnelStep[] = [
   { key: 'signup', label: 'Created an account', event: EVENTS.signup },
   { key: 'intake-open', label: 'Started intake', page: '/application' },
   { key: 'intake', label: 'Submitted intake', event: EVENTS.intake },
-  { key: 'waiver', label: 'Signed the waiver', event: EVENTS.waiver },
   { key: 'tour', label: 'Started the tour', event: EVENTS.tour },
   { key: 'baseline', label: 'Saved a starting estimate', event: EVENTS.baseline },
   { key: 'setup', label: 'Set up a program', event: EVENTS.programSetup },
@@ -75,6 +75,11 @@ export const TOUR_STEPS: Array<{ key: string; label: string }> = [
   { key: 'training', label: 'Training' }
 ];
 
+// The starting-level walkthrough (get-started.page.ts), one step for each test, in order.
+export const ESTIMATE_STEPS: Array<{ key: string; label: string }> = [
+  'Deadlift', 'Squat', 'Bench Press', 'Push-ups', 'Pull-ups', 'Standing Long Jump', '100m Sprint', '30-Minute Run', '400 m Run', 'Pike', 'Backbend', 'Middle Split'
+].map((t, i) => ({ key: `${i + 1}:`, label: t }));
+
 // The 30-Minute Run import, in order.
 export const RUN_FUNNEL: FunnelStep[] = [
   { key: 'open', label: 'Opened import', event: EVENTS.run, x: 'open' },
@@ -87,7 +92,6 @@ export const RUN_FUNNEL: FunnelStep[] = [
 export const PAGES: Array<{ path: string; label: string }> = [
   { path: '/auth', label: 'Sign in' },
   { path: '/application', label: 'Intake' },
-  { path: '/waiver', label: 'Waiver' },
   { path: '/home', label: 'World' },
   { path: '/get-started', label: 'Get Started' },
   { path: '/assessment', label: 'Profile' },

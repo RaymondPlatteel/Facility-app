@@ -135,3 +135,16 @@ h1 { margin: 2px 0 0; font-family: 'Bebas Neue', 'Barlow', sans-serif; font-size
   &.zero { color: var(--mute); cursor: default; i { border: 1px dashed var(--mute); } } }
 .an-legend-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .an-legend-val { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+
+.an-refresh { margin-left: auto; align-self: center; display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--hud-border, #133748); background: transparent; color: var(--hud-text-dim, #88a6bf); font: inherit; font-size: 13px; cursor: pointer;
+  &:disabled { opacity: .6; cursor: default; } ion-icon { font-size: 16px; &.spin { animation: an-spin .9s linear infinite; } } }
+@keyframes an-spin { to { transform: rotate(360deg); } }
+.an-note { margin: 12px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--hud-text-mute, #6f8596); }
+
+.an-group { margin: 22px 0 6px; font-family: var(--font-label, 'Barlow Condensed', sans-serif); font-size: 13px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--hud-text-dim, #88a6bf); }
+.an-note.first { margin-top: 0; }
+.an-ret { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  .an-ret-cell { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--hud-border, #133748);
+    span { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--hud-text-mute, #6f8596); }
+    b { font-size: 30px; font-weight: 600; line-height: 1.2; padding: 2px 8px; margin-left: -8px; border-radius: 8px; align-self: flex-start; }
+    small { color: var(--hud-text-mute, #6f8596); } } }

@@ -9,6 +9,7 @@ import { CalendarSyncService } from './services/calendar-sync.service';
 import { TopBarActionService, TopBarAction } from './services/top-bar-action.service';
 import { ThemeService } from './services/theme.service';
 import { AiReviewService } from './ai/ai-review.service';
+import { NewUserAlertsService } from './services/new-user-alerts.service';
 import { addIcons } from 'ionicons';
 import {
   lockClosedOutline,
@@ -111,11 +112,14 @@ export class AppComponent implements OnInit, OnDestroy {
     private calendarSync: CalendarSyncService,
     public programReviews: ProgramReviewCountService,
     private coachTheme: ThemeService,
-    private aiReview: AiReviewService
+    private aiReview: AiReviewService,
+    private newUserAlerts: NewUserAlertsService
   ) {
     this.coachTheme.init();
     // The AI reviewer works through the video proofs whenever the coach app is open.
     setTimeout(() => this.aiReview.start(), 4000);
+    // On the coach's iPhone: a notification for every new download and new account.
+    setTimeout(() => this.newUserAlerts.start(), 6000);
     addIcons({
       scanOutline,
       sparklesOutline,

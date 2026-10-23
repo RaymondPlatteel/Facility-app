@@ -30,6 +30,8 @@
     "@capacitor/haptics": "7.0.1",
     "@capacitor/ios": "7.3.0",
     "@capacitor/keyboard": "7.0.1",
+    "@capacitor/local-notifications": "^7.0.1",
+    "@capacitor/push-notifications": "^7.0.1",
     "@capacitor/status-bar": "7.0.1",
     "@ebarooni/capacitor-calendar": "^7.2.0",
     "@garmin/fitsdk": "^21.208.0",

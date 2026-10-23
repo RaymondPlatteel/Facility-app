@@ -3,10 +3,10 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { IonContent, IonIcon } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { arrowBack, alertCircle, trendingDown } from 'ionicons/icons';
+import { arrowBack, alertCircle, trendingDown, refreshOutline } from 'ionicons/icons';
 import { FirebaseService } from '../services/firebase.service';
 import type { EventBatch } from '../program-engine/analytics';
-import { Bar, PageRow, Report, Section, buildReport } from './analytics.util';
+import { AccountRow, Bar, PageRow, Report, Section, TOUR_ORDER, buildReport } from './analytics.util';
 import { demoBatches } from './demo';
 
 const DAY = 86400000;
@@ -28,20 +28,70 @@ export class AppAnalyticsPage implements OnInit {
   error = '';
   demo = false;
   private batches: EventBatch[] = [];
+  private accounts: AccountRow[] = [];
+  private existingRows: Array<{ linkedAt: number; section: Section }> = [];   // athletes the coach already had who were given a login
+  // How many of them in the period on screen: left out of the journey.
+  get existing(): number { const from = Date.now() - this.period * DAY; return this.existingRows.filter(e => e.section === this.section && e.linkedAt >= from).length; }
+  updatedAt: Date | null = null;
   report: Report | null = null;
   hover: { i: number; x: number } | null = null;   // the day under the pointer on the activity chart
 
   constructor(private firebase: FirebaseService, private router: Router) {
-    addIcons({ arrowBack, alertCircle, trendingDown });
+    addIcons({ arrowBack, alertCircle, trendingDown, refreshOutline });
   }
 
-  async ngOnInit() {
+  ngOnInit() { return this.load(); }
+
+  // Reads the usage log and the new accounts again.
+  async load() {
+    this.loading = true;
+    this.error = '';
     try {
       const since = new Date(Date.now() - 120 * DAY).toLocaleDateString('en-CA');
-      this.batches = await this.firebase.listEventBatches(since);
+      const sinceIso = new Date(Date.now() - 120 * DAY).toISOString();
+      const [batches, links, members, testers, did, requested] = await Promise.all([
+        this.firebase.listEventBatches(since),
+        this.firebase.listLinksSince(sinceIso).catch(() => []),
+        this.firebase.listMembers().catch(() => []),
+        this.firebase.getTesters().catch(() => [] as string[]),
+        this.firebase.listMemberActivity(sinceIso).catch(() => null),
+        this.firebase.listLinkedRequestUids().catch(() => new Set<string>())
+      ]);
+      this.batches = batches;
+      // The accounts come from the athletes' own records, so they count the same whatever version of the app people have.
+      const byKey = new Map(members.map(m => [m.nameKey, m]));
+      this.accounts = [];
+      this.existingRows = [];
+      for (const l of links) {
+        const m = byKey.get(l.nameKey);
+        if (!m || testers.includes(m.nameKey)) continue;
+        // An athlete the coach already had, given a login (a link request a coach approved, or a link the coach made), did not
+        // go through the app's own sign-up, so they are not a new user and are counted apart.
+        const onboarded = m.tourStep != null || m.estimateLvl != null || (m.estimatedTests?.length ?? 0) > 0;
+        if (requested.has(l.uid) || !onboarded) { this.existingRows.push({ linkedAt: Date.parse(l.linkedAt), section: m.inPerson ? 'facility' : 'remote' }); continue; }
+        const week = Date.now() - 7 * DAY;
+        this.accounts.push({
+          linkedAt: Date.parse(l.linkedAt),
+          section: m.inPerson ? 'facility' : 'remote',
+          tour: m.tourStep ? TOUR_ORDER.indexOf(m.tourStep) : -1,
+          estimate: m.estimateLvl != null || (m.estimatedTests?.length ?? 0) > 0,
+          submittedVerified: !!did?.approved.has(m.nameKey),
+          submittedPending: !!did?.pending.has(m.nameKey),
+          program: !!m.programIntake,
+          checkedIn: (m.checkInDays?.length ?? 0) > 0 || !!did?.checkIns.has(m.nameKey),
+          workout: !!did?.workouts.has(m.nameKey),
+          goal: !!did?.goals.has(m.nameKey),
+          resilience: !!did?.resilience.has(m.nameKey),
+          photo: !!m.photoUrl,
+          results: Object.keys(m.testScores ?? {}).length >= 3,
+          board: !m.private && !m.hideWorld && m.latestLvl != null,
+          active: !!m.lastActivityAt && Date.parse(m.lastActivityAt) >= week
+        });
+      }
+      this.updatedAt = new Date();
     } catch (e) {
       console.error('App analytics: could not load', e);
-      this.error = 'Usage could not be loaded. Check the connection and reload.';
+      this.error = 'Usage could not be loaded. Check the connection and try again.';
     }
     this.loading = false;
     this.rebuild();
@@ -56,7 +106,7 @@ export class AppAnalyticsPage implements OnInit {
   showDemo(on: boolean) { this.demo = on; this.rebuild(); }
 
   private rebuild() {
-    this.report = buildReport(this.demo ? demoBatches() : this.batches, this.section, this.period);
+    this.report = buildReport(this.demo ? demoBatches() : this.batches, this.section, this.period, this.demo ? [] : this.accounts);
     this.hover = null;
   }
 
@@ -66,12 +116,15 @@ export class AppAnalyticsPage implements OnInit {
   get sectionName(): string { return this.section === 'remote' ? 'remote athletes' : 'in-person members'; }
 
   // The one sentence the page leads with.
+  // Led by the new accounts, counted from their records; the usage log's earlier steps when there are none.
   get headline(): { lead: string; from: string; to: string; lost: number; of: number; share: number } | null {
     const r = this.report;
-    if (!r?.worst) return null;
-    const i = r.funnel.indexOf(r.worst);
-    const prev = r.funnel[i - 1];
-    return { lead: 'Most new users are lost between', from: prev.label, to: r.worst.label, lost: prev.count - r.worst.count, of: prev.count, share: r.worst.dropFromPrev ?? 0 };
+    if (!r) return null;
+    const worst = r.journeyWorst;
+    if (!worst) return null;
+    const steps = r.journey.map(g => g.steps).find(s => s.includes(worst))!;
+    const prev = steps[steps.indexOf(worst) - 1];
+    return { lead: 'Most new users are lost between', from: prev.label, to: worst.label, lost: prev.count - worst.count, of: prev.count, share: worst.dropFromPrev ?? 0 };
   }
 
   barWidth(b: Bar): number { return Math.max(b.count ? 1.5 : 0, b.pctOfStart * 100); }

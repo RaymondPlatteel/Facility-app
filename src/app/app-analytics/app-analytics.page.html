@@ -7,6 +7,10 @@
         <div class="an-eyebrow">Athlete App</div>
         <h1>APP <span>ANALYTICS</span></h1>
       </div>
+      <button class="an-refresh" (click)="load()" [disabled]="loading" aria-label="Refresh">
+        <ion-icon name="refresh-outline" [class.spin]="loading"></ion-icon>
+        <span>{{ loading ? 'Updating…' : updatedAt ? 'Updated ' + (updatedAt | date:'h:mm a') : 'Refresh' }}</span>
+      </button>
     </div>
 
     <!-- Filters: one row, above everything they change -->
@@ -48,20 +52,41 @@
 
         <!-- Stat tiles -->
         <div class="an-tiles">
-          <div class="an-tile"><span>New users</span><b>{{ r.newUsers }}</b><small>last {{ period }} days</small></div>
+          <div class="an-tile"><span>Opened the app</span><b>{{ r.newUsers }}</b><small>new, last {{ period }} days</small></div>
+          <div class="an-tile"><span>New accounts</span><b>{{ r.accountCount }}</b><small>last {{ period }} days</small></div>
           <div class="an-tile"><span>Active this week</span><b>{{ r.activeWeek }}</b><small>{{ r.activeToday }} today</small></div>
           <div class="an-tile"><span>Came back next day</span><b>{{ pct(r.back1) }}</b><small>of new users</small></div>
           <div class="an-tile"><span>Came back after a week</span><b>{{ pct(r.back7) }}</b><small>of new users</small></div>
           <div class="an-tile"><span>Typical session</span><b>{{ r.sessionMinutes == null ? '—' : num(r.sessionMinutes) + ' min' }}</b><small>{{ num(r.sessionsPerUser, 1) }} sessions a week per user</small></div>
         </div>
 
-        <!-- New-user funnel -->
+        <!-- Every step from opening the app, in order -->
         <section class="an-card">
           <div class="an-card-head">
             <h2>New User Journey</h2>
-            <span class="an-muted">{{ r.newUsers }} new {{ sectionName }} · last {{ period }} days</span>
+            <span class="an-muted">{{ r.accountCount }} new {{ sectionName }} · last {{ period }} days</span>
           </div>
-          <ng-container *ngTemplateOutlet="funnel; context: { $implicit: r.funnel, unit: 'new users' }"></ng-container>
+          <p class="an-note first">Accounts are counted from each athlete's own record, so the numbers are the same whatever version of the app they have. Opening the app comes from the usage log, which older versions do not send.<ng-container *ngIf="existing"> {{ existing }} athlete{{ existing === 1 ? '' : 's' }} the coach already had {{ existing === 1 ? 'was' : 'were' }} given a login in this time and {{ existing === 1 ? 'is' : 'are' }} left out, because they did not sign up through the app.</ng-container></p>
+          <ng-container *ngFor="let g of r.journey">
+            <h3 class="an-group">{{ g.title }}</h3>
+            <ng-container *ngTemplateOutlet="funnel; context: { $implicit: g.steps, unit: 'users' }"></ng-container>
+            <p class="an-note" *ngIf="g.note">{{ g.note }}</p>
+          </ng-container>
+        </section>
+
+        <!-- Coming back -->
+        <section class="an-card">
+          <div class="an-card-head">
+            <h2>Retention</h2>
+            <span class="an-muted">new users who opened the app again, from the usage log</span>
+          </div>
+          <div class="an-ret">
+            <div class="an-ret-cell" *ngFor="let t of r.retention">
+              <span>{{ t.label }}</span>
+              <b [style.background]="cellBg(t.share)">{{ pct(t.share) }}</b>
+              <small>{{ t.of ? t.back + ' of ' + t.of : 'too soon to tell' }}</small>
+            </div>
+          </div>
         </section>
 
         <div class="an-grid">
@@ -96,14 +121,14 @@
               <span class="an-muted">new users who came back</span>
             </div>
             <table class="an-table" *ngIf="r.cohorts.length; else noCohorts">
-              <thead><tr><th>Joined</th><th>Users</th><th>Next day</th><th>After 7 days</th><th>After 30 days</th></tr></thead>
+              <thead><tr><th>Joined</th><th>Users</th><th>1 day</th><th>1 week</th><th>4 weeks</th></tr></thead>
               <tbody>
                 <tr *ngFor="let c of r.cohorts.slice(0, 8)">
                   <td>{{ weekLabel(c.week) }}</td>
                   <td>{{ c.users }}</td>
                   <td [style.background]="cellBg(c.d1)">{{ pct(c.d1) }}</td>
-                  <td [style.background]="cellBg(c.d7)">{{ pct(c.d7) }}</td>
-                  <td [style.background]="cellBg(c.d30)">{{ pct(c.d30) }}</td>
+                  <td [style.background]="cellBg(c.w1)">{{ pct(c.w1) }}</td>
+                  <td [style.background]="cellBg(c.w4)">{{ pct(c.w4) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -176,17 +201,6 @@
         </section>
 
         <div class="an-grid">
-          <section class="an-card">
-            <div class="an-card-head">
-              <h2>Tour</h2>
-              <span class="an-muted">new users who started it</span>
-            </div>
-            <ng-container *ngIf="r.tour.length && r.tour[0].count; else noTour">
-              <ng-container *ngTemplateOutlet="funnel; context: { $implicit: r.tour, unit: 'users' }"></ng-container>
-            </ng-container>
-            <ng-template #noTour><p class="an-muted">No one started the tour in this period.</p></ng-template>
-          </section>
-
           <section class="an-card">
             <div class="an-card-head">
               <h2>30-Minute Run Import</h2>
