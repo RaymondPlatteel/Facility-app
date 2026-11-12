@@ -25,6 +25,7 @@ import {
   RESILIENCE_TESTS, RESILIENCE_REPS, blankResilienceInputs, calcResilience, resilienceTestPct,
   RESILIENCE_GROUPS, calcResilienceGroup, getResilienceRank, resilienceColor, resilienceBgColor, resilienceRankBandBounds
 } from '../services/omni.util';
+import { estimateOneRm } from '../services/omni.util';
 import type { TestKey, TestOverride, TestOverrides, OmniCategory, ScoredTestKey, ResilienceKey, ResilienceInputs, ResilienceGroupKey } from '../services/omni.util';
 import { isSRank } from '../services/level-color.util';
 import { ChromaMotionService } from '../services/chroma-motion.service';
@@ -1100,16 +1101,10 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     return typeof v === 'number' && isFinite(v) ? v : 0;
   }
 
-  private brzycki(weight: number, reps: number): number {
-    if (!weight || reps < 1) return weight || 0;
-    if (reps === 1) return weight;
-    return weight * (1 + reps / 30);
-  }
-
   private get1RM(form: AssessForm, key: StrengthLift['key']): number {
     const w = this.n(form[(key + 'Weight') as keyof AssessForm] as number | null);
     const r = this.n(form[(key + 'Reps') as keyof AssessForm] as number | null) || 1;
-    return this.brzycki(w, r);
+    return estimateOneRm(w, r);
   }
 
   // Live "1RM ≈ x lbs" hint shown under each strength lift.
@@ -1117,7 +1112,7 @@ export class AssessmentsPage implements OnInit, OnDestroy {
     const form = panel.form;
     const w = this.n(form[lift.weightField] as number | null);
     const r = this.n(form[lift.repsField] as number | null) || 1;
-    if (w > 0 && r > 1) return '1RM ≈ ' + this.brzycki(w, r).toFixed(1) + ' lbs';
+    if (w > 0 && r > 1) return '1RM ≈ ' + estimateOneRm(w, r).toFixed(0) + ' lbs';
     if (w > 0) return '1RM = ' + w.toFixed(0) + ' lbs (1 rep)';
     return '';
   }

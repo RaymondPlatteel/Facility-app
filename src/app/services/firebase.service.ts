@@ -3864,6 +3864,49 @@ export class FirebaseService {
       .sort((a, b) => a.clientName.localeCompare(b.clientName));
   }
 
+  // Soma IDs began "P000-XXXXXX" and now read "SOMA-XXXXXX": the same six characters, so nothing collides. The old ID is kept in
+  // legacyIds so an invitation written with it still finds the athlete.
+  async listLegacySomaIds(): Promise<Array<{ key: string; id: string }>> {
+    const snap = await getDocs(collection(this.db, 'members'));
+    return snap.docs
+      .map(d => ({ key: d.id, id: String(d.data()['competitorId'] || '') }))
+      .filter(m => m.id.startsWith('P000-'));
+  }
+
+  async convertSomaIds(rows: Array<{ key: string; id: string }>): Promise<number> {
+    let done = 0;
+    for (let i = 0; i < rows.length; i += 400) {
+      const batch = writeBatch(this.db);
+      for (const r of rows.slice(i, i + 400)) {
+        batch.update(doc(this.db, 'members', r.key), { competitorId: 'SOMA-' + r.id.slice(5), legacyIds: arrayUnion(r.id) });
+      }
+      await batch.commit();
+      done += Math.min(400, rows.length - i);
+    }
+    return done;
+  }
+
+  // The reverse: SOMA-XXXXXX back to P000-XXXXXX, for as long as the athlete app in the App Store only finds IDs starting P000-.
+  async listSomaPrefixIds(): Promise<Array<{ key: string; id: string }>> {
+    const snap = await getDocs(collection(this.db, 'members'));
+    return snap.docs
+      .map(d => ({ key: d.id, id: String(d.data()['competitorId'] || '') }))
+      .filter(m => m.id.startsWith('SOMA-'));
+  }
+
+  async revertSomaIds(rows: Array<{ key: string; id: string }>): Promise<number> {
+    let done = 0;
+    for (let i = 0; i < rows.length; i += 400) {
+      const batch = writeBatch(this.db);
+      for (const r of rows.slice(i, i + 400)) batch.update(doc(this.db, 'members', r.key), { competitorId: 'P000-' + r.id.slice(5) });
+      await batch.commit();
+      done += Math.min(400, rows.length - i);
+    }
+    return done;
+  }
+
+
+
   // Every member's display name and key, for picking testers.
   async listMemberNames(): Promise<Array<{ nameKey: string; clientName: string }>> {
     const snap = await getDocs(collection(this.db, 'members'));

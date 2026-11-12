@@ -125,5 +125,26 @@
       </div>
     </div>
 
+    <div class="settings-section">
+    <h2 class="section-heading">Soma IDs</h2>
+    <div class="migrate-card">
+      <div class="migrate-head">
+        <div>
+          <div class="setting-row-title">Change P000 IDs to SOMA</div>
+          <div class="setting-row-detail">
+            Rewrites every athlete's Soma ID from P000-XXXXXX to SOMA-XXXXXX. The six characters stay the same, and the old ID is kept on the record.
+          </div>
+        </div>
+        <button class="migrate-btn migrate-btn--ghost" [disabled]="somaIdBusy" (click)="previewSomaIds()">Count</button>
+        <button class="migrate-btn migrate-btn--ghost" [disabled]="somaIdBusy" (click)="revertSomaIds()">Revert</button>
+      </div>
+      <p class="migrate-status" *ngIf="somaIdStatus">{{ somaIdStatus }}</p>
+      <div class="migrate-actions" *ngIf="somaIdRows?.length">
+        <span class="migrate-total">{{ somaIdRows?.length }} IDs to change</span>
+        <button class="migrate-btn" [disabled]="somaIdBusy" (click)="convertSomaIds()">Convert</button>
+      </div>
+    </div>
+    </div>
+
   </div>
 </ion-content>

@@ -1,7 +1,7 @@
 // Numbers behind the Workout Log: what a set was worth, what a session
 // added up to, and how a lift compares with the athlete's history.
 import type { LoggedExercise, SetLog } from '../services/firebase.service';
-import { brzycki, matchAssessmentLift } from '../services/omni.util';
+import { effectiveReps, estimateOneRm, matchAssessmentLift } from '../services/omni.util';
 import { durationSeconds } from '../services/attributes';
 
 export function toNumber(text: unknown): number | null {
@@ -36,13 +36,14 @@ export function repsOf(set: SetLog): number | null {
   return toNumber(set.values?.['Reps']);
 }
 
-// Estimated one-rep max for a set; sets past 12 reps say too little about
-// strength to count.
+// Estimated one-rep max for a set, the same estimate the athlete app makes: reps left in reserve count as reps (up to
+// 3), the formula runs 3% under and the result rounds down to 5 lb. Sets past 12 reps say too little about strength
+// to count.
 export function setE1rm(set: SetLog): number | null {
   const load = loadOf(set);
   const reps = repsOf(set);
   if (!load || load <= 0 || !reps || reps < 1 || reps > 12) return null;
-  return brzycki(load, reps);
+  return estimateOneRm(load, Math.min(12, effectiveReps(reps, toNumber(set.values?.['RIR']))));
 }
 
 // Nearest 5 lb, the way plates go on.

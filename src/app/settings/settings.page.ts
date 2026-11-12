@@ -42,6 +42,59 @@ export class SettingsPage implements OnInit {
       console.error('Settings: background calendar refresh failed', err));
   }
 
+  // ---- Soma IDs: P000- to SOMA- ----
+  somaIdBusy = false;
+  somaIdStatus = '';
+  somaIdRows: Array<{ key: string; id: string }> | null = null;
+
+  async previewSomaIds() {
+    this.somaIdBusy = true;
+    this.somaIdStatus = 'Counting…';
+    try {
+      this.somaIdRows = await this.firebase.listLegacySomaIds();
+      this.somaIdStatus = this.somaIdRows.length ? '' : 'Every Soma ID already starts with SOMA.';
+    } catch (err) {
+      console.error('Settings: Soma ID count failed', err);
+      this.somaIdStatus = "Couldn't count the IDs — try again.";
+    } finally {
+      this.somaIdBusy = false;
+    }
+  }
+
+  async convertSomaIds() {
+    if (!this.somaIdRows?.length) return;
+    if (!confirm(`Change ${this.somaIdRows.length} Soma IDs from P000 to SOMA? Each keeps its six characters.`)) return;
+    this.somaIdBusy = true;
+    this.somaIdStatus = 'Converting…';
+    try {
+      const n = await this.firebase.convertSomaIds(this.somaIdRows);
+      this.somaIdRows = null;
+      this.somaIdStatus = `Changed ${n} Soma IDs.`;
+    } catch (err) {
+      console.error('Settings: Soma ID conversion failed', err);
+      this.somaIdStatus = "Couldn't finish — run Count again; IDs already changed are skipped.";
+    } finally {
+      this.somaIdBusy = false;
+    }
+  }
+
+  async revertSomaIds() {
+    this.somaIdBusy = true;
+    this.somaIdStatus = 'Reverting…';
+    try {
+      const rows = await this.firebase.listSomaPrefixIds();
+      if (!rows.length) { this.somaIdStatus = 'No Soma ID starts with SOMA.'; return; }
+      if (!confirm(`Change ${rows.length} Soma IDs back from SOMA to P000?`)) { this.somaIdStatus = ''; return; }
+      this.somaIdStatus = `Changed ${await this.firebase.revertSomaIds(rows)} Soma IDs back to P000.`;
+      this.somaIdRows = null;
+    } catch (err) {
+      console.error('Settings: Soma ID revert failed', err);
+      this.somaIdStatus = "Couldn't finish — try again.";
+    } finally {
+      this.somaIdBusy = false;
+    }
+  }
+
   // ---- Scheduling: stored sessions ----
   storedSessionsOn = false;
   sessionsExist = false;

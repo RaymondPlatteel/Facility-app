@@ -1,6 +1,8 @@
-// Shared Omni Method assessment math + "is this exercise a tracked benchmark"
+// Shared assessment scoring math + "is this exercise a tracked benchmark"
 // detection. Kept framework-free so the program creator, live session, and the
-// assessments page can all reuse the exact same scoring as the original OMPAR tool.
+// assessments page can all reuse the exact same scoring as the athlete app. This file is the athlete app's
+// src/app/services/omni.util.ts with the coach-only parts added at the foot (per-client test overrides, colour ramps,
+// speed units): when the athlete app's scoring changes, copy its file over and keep that foot.
 // `import type` avoids a runtime circular dependency: firebase.service.ts (below)
 // imports runtime helpers back out of this file.
 import type { AssessmentInputs, OmniRank, Sex } from './firebase.service';
@@ -37,82 +39,62 @@ export function matchAssessmentLift(name: string): AssessmentLift | null {
   return null;
 }
 
-// ---------- Scoring (ported verbatim from the OMPAR assessment) ----------
+// ---------- Scoring (ported verbatim from the coach app assessment) ----------
 export function brzycki(weight: number, reps: number): number {
   if (!weight || reps < 1) return weight || 0;
   if (reps === 1) return weight;
   return weight * (1 + reps / 30);
 }
 
+// A one-rep max read from a set of reps runs high, so the estimate takes 3% off. It then rounds down to the plate below,
+// so an estimate is never more than the formula says. This is the only place the estimate is made: the assessment, the
+// workout log and the coach app all use it. A single is the 1RM itself.
+export const ONE_RM_FACTOR = 0.97;
+export function estimateOneRm(weight: number, reps: number): number {
+  if (!weight || reps <= 1) return weight || 0;
+  return Math.max(weight, Math.floor(brzycki(weight, reps) * ONE_RM_FACTOR / 5) * 5);
+}
+
+// Reps left in reserve count as reps that could have been done (6 reps with 2 in reserve is an 8 rep set), up to 3 of
+// them. The set is then read as that many reps, so 185 for 6 at 2 RIR is shown and scored as 185 for 8.
+export function effectiveReps(reps: number, rir?: number | null): number {
+  const spare = typeof rir === 'number' && rir > 0 ? Math.min(3, Math.floor(rir)) : 0;
+  return reps + spare;
+}
+
 function num(v: number | null | undefined): number {
   return typeof v === 'number' && isFinite(v) ? v : 0;
 }
 
-// ---------- Per-test overrides ("modify assessment") ----------
-// A coach can swap out any one of the 13 tracked tests for a custom one on
-// a per-client basis (see ClientProfile.assessmentCustomizable and the
-// Assessments page). The raw result still gets typed into that same test's
-// existing input — only its name and formula constants change, so the swap
-// can't touch anything about how a raw value is entered or which category
-// it counts toward.
-//
-// An override always keeps the SAME formula *shape* as the slot it's
-// replacing — a ratio-type slot (the four strength lifts, long jump) stays
-// a ratio; a curve-type slot (sprint, 30 Min Run, 400 M Run — the
-// time-based tests, all lower-raw-is-better) stays the same sqrt decay
-// curve calcPower/calcCardio use. What the coach can edit is every real
-// constant in that formula — not just the "world record," but (for
-// curve-type slots) the spread constant that controls how fast the score
-// falls off past the record too. Everything else (flexibility, the plain
-// clamp/range tests) keeps its original, un-overridden formula unless a
-// coach overrides it — a straight ratio is the fallback there since none
-// of those are expected to actually get swapped.
-export type TestKey = keyof AssessmentInputs;
-
-export interface TestOverride {
-  name: string;         // custom test name, e.g. "Trap Bar Deadlift"
-  worldRecord: number;  // replaces that slot's built-in reference value
-  // Curve-type slots only (isCurveTest(key) === true) — replaces the
-  // built-in spread constant (the sqrt's denominator). Ignored for
-  // ratio-type slots.
-  spread?: number;
+// The weighted pull-up 1RM was removed from the strength score. Records keep
+// the numbers they already hold (pullup1rm*, in AssessmentInputs) so nothing
+// is lost, but nothing reads them for scoring or display.
+export function calcStrength(dl: number, sq: number, bn: number, overrides?: TestOverrides): number {
+  const dlScore = slotScore(dl, 'deadlift', overrides, () => dl / 700 * 100);
+  const sqScore = slotScore(sq, 'squat', overrides, () => sq / 600 * 100);
+  const bnScore = slotScore(bn, 'bench', overrides, () => bn / 500 * 100);
+  return (dlScore + sqScore + bnScore) / 3;
 }
-
-export type TestOverrides = Partial<Record<TestKey, TestOverride>>;
-
-const LOWER_IS_BETTER: ReadonlySet<TestKey> = new Set<TestKey>(['sprint', 'run400']);
-
-// Exposed so the Assessments page can show the coach the exact formula
-// (and a live preview score) while they're picking new constants for a
-// replacement test — same direction check the scoring itself uses.
-export function isLowerIsBetterTest(key: TestKey): boolean {
-  return LOWER_IS_BETTER.has(key);
+export function calcPower(lj: number, sp: number, overrides?: TestOverrides): number {
+  // 10s sprint anchor, matching the coach app's CURVE_TEST_DEFAULTS. This
+  // file used 9.58 (Bolt's record) while the coach app used 10, so the two
+  // apps scored the same athlete's Power differently — a ~1.7 point gap,
+  // enough to show a different category rank on each screen.
+  const ljScore = slotScore(lj, 'longjump', overrides, () => lj / 147 * 100);
+  const spScore = slotScore(sp, 'sprint', overrides, () => (Math.sqrt(Math.max(0, sp - 10) / 0.125) * -1 + 10) * 10);
+  return (ljScore + spScore) / 2;
 }
-
-// The three time-based tests, each scored by the same sqrt decay curve:
-//   score = (10 − √((raw − record) / spread)) × 10
-// `record` and `spread` here are the slot's real, current built-in
-// constants — the override sheet pre-fills a coach's edit with these
-// exact numbers rather than starting blank. (30 Min Run's built-in
-// formula has a second, legacy linear-ratio branch for slow times; an
-// override always uses the curve branch only, since a coach replacing
-// this test is supplying their own real numbers regardless.)
-export const CURVE_TEST_DEFAULTS: Partial<Record<TestKey, { record: number; spread: number }>> = {
-  sprint: { record: 10, spread: 0.125 },
-  run30: { record: 11.265408, spread: 0.11265408 },
-  run400: { record: 46, spread: 1 },
-};
-
-export function isCurveTest(key: TestKey): boolean {
-  return key in CURVE_TEST_DEFAULTS;
+export function calcEndurance(pu: number, pulls: number, overrides?: TestOverrides): number {
+  const puScore = slotScore(pu, 'pushups', overrides, () => (pu / 150) * 100);
+  const pullsScore = slotScore(pulls, 'pullups', overrides, () => (pulls / 49) * 100);
+  return (puScore + pullsScore) / 2;
 }
-
 // ---------- 400 m run ----------
 // Cardio's short test is a 400 m run, in seconds (it was an 800 m run, and
 // before that a 2-minute run). Same shape as the 100 m sprint: 100 points at
 // the record, falling by a square root. The record is an estimated flat-shoe
 // time, not van Niekerk's 43.03 in spikes, and the spread is set so a
-// typical athlete's time reads as a believable 400 m. No spikes or blocks. Matches the athlete app.
+// typical athlete's time reads as a believable 400 m. No spikes or blocks.
 export const RUN400_RECORD = 46;
 export const RUN400_SPREAD = 1;
 
@@ -153,6 +135,13 @@ export function estimate400FromTwoMinute(km: number): number {
   return RUN400_RECORD + RUN400_SPREAD * Math.pow(10 - twoMinuteScore(km) / 10, 2);
 }
 
+// The 2-minute distance (km) that scores the same as an 400 m time, for the
+// cardio program, which sizes its intervals from a 2-minute pace.
+export function twoMinuteKmFromRun400(seconds: number): number {
+  if (!(seconds > 0)) return 0;
+  return 0.804672 - 0.00804672 * Math.pow(10 - run400Score(seconds) / 10, 2);
+}
+
 // A recorded 400 m time, else the one implied by the record's 800 m time or
 // 2-minute distance, else 0 (not tested).
 export function effectiveRun400(i: Partial<AssessmentInputs> | null | undefined): number {
@@ -162,17 +151,28 @@ export function effectiveRun400(i: Partial<AssessmentInputs> | null | undefined)
   return estimate400FromTwoMinute(i.speed2 ?? 0);
 }
 
-// 144.87 -> "2:25". Whole seconds, rounded.
-export function formatRunTime(seconds: number): string {
-  const t = Math.round(seconds);
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+export function calcCardio(r30: number, t400: number, overrides?: TestOverrides): number {
+  const rs = slotScore(r30, 'run30', overrides, () => r30 < 4.02336
+    ? (Math.sqrt((11.265408 - r30) / 0.11265408) * -1 + 10) * 10
+    : r30 / 11.265408 * 100);
+  const t400Score = slotScore(t400, 'run400', overrides, () => run400Score(t400));
+  return (rs + t400Score) / 2;
+}
+export function calcFlex(pike: number, bb: number, str: number, overrides?: TestOverrides): number {
+  const s = slotScore(str, 'straddle', overrides, () => str < 80 ? 0 : str > 180 ? 100 : str - 80);
+  // Pike/backbend are entered on a 0-10 scale (see FIELD_LIMITS); clamp
+  // here too so a stray out-of-range value (an old 0-100 entry, a typo)
+  // can't inflate the score past what a perfect 10 would give.
+  const p = slotScore(pike, 'pike', overrides, () => Math.max(0, Math.min(10, pike)) * 10);
+  const b = slotScore(bb, 'backbend', overrides, () => Math.max(0, Math.min(10, bb)) * 10);
+  return (p + b + s) / 3;
 }
 
 // The level curve. Strength lost the weighted pull-up, which lowered everyone's
 // raw total by a few points; K and p were refitted so that levels stay where
 // athletes already were (the old curve was 1000 * (raw/1000)^2). Raw can dip
 // below zero for a very slow sprint, so it floors at 0 before the power.
-export const LEVEL_K = 987;
+export const LEVEL_K = 910;
 export const LEVEL_P = 1.96;
 
 export function levelFromRaw(raw: number): number {
@@ -182,71 +182,6 @@ export function levelFromRaw(raw: number): number {
 // The raw total a level needs: the curve run backwards.
 export function rawForLevel(level: number): number {
   return 1000 * Math.pow(level / LEVEL_K, 1 / LEVEL_P);
-}
-
-// Ratio-type slots' real, current built-in "world record" constants —
-// same pre-fill purpose as CURVE_TEST_DEFAULTS above.
-export const RATIO_TEST_DEFAULTS: Partial<Record<TestKey, number>> = {
-  deadlift: 939, squat: 800, bench: 600, longjump: 147,
-};
-
-export function overrideScore(raw: number, worldRecord: number, key: TestKey, spread?: number): number {
-  if (!worldRecord) return 0;
-  if (isCurveTest(key)) {
-    const sp = spread || CURVE_TEST_DEFAULTS[key]!.spread;
-    if (!sp) return 0;
-    const x = (raw - worldRecord) / sp;
-    if (x < 0) return 100; // better than the record — clamp instead of the sqrt going complex
-    const pct = (Math.sqrt(x) * -1 + 10) * 10;
-    return isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
-  }
-  const pct = LOWER_IS_BETTER.has(key) ? (worldRecord / (raw || Infinity)) * 100 : (raw / worldRecord) * 100;
-  return isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
-}
-
-// Runs a slot's normal (un-overridden) scoring unless `overrides` has an
-// entry for it, in which case that entry's constants drive the same-shape
-// formula instead. `fallback` is the slot's usual formula contribution
-// (e.g. `dl / 939 * 100`) — passed as a thunk so it's only evaluated when
-// actually needed.
-function slotScore(raw: number, key: TestKey, overrides: TestOverrides | undefined, fallback: () => number): number {
-  const ov = overrides?.[key];
-  return ov ? overrideScore(raw, ov.worldRecord, key, ov.spread) : fallback();
-}
-
-// The weighted pull-up 1RM was removed from the strength score. Records keep
-// the numbers they already hold (pullup1rm*), but nothing reads them for scoring.
-export function calcStrength(dl: number, sq: number, bn: number, overrides?: TestOverrides): number {
-  const dlScore = slotScore(dl, 'deadlift', overrides, () => dl / 939 * 100);
-  const sqScore = slotScore(sq, 'squat', overrides, () => sq / 800 * 100);
-  const bnScore = slotScore(bn, 'bench', overrides, () => bn / 600 * 100);
-  return (dlScore + sqScore + bnScore) / 3;
-}
-export function calcPower(lj: number, sp: number, overrides?: TestOverrides): number {
-  const ljScore = slotScore(lj, 'longjump', overrides, () => lj / 147 * 100);
-  const spScore = slotScore(sp, 'sprint', overrides, () => (Math.sqrt(Math.max(0, sp - 10) / 0.125) * -1 + 10) * 10);
-  return (ljScore + spScore) / 2;
-}
-export function calcEndurance(pu: number, pulls: number, overrides?: TestOverrides): number {
-  const puScore = slotScore(pu, 'pushups', overrides, () => (pu / 150) * 100);
-  const pullsScore = slotScore(pulls, 'pullups', overrides, () => (pulls / 49) * 100);
-  return (puScore + pullsScore) / 2;
-}
-export function calcCardio(r30: number, t400: number, overrides?: TestOverrides): number {
-  const rs = slotScore(r30, 'run30', overrides, () => r30 < 4.02336
-    ? (Math.sqrt((11.265408 - r30) / 0.11265408) * -1 + 10) * 10
-    : r30 / 11.265408 * 100);
-  const t400Score = slotScore(t400, 'run400', overrides, () => run400Score(t400));
-  return (rs + t400Score) / 2;
-}
-export function calcFlex(pike: number, bb: number, str: number, overrides?: TestOverrides): number {
-  // Pike/backbend are entered on a 0-10 scale (see FIELD_LIMITS); clamp
-  // here too so a stray out-of-range value (an old 0-100 entry, a typo)
-  // can't inflate the score past what a perfect 10 would give.
-  const pikeScore = slotScore(pike, 'pike', overrides, () => Math.max(0, Math.min(10, pike)) * 10);
-  const bbScore = slotScore(bb, 'backbend', overrides, () => Math.max(0, Math.min(10, bb)) * 10);
-  const strScore = slotScore(str, 'straddle', overrides, () => str < 80 ? 0 : str > 180 ? 100 : str - 80);
-  return (pikeScore + bbScore + strScore) / 3;
 }
 
 export interface OmniTotals {
@@ -305,7 +240,7 @@ export function getOmniRank(level: number, sex: Sex = 'male'): OmniRank {
 }
 
 // The floor of the band `level` sits in, and the floor of the next band up.
-// Shared by the colour ramp so a colour boundary can never drift away from
+// Shared by the color ramp so a color boundary can never drift away from
 // the rank boundary it is meant to mark.
 export function rankBandBounds(level: number, sex: Sex = 'male'): { floor: number; ceil: number } {
   const table = RANK_THRESHOLDS[sex] ?? RANK_THRESHOLDS['male'];
@@ -315,113 +250,27 @@ export function rankBandBounds(level: number, sex: Sex = 'male'): { floor: numbe
   const floor = ascending[at].floor;
   const next = ascending[at + 1];
   // Top band has no next floor; treat it as a single point so the ramp
-  // resolves to its end colour rather than dividing by zero.
+  // resolves to its end color rather than dividing by zero.
   return { floor, ceil: next ? next.floor - 1 : floor };
-}
-
-// Splits 'D-RANK' into a big glyph ('D') + tiny caption ('RANK') for the
-// rank badge display. UNRANKED has no letter to show, so an em dash stands
-// in as the glyph instead of leaving it blank.
-export function rankLetter(rank: OmniRank): string {
-  return rank === 'UNRANKED' ? '—' : rank.split('-')[0];
-}
-
-// Each rank's band is split in four: A (80-99) is AI, AII, AIII, AIV. S and Unranked have no tiers.
-const TIERS = ['I', 'II', 'III', 'IV'];
-export function tierNumeral(level: number, rank: OmniRank, sex: Sex = 'male'): string {
-  if (rank === 'S-RANK' || rank === 'UNRANKED' || !isFinite(level)) return '';
-  const { floor, ceil } = rankBandBounds(level, sex);
-  const span = ceil - floor;
-  if (span <= 0) return '';
-  return TIERS[Math.max(0, Math.min(3, Math.floor(((level - floor) / span) * 4)))];
-}
-
-export function rankLabel(rank: OmniRank): string {
-  return rank === 'UNRANKED' ? 'UNRANKED' : 'RANK';
-}
-
-// Level → color, mirrored from the assessments page's own rank-band ramp
-// (kept in sync by hand rather than imported from there, since that file's
-// version is a private method tied to its own panel-scoped color-mixing
-// state). One distinct hue per rank tier — grey/green/sky-blue/purple/
-// amber-red/white — rather than a continuous sweep, so a rank-up always
-// reads as an unmistakable color jump; shading only blends *within* a band.
-// Level 99 lands exactly on blood red, the last color before S-RANK's white.
-// Keyed by RANK, not by level range. The floors now come from
-// RANK_THRESHOLDS above, because they differ by sex — a colour boundary
-// that drifted away from the rank boundary it marks would be worse than no
-// colour at all.
-const RANK_SHADES: Record<OmniRank, { light: string; dark: string }> = {
-  'UNRANKED': { light: '#737373', dark: '#404040' },  // neutral grey (no blue tint)
-  'D-RANK':   { light: '#4ade80', dark: '#15803d' },  // green
-  'C-RANK':   { light: '#38bdf8', dark: '#0369a1' },  // sky blue
-  'B-RANK':   { light: '#c084fc', dark: '#6b21a8' },  // purple
-  'A-RANK':   { light: '#d9695f', dark: '#c1121f' },  // washed red heating to blood red
-  'S-RANK':   { light: '#ffffff', dark: '#ffffff' }   // pure white
-};
-
-// Toggle to flip the within-band direction for every rank at once. true
-// (current): climbs light -> dark as level rises within a rank — a deeper,
-// more saturated shade the closer you are to the next rank-up. Mirrors how
-// A-RANK always worked (amber -> blood red). false: the previous dark ->
-// light climb. Kept as a single flag specifically so this is a one-line
-// revert if the darker-as-you-climb look doesn't stick. Must match the same
-// flag in assessments.page.ts so both screens agree on a given level's color.
-const DARKEN_AS_LEVEL_CLIMBS = true;
-
-function hexToRgb(h: string): [number, number, number] {
-  const s = h.replace('#', '');
-  return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)];
-}
-
-function lerpHex(a: string, b: string, t: number): string {
-  const pa = hexToRgb(a), pb = hexToRgb(b);
-  const mix = (i: number) => Math.round(pa[i] + (pb[i] - pa[i]) * t);
-  return '#' + [mix(0), mix(1), mix(2)].map(x => x.toString(16).padStart(2, '0')).join('');
-}
-
-export function levelColor(level: number, sex: Sex = 'male'): string {
-  const lvl = Math.max(0, Math.min(100, level));
-  const shade = RANK_SHADES[getOmniRank(lvl, sex)];
-  const { floor, ceil } = rankBandBounds(lvl, sex);
-  const span = ceil - floor;
-  const t = span > 0 ? (lvl - floor) / span : 1;
-  const [start, end] = DARKEN_AS_LEVEL_CLIMBS ? [shade.light, shade.dark] : [shade.dark, shade.light];
-  return lerpHex(start, end, t);
-}
-
-// Card background per rank — deliberately NOT derived from levelColor()
-// above. Mixing the bright badge/graph color straight into a card's
-// background blows the lightness way past "dark" (a vivid mid-blue or
-// mid-green card, not a moody dark one) and it wanders per-level as a bonus
-// bug. These are hand-picked instead: same hue family as the rank, held at
-// a constant low lightness across the whole rank rather than shifting with
-// level — the vibrant badge/graph/border already carries the "climbing
-// within a rank" feeling, so the backdrop can stay calm. Mirrored from
-// Project-000's level-color.util.ts so both apps land on the same anchors.
-interface RankBgAnchor { floor: number; ceil: number; bg: string; }
-
-const RANK_BG: Record<OmniRank, string> = {
-  'UNRANKED': '#070809',  // neutral, barely tinted
-  'D-RANK':   '#030c07',  // dark green
-  'C-RANK':   '#03090c',  // dark blue
-  'B-RANK':   '#08030c',  // dark purple
-  'A-RANK':   '#0c0304',  // dark blood red
-  'S-RANK':   '#0a0a0a'   // neutral dark
-};
-
-export function levelBgColor(level: number, sex: Sex = 'male'): string {
-  return RANK_BG[getOmniRank(Math.max(0, Math.min(100, level)), sex)];
 }
 
 // ---------- Per-category ranks (display only) ----------
 //
-// Mirrored from Project-000's omni.util.ts — the athlete and the coach must
-// never read a different rank off the same assessment.
+// The five category scores are not comparable to each other, and none of
+// them is comparable to the overall level, so they cannot share
+// RANK_THRESHOLDS above. Every formula divides by its own "perfect"
+// benchmark, and those benchmarks sit at wildly different distances from
+// what an untrained person actually scores:
 //
-// The five category scores are not comparable to each other, and none is
-// comparable to the overall level, so they cannot share RANK_THRESHOLDS.
-// Each table is built from two anchors instead of hand-written floors.
+//   Flexibility hands out ~30 for free — pike 4 / backbend 3 / straddle
+//     110° is an average desk worker — so 30 has to read as zero.
+//   Power is worse: long jump is scored against 147", so an unathletic 80"
+//     jump already banks 54 in half the formula.
+//   Endurance runs the other way. 150 pushups and 49 pull-ups define 100,
+//     so even very fit people land in the 40s.
+//
+// Hence one table per category, built from two anchors rather than hand-
+// written floors.
 //
 // Nothing here feeds computeOmni. A category rank never moves the overall
 // level or rank — a gym bro can hold C-RANK strength while every other
@@ -429,7 +278,7 @@ export function levelBgColor(level: number, sex: Sex = 'male'): string {
 export type OmniCategory = 'strength' | 'power' | 'endurance' | 'cardio' | 'flexibility';
 
 // Anchor 1, the bottom: what someone who has never trained actually scores,
-// which is where this category's ladder starts. Everything below is
+// which is where this category's ladder starts. Everything below it is
 // UNRANKED. These differ wildly because each formula's free baseline does:
 // an untrained person already banks ~40 power (long jump is scored against
 // 147", so even an unathletic 80" jump fills half the formula) and ~32
@@ -453,12 +302,16 @@ const CATEGORY_FLOOR: Record<OmniCategory, { male: number; female: number }> = {
 };
 
 // Anchor 2, the top: S-RANK in a category means "this category is pulling
-// its weight for an S-RANK athlete" — NOT "world record". Derived as the
-// score which, held in every category, lands exactly on the overall S-RANK
-// threshold: computeOmni squares the five-category sum, so level L needs
-// raw = rawForLevel(L), split five ways — about 62.2 for men (level 100),
-// 55.9 for women (level 80). Clear it in one category and that category is
-// doing S-RANK work, whatever the other four are doing.
+// its weight for an S-RANK athlete" — NOT "world record". Holding the old
+// hand-picked S floors across all five would have scored level 128, well
+// past the level-100 S-RANK line, so they were measuring the wrong thing.
+//
+// Derived instead: the score which, held in every category, lands exactly
+// on the overall S-RANK threshold. computeOmni runs the five-category
+// sum through the level curve, so level L needs raw = rawForLevel(L), split
+// five ways — about 62.2 for men (level 100), 55.9 for women (level 80). Clear it in one
+// category and that category is doing S-RANK work, whatever the other four
+// are doing.
 //
 // Two categories opt out with a fixed, higher floor. Both for the same
 // reason — the derived number assumes the five categories span comparable
@@ -468,10 +321,10 @@ const CATEGORY_FLOOR: Record<OmniCategory, { male: number; female: number }> = {
 //     who simply stretches, and the bar there is meant to be high.
 //   power, because its whole real range is compressed. Long jump is scored
 //     against 147", which hands out ~50 for a mediocre jump, so the entire
-//     roster lands between 39 and 66 — the derived 63.2 sat *inside* the
-//     normal spread and three athletes cleared it on good-but-not-elite
-//     numbers. 68 puts it back above them; reaching it takes roughly a 125"
-//     jump paired with a 12.5s sprint.
+//     roster lands between 39 and 67 — the derived 63.2 sat *inside* the
+//     normal spread and the three best athletes cleared it on good-but-not-
+//     elite numbers. 70 puts it back above them; reaching it takes roughly
+//     a 127" jump paired with a 12.4s sprint.
 //
 // Checked against the real roster: in strength and endurance the best
 // score on file is still 10+ short of the derived floor, so those two need
@@ -520,7 +373,7 @@ export function rankOnLadder(table: Array<{ floor: number; rank: OmniRank }>, sc
   return (table.find(t => score >= t.floor) ?? table[table.length - 1]).rank;
 }
 
-// The band `score` sits in on `table`, for the within-band colour blend.
+// The band `score` sits in on `table`, for the within-band color blend.
 export function ladderBand(table: Array<{ floor: number; rank: OmniRank }>, score: number): { floor: number; ceil: number } {
   const ascending = [...table].sort((a, b) => a.floor - b.floor);
   const top = ascending[ascending.length - 1];
@@ -540,34 +393,14 @@ export function categoryRankBandBounds(cat: OmniCategory, score: number, sex: Se
 
 // Progress through the CURRENT rank band — how close this category is to
 // the next rank up, not its position on the whole ladder. Returns 0 at
-// S-RANK, which has no band above it; callers hide the bar entirely there
-// rather than drawing an empty or permanently-full one.
+// S-RANK, whose band runs from the S floor up to 100 so the bar keeps filling
+// until the category reaches 100.
 export function categoryRankPct(cat: OmniCategory, score: number, sex: Sex = 'male'): number {
-  const { floor, ceil } = categoryRankBandBounds(cat, score, sex);
+  const { floor, ceil: bandCeil } = categoryRankBandBounds(cat, score, sex);
+  const ceil = bandCeil > floor ? bandCeil : 100;
   const span = ceil - floor;
   if (!(span > 0) || !isFinite(score)) return 0;
   return Math.min(Math.max(((score - floor) / span) * 100, 0), 100);
-}
-
-// Same rank shades and within-band ramp as levelColor/levelBgColor, driven
-// by a category's own thresholds. S-RANK's static value is only a fallback —
-// a caller that can reach the chroma ramp paints it live instead.
-export function categoryColor(cat: OmniCategory, score: number, sex: Sex = 'male'): string {
-  return ladderColor(categoryRankThresholds(cat, sex), score);
-}
-
-// Rank shade + within-band ramp on any D..S ladder.
-export function ladderColor(table: Array<{ floor: number; rank: OmniRank }>, score: number): string {
-  const shade = RANK_SHADES[rankOnLadder(table, score)];
-  const { floor, ceil } = ladderBand(table, score);
-  const span = ceil - floor;
-  const t = span > 0 ? Math.min(Math.max((score - floor) / span, 0), 1) : 1;
-  const [start, end] = DARKEN_AS_LEVEL_CLIMBS ? [shade.light, shade.dark] : [shade.dark, shade.light];
-  return lerpHex(start, end, t);
-}
-
-export function categoryBgColor(cat: OmniCategory, score: number, sex: Sex = 'male'): string {
-  return RANK_BG[getCategoryRank(cat, score, sex)];
 }
 
 // ---------- Per-test ranks ----------
@@ -575,7 +408,7 @@ export function categoryBgColor(cat: OmniCategory, score: number, sex: Sex = 'ma
 // contributions, so a single test's contribution sits on the same scale as
 // the category itself. Ranking it against that category's (adjusted) ladder
 // means a test reads B-RANK exactly when, were every test in the category
-// that good, the category would be B-RANK too — and Project 000's copy of
+// that good, the category would be B-RANK too — the coach app's copy of
 // this map ranks it identically.
 export type ScoredTestKey =
   'deadlift' | 'squat' | 'bench' | 'longjump' | 'sprint' | 'pushups' |
@@ -589,26 +422,31 @@ export const TEST_CATEGORY: Record<ScoredTestKey, OmniCategory> = {
   pike: 'flexibility', backbend: 'flexibility', straddle: 'flexibility'
 };
 
-// One test's contribution to its category score — the same per-slot terms
-// calcStrength/calcPower/... average, overrides included. NaN (a sprint or
-// run left blank lands the sqrt below zero) ranks as UNRANKED downstream.
+// One test's contribution to its category score — the same per-test terms
+// calcStrength/calcPower/... average. NaN (a sprint or run left blank lands
+// the sqrt below zero) ranks as UNRANKED downstream.
 export function testScore(key: ScoredTestKey, i: AssessmentInputs, overrides?: TestOverrides): number {
   const v = key === 'run400' ? effectiveRun400(i) : num(i[key]);
+  return slotScore(v, key, overrides, () => scoreOfResult(key, v));
+}
+
+// The same contribution from a result alone, in the units the record stores (30 min run in km).
+function scoreOfResult(key: ScoredTestKey, v: number): number {
   switch (key) {
-    case 'deadlift': return slotScore(v, key, overrides, () => v / 939 * 100);
-    case 'squat': return slotScore(v, key, overrides, () => v / 800 * 100);
-    case 'bench': return slotScore(v, key, overrides, () => v / 600 * 100);
-    case 'longjump': return slotScore(v, key, overrides, () => v / 147 * 100);
-    case 'sprint': return slotScore(v, key, overrides, () => (Math.sqrt(Math.max(0, v - 10) / 0.125) * -1 + 10) * 10);
-    case 'pushups': return slotScore(v, key, overrides, () => (v / 150) * 100);
-    case 'pullups': return slotScore(v, key, overrides, () => (v / 49) * 100);
-    case 'run30': return slotScore(v, key, overrides, () => v < 4.02336
+    case 'deadlift': return v / 700 * 100;
+    case 'squat': return v / 500 * 100;
+    case 'bench': return v / 500 * 100;
+    case 'longjump': return v / 147 * 100;
+    case 'sprint': return (Math.sqrt(Math.max(0, v - 10) / 0.125) * -1 + 10) * 10;
+    case 'pushups': return (v / 150) * 100;
+    case 'pullups': return (v / 49) * 100;
+    case 'run30': return v < 4.02336
       ? (Math.sqrt((11.265408 - v) / 0.11265408) * -1 + 10) * 10
-      : v / 11.265408 * 100);
-    case 'run400': return slotScore(v, key, overrides, () => run400Score(v));
-    case 'pike': return slotScore(v, key, overrides, () => Math.max(0, Math.min(10, v)) * 10);
-    case 'backbend': return slotScore(v, key, overrides, () => Math.max(0, Math.min(10, v)) * 10);
-    case 'straddle': return slotScore(v, key, overrides, () => v < 80 ? 0 : v > 180 ? 100 : v - 80);
+      : v / 11.265408 * 100;
+    case 'run400': return run400Score(v);
+    case 'pike': return Math.max(0, Math.min(10, v)) * 10;
+    case 'backbend': return Math.max(0, Math.min(10, v)) * 10;
+    case 'straddle': return v < 80 ? 0 : v > 180 ? 100 : v - 80;
   }
 }
 
@@ -632,7 +470,7 @@ export function testScore(key: ScoredTestKey, i: AssessmentInputs, overrides?: T
 // between the sexes (56.6 / 63.2), landing at 326 lb.
 
 const INCHES_TO_LJ_SCORE = 100 / 147;
-const LBS_TO_BENCH_SCORE = 100 / 600;
+const LBS_TO_BENCH_SCORE = 100 / 500;
 const TEST_LADDER_OVERRIDE: Partial<Record<ScoredTestKey, { male: { d: number; s: number }; female: { d: number; s: number } }>> = {
   longjump: {
     male: { d: 72 * INCHES_TO_LJ_SCORE, s: 128 * INCHES_TO_LJ_SCORE },
@@ -644,10 +482,64 @@ const TEST_LADDER_OVERRIDE: Partial<Record<ScoredTestKey, { male: { d: number; s
   }
 };
 
-// A coach-replaced test is scored against its own record, so the feet-based
-// anchors above no longer mean anything for it — it falls back to the
-// category ladder.
+// Results for D, C, B, A and S, set by hand test by test (2026-10-29). They replace the even D-to-S ladders above:
+// the rank steps are not equal, so each floor is the score its own result earns. Results are in the units athletes
+// enter: lb, in, reps, seconds, miles (30 min run), 0-10 (pike, backbend) and degrees (middle split). Long jump keeps
+// its ladder above, for both sexes.
+//
+// Women's are the men's scaled down and rounded: lifts, pushups and pull-ups at 75%, the 30 min run at 85%, and the
+// sprint and 400 m times 10% slower. Pike, backbend and middle split are the same as men's, as the category ladders
+// already held them at parity. Lifts round to 5 lb, reps to a whole rep, the sprint to 0.1 s, the 400 m to 5 s and
+// the run to 0.05 mi.
+const KM_PER_MILE = 1.609344;
+type Five = [number, number, number, number, number];
+const RESULT_LADDER: Record<'male' | 'female', Partial<Record<ScoredTestKey, Five>>> = {
+  male: {
+    deadlift: [135, 225, 315, 405, 495],
+    squat: [105, 195, 275, 365, 425],
+    bench: [85, 165, 245, 295, 345],
+    sprint: [15, 13.5, 12.5, 12, 11.5],
+    pushups: [10, 30, 50, 65, 75],
+    pullups: [3, 8, 15, 25, 30],
+    run30: [2.55, 3, 3.5, 4, 4.5],
+    run400: [95, 80, 70, 60, 55],
+    pike: [3, 5, 6, 7, 8],
+    backbend: [3, 5, 6, 7, 8],
+    straddle: [120, 130, 145, 150, 160]
+  },
+  female: {
+    deadlift: [100, 170, 235, 305, 370],
+    squat: [80, 145, 205, 275, 320],
+    bench: [65, 125, 185, 220, 260],
+    sprint: [16.5, 14.9, 13.8, 13.2, 12.7],
+    pushups: [8, 23, 38, 49, 56],
+    pullups: [2, 6, 11, 19, 23],
+    run30: [2.15, 2.55, 3, 3.4, 3.85],
+    run400: [105, 90, 75, 65, 60],
+    pike: [3, 5, 6, 7, 8],
+    backbend: [3, 5, 6, 7, 8],
+    straddle: [120, 130, 145, 150, 160]
+  }
+};
+
+function resultLadder(key: ScoredTestKey, results: number[]): Array<{ floor: number; rank: OmniRank }> {
+  const unit = key === 'run30' ? KM_PER_MILE : 1;
+  const [d, c, b, a, s] = results.map(r => scoreOfResult(key, r * unit));
+  return [
+    { floor: s, rank: 'S-RANK' },
+    { floor: a, rank: 'A-RANK' },
+    { floor: b, rank: 'B-RANK' },
+    { floor: c, rank: 'C-RANK' },
+    { floor: d, rank: 'D-RANK' },
+    { floor: 0, rank: 'UNRANKED' }
+  ];
+}
+
 export function testRankThresholds(key: ScoredTestKey, sex: Sex = 'male', overrides?: TestOverrides): Array<{ floor: number; rank: OmniRank }> {
+  // A coach-replaced test is scored against its own record, so the hand-set results no longer mean anything for it: it
+  // falls back to the category ladder.
+  const set = overrides?.[key] ? undefined : RESULT_LADDER[sex === 'female' ? 'female' : 'male'][key];
+  if (set) return resultLadder(key, set);
   const own = overrides?.[key] ? undefined : TEST_LADDER_OVERRIDE[key];
   if (own) {
     const a = own[sex === 'female' ? 'female' : 'male'];
@@ -656,29 +548,164 @@ export function testRankThresholds(key: ScoredTestKey, sex: Sex = 'male', overri
   return categoryRankThresholds(TEST_CATEGORY[key], sex);
 }
 
+// What each rank asks of a test, D to S, in the units a record stores (lb, in, reps, seconds, km for the 30 min run,
+// 0-10, degrees). The hand-set results above are used as they are; every other ladder is worked back from its floors.
+const REQUIREMENT_SEARCH: Record<ScoredTestKey, [number, number]> = {
+  deadlift: [0, 2000], squat: [0, 1500], bench: [0, 1000], longjump: [0, 250], sprint: [40, 8], pushups: [0, 400],
+  pullups: [0, 150], run30: [0, 25], run400: [400, 30], pike: [0, 10], backbend: [0, 10], straddle: [0, 200]
+};
+const RANKS_D_TO_S: OmniRank[] = ['D-RANK', 'C-RANK', 'B-RANK', 'A-RANK', 'S-RANK'];
+
+export function testRankRequirements(key: ScoredTestKey, sex: Sex = 'male'): Array<{ rank: OmniRank; value: number }> {
+  const set = RESULT_LADDER[sex === 'female' ? 'female' : 'male'][key];
+  if (set) return set.map((v, i) => ({ rank: RANKS_D_TO_S[i], value: key === 'run30' ? v * KM_PER_MILE : v }));
+  const [worst, best] = REQUIREMENT_SEARCH[key];
+  const floors = testRankThresholds(key, sex).filter(t => t.rank !== 'UNRANKED').reverse();
+  return floors.map(t => {
+    let a = worst, b = best;
+    for (let n = 0; n < 60; n++) { const m = (a + b) / 2; if (scoreOfResult(key, m) >= t.floor) b = m; else a = m; }
+    return { rank: t.rank, value: b };
+  });
+}
+
 export function getTestRank(key: ScoredTestKey, i: AssessmentInputs, sex: Sex = 'male', overrides?: TestOverrides): OmniRank {
   return rankOnLadder(testRankThresholds(key, sex, overrides), testScore(key, i, overrides));
 }
 
-// Static colour for a test's rank; S-RANK callers swap in the live chroma.
-export function testColor(key: ScoredTestKey, i: AssessmentInputs, sex: Sex = 'male', overrides?: TestOverrides): string {
-  const score = testScore(key, i, overrides);
-  return ladderColor(testRankThresholds(key, sex, overrides), isFinite(score) ? score : 0);
+// Splits 'D-RANK' into a big glyph ('D') + tiny caption ('RANK') for the
+// rank badge display. UNRANKED has no letter to show, so an em dash stands
+// in as the glyph instead of leaving it blank.
+export function rankLetter(rank: OmniRank): string {
+  return rank === 'UNRANKED' ? '—' : rank.split('-')[0];
 }
 
-// Card ground for a test's rank — same per-rank darks the category cards use.
-export function testBgColor(key: ScoredTestKey, i: AssessmentInputs, sex: Sex = 'male', overrides?: TestOverrides): string {
-  return RANK_BG[getTestRank(key, i, sex, overrides)];
+// The overall rank with its tier: each rank's band is split in four, so A (80-99) is AI, AII, AIII, AIV as the
+// level climbs 80-84, 85-89, 90-94, 95-99. There is no bare A. S and Unranked have no tiers.
+const TIERS = ['I', 'II', 'III', 'IV'];
+export function tierParts(level: number, rank: OmniRank, sex: Sex = 'male'): { letter: string; numeral: string } {
+  const letter = rankLetter(rank);
+  if (rank === 'S-RANK' || rank === 'UNRANKED' || !isFinite(level)) return { letter, numeral: '' };
+  const { floor, ceil } = rankBandBounds(level, sex);
+  const span = ceil - floor;
+  if (span <= 0) return { letter, numeral: '' };
+  const tier = Math.max(0, Math.min(3, Math.floor(((level - floor) / span) * 4)));
+  return { letter, numeral: TIERS[tier] };
 }
 
-export function isCategorySRank(cat: OmniCategory, score: number, sex: Sex = 'male'): boolean {
-  return getCategoryRank(cat, score, sex) === 'S-RANK';
+// How far through the current sub-rank (I to IV) a value is, 0 to 1, for the ring around the rank badge. Unranked has no
+// tiers, so it is the way to D-Rank; S-Rank is the top and reads full.
+export function tierProgress(value: number, rank: OmniRank, bounds: { floor: number; ceil: number }): number {
+  if (rank === 'S-RANK') return 1;
+  const span = bounds.ceil - bounds.floor;
+  if (!(span > 0) || !isFinite(value)) return 0;
+  const f = Math.max(0, Math.min(1, (value - bounds.floor) / span));
+  if (rank === 'UNRANKED') return f;
+  const pos = f * 4;
+  return pos >= 4 ? 1 : pos - Math.floor(pos);
 }
 
-// Per-test display metadata for the "highest level impact" recommendations
-// and the recent-activity headline — shared so both features describe tests
-// the same way (label/unit/decimals for display, step/min/max for the
-// opportunity search).
+export function tierLetter(level: number, rank: OmniRank, sex: Sex = 'male'): string {
+  const { letter, numeral } = tierParts(level, rank, sex);
+  return letter + numeral;
+}
+
+export function rankLabel(rank: OmniRank): string {
+  return rank === 'UNRANKED' ? 'UNRANKED' : 'RANK';
+}
+
+// Display-only floor: a computed level of 0 (or below) reads as "Level 1"
+// everywhere it's shown. Doesn't touch the underlying score/xp/storage —
+// getOmniRank, deltas, and the saved lvl field all keep using the real
+// value (0 and 1 land in the same UNRANKED band anyway, so this never
+// disagrees with a rank color/threshold). Mirrors facility-app's
+// assessments.page.ts dispLvl(), which the two apps must never show a
+// different starting level.
+// Progress through the current level as experience points: "92 / 100 EXP". Floored, so it never reads 100 before
+// the level is reached.
+export function expLabel(xpPct: number | null | undefined): string {
+  return `${Math.floor(Math.max(0, Math.min(99.999, xpPct || 0)))} / 100 EXP`;
+}
+
+export function dispLvl(lvl: number | null | undefined): number {
+  return Math.max(1, Math.round(lvl ?? 0));
+}
+
+// True once an assessment carries any actual test result — body weight and
+// height alone (what intake records) don't count. This is what separates a
+// brand-new player who still owes their first baseline from an athlete with
+// a real level, so it's the single definition Home, the bottom nav and the
+// Get Started flow all lean on.
+export function hasTestResults(i: Partial<AssessmentInputs> | null | undefined): boolean {
+  if (!i) return false;
+  const keys: Array<keyof AssessmentInputs> = [
+    'deadliftWeight', 'squatWeight', 'benchWeight',
+    'longjump', 'sprint', 'pushups', 'pullups', 'run30', 'run400', 'speed2', 'pike', 'backbend', 'straddle'
+  ];
+  return keys.some(k => (i[k] ?? 0) > 0);
+}
+
+// ---------- realistic-result limits ----------
+// The records each test is scored against — exactly the constants the
+// scoring itself uses (and the coach app's CURVE_TEST_DEFAULTS /
+// RATIO_TEST_DEFAULTS), so the limits can never disagree with the score. A self-reported
+// number more than 5% past a record isn't believable, and anything at 80% or
+// more of one is elite enough that it should come with video proof rather
+// than a typed number.
+const RESULT_RECORDS: Record<string, { record: number; lowerIsBetter?: boolean }> = {
+  deadlift: { record: 700 },
+  squat: { record: 600 },
+  bench: { record: 500 },
+  longjump: { record: 147 },
+  sprint: { record: 10, lowerIsBetter: true },
+  pushups: { record: 150 },
+  pullups: { record: 49 },
+  run30: { record: 11.265408 },
+  run400: { record: RUN400_RECORD, lowerIsBetter: true }
+};
+
+export type ResultVerdict = 'ok' | 'proof' | 'blocked';
+
+export const RESULT_PROOF_RATIO = 0.8;
+
+// What cannot be entered at all: a result past the world record. Stored units (lb / in / km / sec); the lifts are
+// the one-rep max. Rounded slightly in the athlete's favour where a record is disputed.
+const WORLD_RECORDS: Record<string, { record: number; lowerIsBetter?: boolean }> = {
+  deadlift: { record: 1105 },
+  squat: { record: 1030 },
+  bench: { record: 800 },
+  longjump: { record: 147 },
+  sprint: { record: 9.58, lowerIsBetter: true },
+  pushups: { record: 10507 },
+  pullups: { record: 7306 },
+  run30: { record: 11.45 },
+  run400: { record: 43.03, lowerIsBetter: true }
+};
+
+// `value` is in the stored unit (lb / in / km / sec), and for the lifts it
+// is the 1RM, not the weight on the bar.
+export function resultVerdict(key: string, value: number): ResultVerdict {
+  const r = RESULT_RECORDS[key];
+  if (!r || !isFinite(value) || value <= 0) return 'ok';
+  const wr = WORLD_RECORDS[key];
+  if (wr && (wr.lowerIsBetter ? value < wr.record : value > wr.record)) return 'blocked';
+  const ratio = r.lowerIsBetter ? r.record / value : value / r.record;
+  if (ratio >= RESULT_PROOF_RATIO) return 'proof';
+  return 'ok';
+}
+
+// Whether a result is past the scoring reference for its test (the number a score is measured against): higher than it,
+// or for a timed test faster than it. The starting-level walkthrough accepts anything up to this and nothing past it.
+export function exceedsReference(key: string, value: number): boolean {
+  const r = RESULT_RECORDS[key];
+  if (!r || !isFinite(value) || value <= 0) return false;
+  return r.lowerIsBetter ? value < r.record : value > r.record;
+}
+
+// The most repetitions a lift's score is worked out from. Past this a 1RM estimate is not accurate enough to use.
+export const MAX_LIFT_REPS = 10;
+
+// Per-test display metadata for the recent-activity headline: label, unit
+// and decimals for display, step/min/max for the opportunity search.
 export const ASSESSMENT_META = [
   { key: 'deadlift', label: 'Deadlift', unit: 'lbs', step: 20, min: 0, max: 2000, decimals: 0 },
   { key: 'squat', label: 'Squat', unit: 'lbs', step: 20, min: 0, max: 2000, decimals: 0 },
@@ -732,12 +759,13 @@ export function remainingEstimates(
 }
 
 export interface AssessmentChange {
-  text: string;         // "100m Sprint 13.86 → 13.50 sec (+12.5%)"
-  pct: number | null;   // null when `fallback` was used (no prior, or nothing scorable changed)
+  text: string;                // "100m Sprint 13.86 → 13.50 sec (+12.5%)"
+  pct: number | null;          // null when `fallback` was used (no prior, or nothing scorable changed)
+  metricLabel: string | null;  // "100m Sprint" — just the test name, for compact UI that can't fit `text` whole
 }
 
 // Compares two assessments' raw inputs and describes whichever single test
-// moved the OMNI score the most, e.g. "100m Sprint 13.86 → 13.50 sec
+// moved the score the most, e.g. "100m Sprint 13.86 → 13.50 sec
 // (+2.5%)" — the trial-substitution technique already used by the "highest
 // level impact" panel, run against the actual old→new step instead of a
 // hypothetical one, so direction (lower-is-better tests included) always
@@ -746,7 +774,10 @@ export interface AssessmentChange {
 export function describeAssessmentChange(
   prev: AssessmentInputs | null, curr: AssessmentInputs, fallback = 'New Assessment'
 ): AssessmentChange {
-  if (!prev) return { text: fallback, pct: null };
+  // A prior with no test results (intake's weight/height-only record) is a
+  // blank scorecard, not a first score: diffing against it read every real
+  // first result as a jump from zero (a "+6600%" on a level-66 start).
+  if (!prev || !hasTestResults(prev)) return { text: fallback, pct: null, metricLabel: null };
 
   const currTotals = computeOmni(curr);
   let best: { label: string; unit: string; decimals: number; oldVal: number; newVal: number; gain: number; pct: number } | null = null;
@@ -764,27 +795,40 @@ export function describeAssessmentChange(
     const trialExact = computeOmni(trial).exact;
     const gain = currTotals.exact - trialExact;
     const base = Math.abs(trialExact) > 1e-9 ? trialExact : currTotals.exact;
-    const pct = base !== 0 ? (gain / Math.abs(base)) * 100 : 0;
+    // A score that isn't a number (a 0-second sprint goes through sqrt of a
+    // negative) or a zero base would print "±NaN%" — call it no change.
+    const rawPct = base !== 0 ? (gain / Math.abs(base)) * 100 : 0;
+    const pct = isFinite(rawPct) ? rawPct : 0;
 
     if (!best || Math.abs(gain) > Math.abs(best.gain)) {
       best = { label: meta.label, unit: meta.unit, decimals: meta.decimals, oldVal, newVal, gain, pct };
     }
   }
 
-  if (!best) return { text: fallback, pct: null };
+  if (!best) return { text: fallback, pct: null, metricLabel: null };
   // The 400 m run reads best as minutes and seconds.
   const isTime = best.label === '400 M Run';
-  const unitSuffix = best.unit ? ` ${best.unit}` : '';
   const sign = best.pct > 0 ? '+' : best.pct < 0 ? '' : '±';
   const text = isTime
     ? `${best.label} ${formatRunTime(best.oldVal)} → ${formatRunTime(best.newVal)} (${sign}${best.pct.toFixed(1)}%)`
-    : `${best.label} ${best.oldVal.toFixed(best.decimals)} → ${best.newVal.toFixed(best.decimals)}${unitSuffix} (${sign}${best.pct.toFixed(1)}%)`;
-  return { text, pct: best.pct };
+    : `${best.label} ${best.oldVal.toFixed(best.decimals)} → ${best.newVal.toFixed(best.decimals)}${best.unit ? ` ${best.unit}` : ''} (${sign}${best.pct.toFixed(1)}%)`;
+  return { text, pct: best.pct, metricLabel: best.label };
 }
 
-// Shared green/red/neutral convention for any "did this improve" delta.
+// 144.87 -> "2:25". Whole seconds, rounded.
+export function formatRunTime(seconds: number): string {
+  const t = Math.round(seconds);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+}
+
+// Shared green/red/neutral convention for any "did this improve" delta —
+// used by the category deltas on the assessment result and the recent-
+// activity feed's per-line percentages.
+// The color for a gain is held here so a theme can change it (Synthwave's is cyan); ThemeService sets it.
+export const deltaTone = { up: '#2dd36f' };
 export function deltaColor(diff: number): string {
-  return diff > 0 ? '#2dd36f' : diff < 0 ? '#ff5a6a' : '#4a6378';
+  // a variable, so colors already worked out follow a theme change (ThemeService sets --delta-up)
+  return diff > 0 ? 'var(--delta-up, #2dd36f)' : diff < 0 ? 'var(--delta-down, #ff5a6a)' : 'var(--delta-flat, #4a6378)';
 }
 
 export function blankAssessmentInputs(): AssessmentInputs {
@@ -799,57 +843,62 @@ export function blankAssessmentInputs(): AssessmentInputs {
   };
 }
 
-// ---------------------------------------------------------------------
-// Cardio distance <-> speed conversions. The two timed-distance tests
-// (30 Min Run, 2 Min Speed) are stored and scored as raw km — see
-// calcCardio — but a coach thinks in mph (or pace), not "how many
-// kilometers did they cover in exactly 2 minutes." These let the UI show
-// whichever unit is picked while the canonical stored value stays km.
-export type SpeedUnit = 'mph' | 'km' | 'minkm';
+// Scales a set of inputs until they actually score to `targetLvl`.
+//
+// For the dev level bump in Settings. Writing an assessment row with a
+// higher `lvl` but the original inputs looks right in the UI — which reads
+// the stored field — while being wrong everywhere that recomputes from
+// inputs, including the XP detector. That mismatch is a bug generator, so
+// the bump produces a genuinely consistent row instead: real numbers that
+// really do score to the target.
+//
+// Binary search rather than algebra. `exact` is the level curve over
+// five differently-shaped category curves, several of them capped, and
+// inverting that in closed form is not worth the bugs for a test button.
+// Monotonic in the scale factor, which is all a search needs.
+export function scaleInputsToLevel(base: AssessmentInputs, targetLvl: number): AssessmentInputs {
+  // Ceilings the scoring formulas cannot go past — a sprint under the 10s
+  // anchor makes calcPower take the root of a negative.
+  const CAPS: Partial<Record<string, { min?: number; max?: number }>> = {
+    sprint: { min: 10 },
+    run400: { min: RUN400_RECORD },
+    pike: { max: 10 },
+    backbend: { max: 10 },
+    straddle: { max: 180 }
+  };
+  // The one test where a lower number is a better number.
+  const LOWER_IS_BETTER = new Set(['sprint', 'run400']);
 
-const KM_TO_MILES = 0.621371;
+  const apply = (factor: number): AssessmentInputs => {
+    const out: AssessmentInputs = { ...base };
+    const rec = out as unknown as Record<string, number>;
+    for (const meta of ASSESSMENT_META) {
+      const from = num((base as unknown as Record<string, number>)[meta.key]);
+      let next = LOWER_IS_BETTER.has(meta.key) ? from / factor : from * factor;
+      const cap = CAPS[meta.key];
+      if (cap?.min !== undefined) next = Math.max(cap.min, next);
+      if (cap?.max !== undefined) next = Math.min(cap.max, next);
+      rec[meta.key] = next;
+    }
+    return out;
+  };
 
-// mph = km covered in the window, scaled up to a full hour, converted to
-// miles. windowMinutes is 30 for the 30-minute run, 2 for the 2-minute
-// speed test.
-function kmToMph(km: number, windowMinutes: number): number {
-  return km * (60 / windowMinutes) * KM_TO_MILES;
-}
-function mphToKm(mph: number, windowMinutes: number): number {
-  return mph / (60 / windowMinutes) / KM_TO_MILES;
-}
-// Pace: minutes per km, extrapolated from how much of a km they covered
-// in the window (e.g. covered 0.5km in 2 minutes -> 4 min/km pace).
-function kmToMinPerKm(km: number, windowMinutes: number): number {
-  return km > 0 ? windowMinutes / km : 0;
-}
-function minPerKmToKm(pace: number, windowMinutes: number): number {
-  return pace > 0 ? windowMinutes / pace : 0;
-}
+  let lo = 1, hi = 12;
+  // If even a 12x scale can't reach the target (caps), return the best
+  // available rather than looping — the caller wants a bump, not an error.
+  if (computeOmni(apply(hi)).exact < targetLvl) return apply(hi);
 
-// Canonical km -> whatever unit is currently displayed.
-export function kmToSpeedDisplay(km: number, unit: SpeedUnit, windowMinutes: number): number {
-  if (!isFinite(km) || km < 0) return 0;
-  switch (unit) {
-    case 'mph': return kmToMph(km, windowMinutes);
-    case 'minkm': return kmToMinPerKm(km, windowMinutes);
-    default: return km;
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2;
+    if (computeOmni(apply(mid)).exact >= targetLvl) hi = mid;
+    else lo = mid;
   }
-}
-
-// Whatever's typed in the display field -> canonical km, for storage/scoring.
-export function speedDisplayToKm(value: number, unit: SpeedUnit, windowMinutes: number): number {
-  if (!isFinite(value) || value < 0) return 0;
-  switch (unit) {
-    case 'mph': return mphToKm(value, windowMinutes);
-    case 'minkm': return minPerKmToKm(value, windowMinutes);
-    default: return value;
-  }
+  return apply(hi);
 }
 
 // ---------- Resilience ----------
 //
-// Ten joint-resilience exercises, tracked separately from the OMPAR
+// Ten joint-resilience exercises, tracked separately from the
 // assessment and NOT part of computeOmni — nothing here moves the Level.
 //
 // Every one is performed as sets of 8 reps, always, so the rep count is a
@@ -885,7 +934,7 @@ export const RESILIENCE_TESTS: ReadonlyArray<{
 ];
 
 // Per-exercise percentage of its own max, clamped — the same ratio shape
-// calcStrength uses for the four lifts.
+// calcStrength uses for the three lifts.
 export function resilienceTestPct(key: ResilienceKey, weight: number): number {
   const test = RESILIENCE_TESTS.find(t => t.key === key);
   if (!test || !test.max) return 0;
@@ -899,7 +948,7 @@ export function resilienceTestPct(key: ResilienceKey, weight: number): number {
 // incomplete rather than quietly scoring only what was filled in.
 //
 // Kept out of computeOmni on purpose: resilience is scored alongside the
-// OMPAR categories, not inside them, so nothing here moves anyone's Level.
+// assessment categories, not inside them, so nothing here moves anyone's Level.
 export function calcResilience(inputs: Partial<ResilienceInputs> | null | undefined): number {
   if (!inputs) return 0;
   const total = RESILIENCE_TESTS.reduce(
@@ -975,7 +1024,7 @@ export function getResilienceRank(score: number, sex: Sex = 'male'): OmniRank {
   return (table.find(t => score >= t.floor) ?? table[table.length - 1]).rank;
 }
 
-// Band bounds for the colour ramp, mirroring rankBandBounds.
+// Band bounds for the color ramp, mirroring rankBandBounds.
 export function resilienceRankBandBounds(score: number, sex: Sex = 'male'): { floor: number; ceil: number } {
   const table = RESILIENCE_RANK_THRESHOLDS[sex] ?? RESILIENCE_RANK_THRESHOLDS['male'];
   const ascending = [...table].sort((a, b) => a.floor - b.floor);
@@ -985,6 +1034,308 @@ export function resilienceRankBandBounds(score: number, sex: Sex = 'male'): { fl
   const next = ascending[at + 1];
   return { floor: ascending[at].floor, ceil: next ? next.floor : ascending[at].floor };
 }
+
+
+
+export type ResilienceInputs = Record<ResilienceKey, number>;
+
+export function blankResilienceInputs(): ResilienceInputs {
+  return RESILIENCE_TESTS.reduce((acc, t) => {
+    acc[t.key] = 0;
+    return acc;
+  }, {} as ResilienceInputs);
+}
+
+
+// ================= Coach app only =================
+
+
+// ---------- Per-test overrides ("modify assessment") ----------
+// A coach can swap out any one of the 13 tracked tests for a custom one on
+// a per-client basis (see ClientProfile.assessmentCustomizable and the
+// Assessments page). The raw result still gets typed into that same test's
+// existing input — only its name and formula constants change, so the swap
+// can't touch anything about how a raw value is entered or which category
+// it counts toward.
+//
+// An override always keeps the SAME formula *shape* as the slot it's
+// replacing — a ratio-type slot (the four strength lifts, long jump) stays
+// a ratio; a curve-type slot (sprint, 30 Min Run, 400 M Run — the
+// time-based tests, all lower-raw-is-better) stays the same sqrt decay
+// curve calcPower/calcCardio use. What the coach can edit is every real
+// constant in that formula — not just the "world record," but (for
+// curve-type slots) the spread constant that controls how fast the score
+// falls off past the record too. Everything else (flexibility, the plain
+// clamp/range tests) keeps its original, un-overridden formula unless a
+// coach overrides it — a straight ratio is the fallback there since none
+// of those are expected to actually get swapped.
+export type TestKey = keyof AssessmentInputs;
+
+
+export interface TestOverride {
+  name: string;         // custom test name, e.g. "Trap Bar Deadlift"
+  worldRecord: number;  // replaces that slot's built-in reference value
+  // Curve-type slots only (isCurveTest(key) === true) — replaces the
+  // built-in spread constant (the sqrt's denominator). Ignored for
+  // ratio-type slots.
+  spread?: number;
+}
+
+
+export type TestOverrides = Partial<Record<TestKey, TestOverride>>;
+
+
+const LOWER_IS_BETTER: ReadonlySet<TestKey> = new Set<TestKey>(['sprint', 'run400']);
+
+
+// Exposed so the Assessments page can show the coach the exact formula
+// (and a live preview score) while they're picking new constants for a
+// replacement test — same direction check the scoring itself uses.
+export function isLowerIsBetterTest(key: TestKey): boolean {
+  return LOWER_IS_BETTER.has(key);
+}
+
+
+// The three time-based tests, each scored by the same sqrt decay curve:
+//   score = (10 − √((raw − record) / spread)) × 10
+// `record` and `spread` here are the slot's real, current built-in
+// constants — the override sheet pre-fills a coach's edit with these
+// exact numbers rather than starting blank. (30 Min Run's built-in
+// formula has a second, legacy linear-ratio branch for slow times; an
+// override always uses the curve branch only, since a coach replacing
+// this test is supplying their own real numbers regardless.)
+export const CURVE_TEST_DEFAULTS: Partial<Record<TestKey, { record: number; spread: number }>> = {
+  sprint: { record: 10, spread: 0.125 },
+  run30: { record: 11.265408, spread: 0.11265408 },
+  run400: { record: 46, spread: 1 },
+};
+
+
+export function isCurveTest(key: TestKey): boolean {
+  return key in CURVE_TEST_DEFAULTS;
+}
+
+
+// Ratio-type slots' real, current built-in "world record" constants —
+// same pre-fill purpose as CURVE_TEST_DEFAULTS above.
+export const RATIO_TEST_DEFAULTS: Partial<Record<TestKey, number>> = {
+  deadlift: 700, squat: 600, bench: 500, longjump: 147,
+};
+
+
+export function overrideScore(raw: number, worldRecord: number, key: TestKey, spread?: number): number {
+  if (!worldRecord) return 0;
+  if (isCurveTest(key)) {
+    const sp = spread || CURVE_TEST_DEFAULTS[key]!.spread;
+    if (!sp) return 0;
+    const x = (raw - worldRecord) / sp;
+    if (x < 0) return 100; // better than the record — clamp instead of the sqrt going complex
+    const pct = (Math.sqrt(x) * -1 + 10) * 10;
+    return isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
+  }
+  const pct = LOWER_IS_BETTER.has(key) ? (worldRecord / (raw || Infinity)) * 100 : (raw / worldRecord) * 100;
+  return isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
+}
+
+
+// Runs a slot's normal (un-overridden) scoring unless `overrides` has an
+// entry for it, in which case that entry's constants drive the same-shape
+// formula instead. `fallback` is the slot's usual formula contribution
+// (e.g. `dl / 939 * 100`) — passed as a thunk so it's only evaluated when
+// actually needed.
+function slotScore(raw: number, key: TestKey, overrides: TestOverrides | undefined, fallback: () => number): number {
+  const ov = overrides?.[key];
+  return ov ? overrideScore(raw, ov.worldRecord, key, ov.spread) : fallback();
+}
+
+export function tierNumeral(level: number, rank: OmniRank, sex: Sex = 'male'): string {
+  if (rank === 'S-RANK' || rank === 'UNRANKED' || !isFinite(level)) return '';
+  const { floor, ceil } = rankBandBounds(level, sex);
+  const span = ceil - floor;
+  if (span <= 0) return '';
+  return TIERS[Math.max(0, Math.min(3, Math.floor(((level - floor) / span) * 4)))];
+}
+
+
+// Level → color, mirrored from the assessments page's own rank-band ramp
+// (kept in sync by hand rather than imported from there, since that file's
+// version is a private method tied to its own panel-scoped color-mixing
+// state). One distinct hue per rank tier — grey/green/sky-blue/purple/
+// amber-red/white — rather than a continuous sweep, so a rank-up always
+// reads as an unmistakable color jump; shading only blends *within* a band.
+// Level 99 lands exactly on blood red, the last color before S-RANK's white.
+// Keyed by RANK, not by level range. The floors now come from
+// RANK_THRESHOLDS above, because they differ by sex — a colour boundary
+// that drifted away from the rank boundary it marks would be worse than no
+// colour at all.
+const RANK_SHADES: Record<OmniRank, { light: string; dark: string }> = {
+  'UNRANKED': { light: '#737373', dark: '#404040' },  // neutral grey (no blue tint)
+  'D-RANK':   { light: '#4ade80', dark: '#15803d' },  // green
+  'C-RANK':   { light: '#38bdf8', dark: '#0369a1' },  // sky blue
+  'B-RANK':   { light: '#c084fc', dark: '#6b21a8' },  // purple
+  'A-RANK':   { light: '#d9695f', dark: '#c1121f' },  // washed red heating to blood red
+  'S-RANK':   { light: '#ffffff', dark: '#ffffff' }   // pure white
+};
+
+
+// Toggle to flip the within-band direction for every rank at once. true
+// (current): climbs light -> dark as level rises within a rank — a deeper,
+// more saturated shade the closer you are to the next rank-up. Mirrors how
+// A-RANK always worked (amber -> blood red). false: the previous dark ->
+// light climb. Kept as a single flag specifically so this is a one-line
+// revert if the darker-as-you-climb look doesn't stick. Must match the same
+// flag in assessments.page.ts so both screens agree on a given level's color.
+const DARKEN_AS_LEVEL_CLIMBS = true;
+
+
+function hexToRgb(h: string): [number, number, number] {
+  const s = h.replace('#', '');
+  return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)];
+}
+
+
+function lerpHex(a: string, b: string, t: number): string {
+  const pa = hexToRgb(a), pb = hexToRgb(b);
+  const mix = (i: number) => Math.round(pa[i] + (pb[i] - pa[i]) * t);
+  return '#' + [mix(0), mix(1), mix(2)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+
+export function levelColor(level: number, sex: Sex = 'male'): string {
+  const lvl = Math.max(0, Math.min(100, level));
+  const shade = RANK_SHADES[getOmniRank(lvl, sex)];
+  const { floor, ceil } = rankBandBounds(lvl, sex);
+  const span = ceil - floor;
+  const t = span > 0 ? (lvl - floor) / span : 1;
+  const [start, end] = DARKEN_AS_LEVEL_CLIMBS ? [shade.light, shade.dark] : [shade.dark, shade.light];
+  return lerpHex(start, end, t);
+}
+
+
+// Card background per rank — deliberately NOT derived from levelColor()
+// above. Mixing the bright badge/graph color straight into a card's
+// background blows the lightness way past "dark" (a vivid mid-blue or
+// mid-green card, not a moody dark one) and it wanders per-level as a bonus
+// bug. These are hand-picked instead: same hue family as the rank, held at
+// a constant low lightness across the whole rank rather than shifting with
+// level — the vibrant badge/graph/border already carries the "climbing
+// within a rank" feeling, so the backdrop can stay calm. Mirrored from
+// Project-000's level-color.util.ts so both apps land on the same anchors.
+interface RankBgAnchor { floor: number; ceil: number; bg: string; }
+
+
+const RANK_BG: Record<OmniRank, string> = {
+  'UNRANKED': '#070809',  // neutral, barely tinted
+  'D-RANK':   '#030c07',  // dark green
+  'C-RANK':   '#03090c',  // dark blue
+  'B-RANK':   '#08030c',  // dark purple
+  'A-RANK':   '#0c0304',  // dark blood red
+  'S-RANK':   '#0a0a0a'   // neutral dark
+};
+
+
+export function levelBgColor(level: number, sex: Sex = 'male'): string {
+  return RANK_BG[getOmniRank(Math.max(0, Math.min(100, level)), sex)];
+}
+
+
+// Same rank shades and within-band ramp as levelColor/levelBgColor, driven
+// by a category's own thresholds. S-RANK's static value is only a fallback —
+// a caller that can reach the chroma ramp paints it live instead.
+export function categoryColor(cat: OmniCategory, score: number, sex: Sex = 'male'): string {
+  return ladderColor(categoryRankThresholds(cat, sex), score);
+}
+
+
+// Rank shade + within-band ramp on any D..S ladder.
+export function ladderColor(table: Array<{ floor: number; rank: OmniRank }>, score: number): string {
+  const shade = RANK_SHADES[rankOnLadder(table, score)];
+  const { floor, ceil } = ladderBand(table, score);
+  const span = ceil - floor;
+  const t = span > 0 ? Math.min(Math.max((score - floor) / span, 0), 1) : 1;
+  const [start, end] = DARKEN_AS_LEVEL_CLIMBS ? [shade.light, shade.dark] : [shade.dark, shade.light];
+  return lerpHex(start, end, t);
+}
+
+
+export function categoryBgColor(cat: OmniCategory, score: number, sex: Sex = 'male'): string {
+  return RANK_BG[getCategoryRank(cat, score, sex)];
+}
+
+
+// Static colour for a test's rank; S-RANK callers swap in the live chroma.
+export function testColor(key: ScoredTestKey, i: AssessmentInputs, sex: Sex = 'male', overrides?: TestOverrides): string {
+  const score = testScore(key, i, overrides);
+  return ladderColor(testRankThresholds(key, sex, overrides), isFinite(score) ? score : 0);
+}
+
+
+// Card ground for a test's rank — same per-rank darks the category cards use.
+export function testBgColor(key: ScoredTestKey, i: AssessmentInputs, sex: Sex = 'male', overrides?: TestOverrides): string {
+  return RANK_BG[getTestRank(key, i, sex, overrides)];
+}
+
+
+export function isCategorySRank(cat: OmniCategory, score: number, sex: Sex = 'male'): boolean {
+  return getCategoryRank(cat, score, sex) === 'S-RANK';
+}
+
+
+// ---------------------------------------------------------------------
+// Cardio distance <-> speed conversions. The two timed-distance tests
+// (30 Min Run, 2 Min Speed) are stored and scored as raw km — see
+// calcCardio — but a coach thinks in mph (or pace), not "how many
+// kilometers did they cover in exactly 2 minutes." These let the UI show
+// whichever unit is picked while the canonical stored value stays km.
+export type SpeedUnit = 'mph' | 'km' | 'minkm';
+
+
+const KM_TO_MILES = 0.621371;
+
+
+// mph = km covered in the window, scaled up to a full hour, converted to
+// miles. windowMinutes is 30 for the 30-minute run, 2 for the 2-minute
+// speed test.
+function kmToMph(km: number, windowMinutes: number): number {
+  return km * (60 / windowMinutes) * KM_TO_MILES;
+}
+
+function mphToKm(mph: number, windowMinutes: number): number {
+  return mph / (60 / windowMinutes) / KM_TO_MILES;
+}
+
+// Pace: minutes per km, extrapolated from how much of a km they covered
+// in the window (e.g. covered 0.5km in 2 minutes -> 4 min/km pace).
+function kmToMinPerKm(km: number, windowMinutes: number): number {
+  return km > 0 ? windowMinutes / km : 0;
+}
+
+function minPerKmToKm(pace: number, windowMinutes: number): number {
+  return pace > 0 ? windowMinutes / pace : 0;
+}
+
+
+// Canonical km -> whatever unit is currently displayed.
+export function kmToSpeedDisplay(km: number, unit: SpeedUnit, windowMinutes: number): number {
+  if (!isFinite(km) || km < 0) return 0;
+  switch (unit) {
+    case 'mph': return kmToMph(km, windowMinutes);
+    case 'minkm': return kmToMinPerKm(km, windowMinutes);
+    default: return km;
+  }
+}
+
+
+// Whatever's typed in the display field -> canonical km, for storage/scoring.
+export function speedDisplayToKm(value: number, unit: SpeedUnit, windowMinutes: number): number {
+  if (!isFinite(value) || value < 0) return 0;
+  switch (unit) {
+    case 'mph': return mphToKm(value, windowMinutes);
+    case 'minkm': return minPerKmToKm(value, windowMinutes);
+    default: return value;
+  }
+}
+
 
 // Colour for a resilience score — the same rank shades and within-band
 // ramp levelColor uses, but walked along resilience's own ladder, so the
@@ -998,19 +1349,9 @@ export function resilienceColor(score: number, sex: Sex = 'male'): string {
   return lerpHex(start, end, t);
 }
 
+
 // Card ground per resilience rank, from the same hand-picked anchors the
 // level cards use — so the whole pane recolours with the rank.
 export function resilienceBgColor(score: number, sex: Sex = 'male'): string {
   return RANK_BG[getResilienceRank(score, sex)];
-}
-
-
-
-export type ResilienceInputs = Record<ResilienceKey, number>;
-
-export function blankResilienceInputs(): ResilienceInputs {
-  return RESILIENCE_TESTS.reduce((acc, t) => {
-    acc[t.key] = 0;
-    return acc;
-  }, {} as ResilienceInputs);
 }

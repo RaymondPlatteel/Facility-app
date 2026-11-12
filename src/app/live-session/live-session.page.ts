@@ -20,7 +20,7 @@ import {
 } from '../services/workout-sync';
 import { HeartRateService, WatchSlot } from '../services/heart-rate.service';
 import {
-  matchAssessmentLift, brzycki, computeOmni, getOmniRank, blankAssessmentInputs
+  matchAssessmentLift, effectiveReps, estimateOneRm, computeOmni, getOmniRank, blankAssessmentInputs
 } from '../services/omni.util';
 
 interface ProtocolRow {
@@ -967,10 +967,11 @@ export class LiveSessionPage implements OnInit, OnDestroy {
         const reps = parseFloat(set.values['Reps'] ?? '');
         if (!isFinite(reps) || reps < 1) continue;
         if (!isFinite(load) || load <= 0) continue;
-        const est = brzycki(load, reps);
+        const shown = effectiveReps(reps, parseFloat(set.values['RIR'] ?? ''));
+        const est = estimateOneRm(load, shown);
         const recordWeight = load;
         const cur = bests.get(lift.key);
-        if (!cur || est > cur.est) bests.set(lift.key, { weight: recordWeight, reps, est, label: lift.label });
+        if (!cur || est > cur.est) bests.set(lift.key, { weight: recordWeight, reps: shown, est, label: lift.label });
       }
     }
     if (!bests.size) return null;
