@@ -76,6 +76,13 @@
             </select>
           </label>
           <label class="field">
+            <span>Synthwave collection</span>
+            <select [ngModel]="draftSynthwave ? 'yes' : 'no'" (ngModelChange)="draftSynthwave = $event === 'yes'">
+              <option value="yes">Granted — theme and collection unlocked</option>
+              <option value="no">Not granted</option>
+            </select>
+          </label>
+          <label class="field">
             <span>Profile</span>
             <select [ngModel]="draftPrivate ? 'yes' : 'no'" (ngModelChange)="draftPrivate = $event === 'yes'">
               <option value="no">Public — on the leaderboards, profile and videos visible</option>

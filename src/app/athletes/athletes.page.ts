@@ -31,6 +31,7 @@ export class AthletesPage implements OnInit {
   draftReason = '';
   draftFree = false;
   draftPrivate = false;
+  draftSynthwave = false;
   // Open reports on proof shown on athletes' profiles.
   reports: Array<{ id: string; targetKey: string; targetName: string; test: string; url: string; reason: string; createdAt: string }> = [];
   saving = false;
@@ -72,6 +73,7 @@ export class AthletesPage implements OnInit {
     this.draftReason = m.suspendedReason ?? '';
     this.draftFree = !!m.freeProgram;
     this.draftPrivate = !!m.private;
+    this.draftSynthwave = !!m.cosmeticsOwned?.includes('synthwave');
   }
 
   async save(m: Member) {
@@ -82,6 +84,10 @@ export class AthletesPage implements OnInit {
       await this.firebase.setMemberInPerson(m.nameKey, m.clientName, this.draftInPerson);
       await this.firebase.setMemberSuspended(m.nameKey, m.clientName, this.draftSuspended, this.draftReason);
       await this.firebase.setMemberFreeProgram(m.nameKey, m.clientName, this.draftFree);
+      if (this.draftSynthwave !== !!m.cosmeticsOwned?.includes('synthwave')) {
+        await this.firebase.setMemberSynthwave(m.nameKey, m.clientName, this.draftSynthwave);
+        m.cosmeticsOwned = this.draftSynthwave ? [...(m.cosmeticsOwned ?? []), 'synthwave'] : (m.cosmeticsOwned ?? []).filter(id => id !== 'synthwave');
+      }
       if (this.draftPrivate !== !!m.private) {
         const ok = confirm(this.draftPrivate
           ? `Make ${m.clientName} private? Their profile, results and videos will be hidden from other athletes, and they will be removed from the leaderboards.`

@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
 import { initializeApp } from 'firebase/app';
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
-import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit, onSnapshot, getCountFromServer, arrayUnion, runTransaction, increment } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, deleteField, setDoc, getDoc, writeBatch, limit, onSnapshot, getCountFromServer, arrayUnion, arrayRemove, runTransaction, increment } from 'firebase/firestore';
 import { projectPackageEnd, AttendanceMark, planTopUp, planMigration, MigrationPlan, usesStoredSessions } from './schedule.util';
 import type { ScheduleEntry } from './schedule.util';
 import { SYNC_CLIENT_ID, ensureExerciseKeys, isLiveWorkout, isStaleWorkout, staleCloseFields, newExerciseKey, normalizeState, sheetToSync, syncToSheet, WorkoutSyncState } from './workout-sync';
@@ -356,6 +356,7 @@ export interface Member {
   publicProofs?: Record<string, { url: string; kind: string; value: number; at: string }>;
   // Set by the coach only. The athlete gets their program without paying for it.
   freeProgram?: boolean;
+  cosmeticsOwned?: string[];
   // Written only by the payments worker from Apple's signed receipts: the program is paid for until this time.
   programExpiresAt?: string;
   cell: number | null;
@@ -3559,6 +3560,11 @@ export class FirebaseService {
 
   async setMemberFreeProgram(nameKey: string, clientName: string, freeProgram: boolean): Promise<void> {
     await setDoc(doc(this.db, 'members', nameKey), { nameKey, clientName, freeProgram }, { merge: true });
+  }
+
+  // Adds or removes the Synthwave collection on the athlete's record, the same entry a verified purchase writes.
+  async setMemberSynthwave(nameKey: string, clientName: string, owned: boolean): Promise<void> {
+    await setDoc(doc(this.db, 'members', nameKey), { nameKey, clientName, cosmeticsOwned: owned ? arrayUnion('synthwave') : arrayRemove('synthwave') }, { merge: true });
   }
 
   async setMemberPrivate(nameKey: string, clientName: string, on: boolean): Promise<void> {
