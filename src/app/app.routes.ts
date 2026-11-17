@@ -190,6 +190,12 @@ export const routes: Routes = [
     data: { title: 'App Videos' }
   },
   {
+    path: 'ai-guide',
+    canActivate: [authGuard],
+    loadComponent: () => import('./ai-guide/ai-guide.page').then( m => m.AiGuidePage),
+    data: { title: 'AI Guide' }
+  },
+  {
     path: 'program-trainer',
     canActivate: [authGuard],
     loadComponent: () => import('./program-trainer/program-trainer.page').then( m => m.ProgramTrainerPage),

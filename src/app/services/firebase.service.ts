@@ -1128,6 +1128,7 @@ export interface ThemeDoc {
   order?: number;
 }
 
+export interface AiReference { id: string; title: string; summary: string; text: string; fileName?: string; updatedAt?: string; }
 export type { AppVideo } from '../program-engine/videos';
 import type { AppVideo } from '../program-engine/videos';
 import type { EventBatch } from '../program-engine/analytics';
@@ -4258,6 +4259,32 @@ export class FirebaseService {
   }
 
   // ---------- App videos ----------
+  // What guides the athlete app's AI, the only thing besides the athlete's own records: the chat guide and the workout guide.
+  // The athlete app reads them at the start of each conversation, so a change here applies with no new build. Empty means none.
+  async getAiGuide(id: 'aiGuide' | 'aiWorkoutGuide'): Promise<string> {
+    const snap = await getDoc(doc(this.db, 'appSettings', id));
+    return (snap.data() as { text?: string } | undefined)?.text ?? '';
+  }
+
+  async setAiGuide(id: 'aiGuide' | 'aiWorkoutGuide', text: string): Promise<void> {
+    await setDoc(doc(this.db, 'appSettings', id), { text, updatedAt: new Date().toISOString() }, { merge: true });
+  }
+
+  // Reference material for the athlete app's AI, one document per topic. The AI is told each topic's name and when it applies,
+  // and reads a topic's text only when a question needs it.
+  async listAiReference(): Promise<AiReference[]> {
+    const snap = await getDocs(collection(this.db, 'aiReference'));
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<AiReference, 'id'>) })).sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  async saveAiReference(id: string, ref: Omit<AiReference, 'id' | 'updatedAt'>): Promise<void> {
+    await setDoc(doc(this.db, 'aiReference', id), { ...ref, updatedAt: new Date().toISOString() });
+  }
+
+  async deleteAiReference(id: string): Promise<void> {
+    await deleteDoc(doc(this.db, 'aiReference', id));
+  }
+
   // Videos the athlete app plays (flexibility routines, assessment tests), by slot key. The athlete app reads the
   // `appVideos` collection, so a video is added or swapped here without a new build.
   async listAppVideos(): Promise<Record<string, AppVideo>> {

@@ -1,0 +1,52 @@
+<ion-content [fullscreen]="true" class="content-no-header">
+  <div class="ag-page">
+    <div class="ag-header">
+      <button class="icon-btn" (click)="goBack()" aria-label="Back"><ion-icon name="arrow-back"></ion-icon></button>
+      <div class="ag-titles">
+        <div class="ag-eyebrow">Athlete App</div>
+        <h1>AI <span>GUIDE</span></h1>
+      </div>
+    </div>
+
+    <p class="ag-note">Everything that guides the athlete app's AI is written here. The app gives it only the athlete's name, the date, the notes it keeps about them and its lookups into their records. With both guides empty it answers as plain Claude. A change applies the next time an athlete opens a conversation, with no new build.</p>
+    <p class="ag-error" *ngIf="error">{{ error }}</p>
+    <p class="ag-ok" *ngIf="message">{{ message }}</p>
+    <p class="ag-note" *ngIf="loading">Loading…</p>
+
+    <section class="ag-block" *ngFor="let g of guides">
+      <div class="ag-row">
+        <div class="ag-name"><b>{{ g.title }}</b><span>{{ g.note }}</span></div>
+        <div class="ag-actions">
+          <span class="ag-count">{{ chars(g.id) }}</span>
+          <button class="ag-btn primary" [disabled]="loading || busy[g.id] || !changed(g.id)" (click)="save(g.id)">{{ busy[g.id] ? 'Saving…' : 'Save' }}</button>
+        </div>
+      </div>
+      <textarea class="ag-text" rows="22" spellcheck="false" [(ngModel)]="text[g.id]" [disabled]="loading" [attr.aria-label]="g.title"></textarea>
+    </section>
+
+    <section class="ag-block">
+      <div class="ag-row">
+        <div class="ag-name"><b>Reference topics</b><span>The AI is told each topic's name and when it applies, and reads the text only when a question needs it. Add a text, Markdown, CSV or JSON file, or type the text in.</span></div>
+        <div class="ag-actions"><button class="ag-btn primary" [disabled]="loading" (click)="addTopic()">Add Topic</button></div>
+      </div>
+      <p class="ag-note" *ngIf="!loading && !topics.length">No topics yet.</p>
+      <div class="ag-topic" *ngFor="let t of topics">
+        <label class="ag-field">Topic name
+          <input class="ag-input" type="text" [(ngModel)]="t.title" placeholder="Strength training" [disabled]="!!t.id" />
+        </label>
+        <label class="ag-field">Use when
+          <input class="ag-input" type="text" [(ngModel)]="t.summary" placeholder="The athlete asks how to program or progress lifting" />
+        </label>
+        <textarea class="ag-text" rows="10" spellcheck="false" [(ngModel)]="t.text" placeholder="The reference text" aria-label="Reference text"></textarea>
+        <div class="ag-row ag-topic-foot">
+          <span class="ag-count">{{ t.text.length | number }} characters<ng-container *ngIf="t.fileName"> · {{ t.fileName }}</ng-container></span>
+          <div class="ag-actions">
+            <label class="ag-btn">Choose File<input type="file" accept=".txt,.md,.markdown,.csv,.json,text/*" hidden (change)="pick(t, $event)" /></label>
+            <button class="ag-btn danger" (click)="removeTopic(t)">{{ t.id ? 'Delete' : 'Discard' }}</button>
+            <button class="ag-btn primary" [disabled]="topicBusy[t.id || 'new'] || !topicReady(t) || (!!t.id && !topicChanged(t))" (click)="saveTopic(t)">{{ topicBusy[t.id || 'new'] ? 'Saving…' : 'Save' }}</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</ion-content>
